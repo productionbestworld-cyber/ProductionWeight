@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { Save, Printer, RefreshCw, CheckCircle2, ArrowLeft, Wind, Lock } from 'lucide-react'
+import { Save, Printer, RefreshCw, CheckCircle2, ArrowLeft, Wind, Lock, X } from 'lucide-react'
+import QRCode from 'react-qr-code'
 import { supabase } from '../lib/supabase'
 import { loadProfiles, type MachineProfile } from './MachineSettings'
 
@@ -229,7 +230,7 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
   const [saving,       setSaving]       = useState(false)
   const [lastRoll,     setLastRoll]     = useState<any>(null)
   const [weighedKg,    setWeighedKg]    = useState(0)
-  const [weighedRolls, setWeighedRolls] = useState<{roll_no:number;weight:number}[]>([])
+  const [weighedRolls, setWeighedRolls] = useState<any[]>([])
   const [stable,       setStable]       = useState(true)
   const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -250,9 +251,9 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
       .order('roll_no', { ascending: true })
       .then(({ data }) => {
         if (!data?.length) return
-        const total = data.reduce((s, r) => s + (r.weight ?? 0), 0)
+        const total = (data as any[]).reduce((s, r) => s + (r.weight ?? 0), 0)
         setWeighedKg(parseFloat(total.toFixed(dec)))
-        setWeighedRolls(data)
+        setWeighedRolls(data as any[])
         setRollNo(data.length + 1)
       })
     startIdle()
@@ -318,12 +319,27 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
 
   const progressColor = done ? 'bg-green-500' : pct >= 80 ? 'bg-amber-400' : 'bg-brand-500'
 
-  return (
-    <div className="min-h-[calc(100vh-48px)] bg-[#0a0f1e] flex flex-col items-center p-5 gap-4 pt-5">
+  const [selectedRoll, setSelectedRoll] = useState<any>(null)
 
-      <div className="w-full max-w-xl bg-slate-900 border border-slate-800 rounded-2xl px-5 py-3 flex items-center justify-between">
+  // QR data สำหรับม้วนที่เลือก
+  function makeQrData(r: any) {
+    return JSON.stringify({
+      mat: profile.matCode, lot: profile.lotNo,
+      roll: r.roll_no, net: fmt(r.weight, dec),
+      gross: fmt(r.gross_weight ?? 0, dec), core: fmt(r.core_weight ?? 0, dec),
+      machine: profile.machine_no, date: new Date(r.created_at).toLocaleDateString('th-TH'),
+      time: new Date(r.created_at).toLocaleTimeString('th-TH', {hour:'2-digit',minute:'2-digit'}),
+      customer: profile.custName, product: profile.productName,
+    })
+  }
+
+  return (
+    <div className="h-[calc(100vh-48px)] bg-[#0a0f1e] flex flex-col">
+
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 py-2.5 bg-slate-900 border-b border-slate-800 shrink-0">
         <div className="flex items-center gap-3">
-          <div className="bg-brand-600 text-white font-black text-xl w-12 h-12 rounded-xl flex items-center justify-center shrink-0">
+          <div className="bg-brand-600 text-white font-black text-base w-10 h-10 rounded-xl flex items-center justify-center shrink-0">
             {profile.machine_no}
           </div>
           <div>
@@ -331,104 +347,205 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
             <p className="text-slate-400 text-xs">{profile.custName} · Lot {profile.lotNo}</p>
           </div>
         </div>
-        <button onClick={onBack}
-          className="flex items-center gap-1 text-slate-500 hover:text-white text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg transition-colors">
-          <ArrowLeft size={12} /> เปลี่ยนเครื่อง
-        </button>
+        <div className="flex items-center gap-3">
+          {/* Progress mini */}
+          {planned > 0 && (
+            <div className="text-right hidden sm:block">
+              <p className="text-xs text-slate-500">{fmt(weighedKg,dec)} / {fmt(planned,dec)} Kgs.</p>
+              <div className="h-1.5 bg-slate-800 rounded-full w-32 mt-1">
+                <div className={`h-full rounded-full ${progressColor}`} style={{width:`${pct}%`}}/>
+              </div>
+            </div>
+          )}
+          <button onClick={onBack}
+            className="flex items-center gap-1 text-slate-500 hover:text-white text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg transition-colors">
+            <ArrowLeft size={12}/> เปลี่ยนเครื่อง
+          </button>
+        </div>
       </div>
 
-      {planned > 0 && (
-        <div className={`w-full max-w-xl rounded-2xl p-4 border transition-colors ${done ? 'bg-green-500/10 border-green-500/30' : 'bg-slate-900 border-slate-800'}`}>
-          <div className="flex justify-between items-end mb-2">
-            <div>
-              <p className="text-slate-400 text-xs">ชั่งไปแล้ว</p>
-              <p className={`font-black text-2xl leading-tight ${done ? 'text-green-300' : 'text-white'}`}>
-                {fmt(weighedKg, dec)}<span className="text-slate-500 font-normal text-sm ml-1">Kgs.</span>
-              </p>
+      {/* Body: 2 column */}
+      <div className="flex flex-1 min-h-0">
+
+        {/* ── LEFT: เครื่องชั่ง ─────────────────────────────── */}
+        <div className="w-[340px] shrink-0 flex flex-col gap-3 p-4 border-r border-slate-800 overflow-y-auto">
+
+          {/* Scale display */}
+          <div className="bg-slate-900 border-2 border-slate-700 rounded-2xl px-5 py-5 text-center shadow-xl">
+            <p className="text-slate-500 text-[10px] uppercase tracking-widest mb-1">Gross Weight</p>
+            <div className={`font-mono text-6xl font-black tracking-tight leading-none mb-1 transition-colors ${stable ? 'text-white' : 'text-amber-300'}`}>
+              {fmt(gross, dec)}
             </div>
-            <div className="text-center">
-              <p className="text-slate-500 text-xs">ยอดสั่งผลิต</p>
-              <p className="text-slate-300 font-bold text-lg">{fmt(planned, dec)} Kgs.</p>
+            <p className={`text-xs font-semibold mb-3 ${stable ? 'text-slate-500' : 'text-amber-500 animate-pulse'}`}>
+              {stable ? 'Kgs. ✓' : 'Kgs. ⟳ อ่านค่า...'}
+            </p>
+
+            <div className="flex items-center justify-center gap-4 mb-3">
+              <div className="text-center bg-slate-800 rounded-xl px-3 py-1.5">
+                <p className="text-slate-500 text-[9px]">Core</p>
+                <p className="text-slate-300 font-bold text-sm">{fmt(core, dec)}</p>
+              </div>
+              <span className="text-slate-700 text-lg">−</span>
+              <div className="text-center">
+                <p className="text-slate-500 text-[9px]">Net</p>
+                <p className="text-brand-400 font-black text-2xl">{fmt(net, dec)}</p>
+                <p className="text-brand-400/60 text-[9px]">Kgs.</p>
+              </div>
             </div>
-            <div className="text-right">
-              <p className="text-slate-500 text-xs">คงเหลือ</p>
-              <p className={`font-black text-2xl leading-tight ${done ? 'text-green-400' : remaining < planned*0.2 ? 'text-amber-300' : 'text-brand-300'}`}>
-                {done ? '✓ ครบแล้ว' : `${fmt(remaining, dec)} Kgs.`}
-              </p>
-            </div>
+
+            <button onClick={readScale}
+              className={`w-full py-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all ${stable ? 'bg-slate-700 hover:bg-slate-600 text-white' : 'bg-amber-500/20 text-amber-400 cursor-not-allowed'}`}>
+              <RefreshCw size={13} className={stable ? '' : 'animate-spin'}/>
+              {stable ? 'วางม้วน / อ่านค่าใหม่' : 'กำลังอ่านค่า...'}
+            </button>
           </div>
-          <div className="h-3 bg-slate-800 rounded-full overflow-hidden">
-            <div className={`h-full rounded-full transition-all duration-500 ${progressColor}`} style={{ width: `${pct}%` }} />
+
+          {/* Roll No + Save */}
+          <div className="flex items-center gap-2">
+            <div className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 flex items-center gap-2 shrink-0">
+              <span className="text-slate-500 text-xs">Roll</span>
+              <button onClick={() => setRollNo(r => Math.max(1,r-1))} className="text-slate-500 hover:text-white w-5 text-center">−</button>
+              <span className="text-white font-black w-7 text-center">{rollNo}</span>
+              <button onClick={() => setRollNo(r => r+1)} className="text-slate-500 hover:text-white w-5 text-center">+</button>
+            </div>
+            <button onClick={handleSave} disabled={saving || net <= 0 || !stable}
+              className={`flex-1 py-3 rounded-xl text-white font-black flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-40 ${!stable ? 'bg-slate-700 cursor-not-allowed' : 'bg-brand-600 hover:bg-brand-500'}`}>
+              <Save size={17}/>
+              {saving ? 'บันทึก...' : !stable ? 'รอค่านิ่ง...' : `Roll ${rollNo} · ${fmt(net,dec)}`}
+            </button>
           </div>
-          <div className="flex justify-between text-[10px] mt-1">
-            <span className="text-slate-600">{weighedRolls.length} ม้วน · {pct}%</span>
-            {!done && weighedRolls.length > 0 && (
-              <span className="text-slate-600">อีก ~{Math.ceil(remaining / (weighedKg/Math.max(weighedRolls.length,1)))} ม้วน</span>
+
+          {/* Last saved flash */}
+          {lastRoll && (
+            <div className="bg-green-500/10 border border-green-500/25 rounded-xl px-4 py-2.5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 size={14} className="text-green-400"/>
+                <p className="text-green-300 text-sm font-semibold">Roll {lastRoll.roll_no} · {fmt(lastRoll.weight,dec)} Kgs. ✓</p>
+              </div>
+            </div>
+          )}
+
+          {/* Progress detail */}
+          {planned > 0 && (
+            <div className={`rounded-xl p-3 border ${done ? 'bg-green-500/10 border-green-500/30' : 'bg-slate-900 border-slate-800'}`}>
+              <div className="flex justify-between text-xs mb-1.5">
+                <span className="text-slate-400">ชั่งแล้ว <b className={done?'text-green-300':'text-white'}>{fmt(weighedKg,dec)}</b></span>
+                <span className={done ? 'text-green-400 font-bold' : 'text-brand-300'}>{done ? '✓ ครบ' : `เหลือ ${fmt(remaining,dec)}`}</span>
+              </div>
+              <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                <div className={`h-full rounded-full ${progressColor}`} style={{width:`${pct}%`}}/>
+              </div>
+              <p className="text-slate-600 text-[10px] mt-1">{weighedRolls.length} ม้วน · {pct}% · เป้า {fmt(planned,dec)} Kgs.</p>
+            </div>
+          )}
+        </div>
+
+        {/* ── RIGHT: ตารางม้วน ──────────────────────────────── */}
+        <div className="flex-1 flex flex-col min-w-0">
+          <div className="px-4 py-2.5 border-b border-slate-800 flex items-center justify-between shrink-0">
+            <p className="text-white font-semibold text-sm">รายการม้วน</p>
+            <p className="text-slate-500 text-xs">{weighedRolls.length} ม้วน</p>
+          </div>
+
+          {/* Table header */}
+          <div className="grid grid-cols-5 gap-0 border-b border-slate-800 bg-slate-800/30 shrink-0">
+            {['ม้วนที่','นน.เต็ม (Kgs.)','นน.แกน (Kgs.)','นน.สุทธิ (Kgs.)',''].map(h => (
+              <div key={h} className="px-4 py-2 text-slate-500 text-[10px] font-semibold uppercase tracking-wider">{h}</div>
+            ))}
+          </div>
+
+          {/* Rows */}
+          <div className="flex-1 overflow-y-auto divide-y divide-slate-800/50">
+            {[...weighedRolls].reverse().map(r => (
+              <div key={r.roll_no}
+                onClick={() => setSelectedRoll(r)}
+                className={`grid grid-cols-5 gap-0 hover:bg-slate-800/40 cursor-pointer transition-colors ${lastRoll?.roll_no === r.roll_no ? 'bg-green-500/5' : ''}`}>
+                <div className="px-4 py-3">
+                  <span className="text-white font-bold font-mono">#{r.roll_no}</span>
+                  {lastRoll?.roll_no === r.roll_no && (
+                    <span className="ml-2 text-[9px] text-green-400">NEW</span>
+                  )}
+                </div>
+                <div className="px-4 py-3 text-slate-400">{fmt(r.weight + (r.core_weight??0), dec)}</div>
+                <div className="px-4 py-3 text-slate-500">{fmt(r.core_weight ?? 0, dec)}</div>
+                <div className="px-4 py-3 text-brand-300 font-black text-base">{fmt(r.weight, dec)}</div>
+                <div className="px-4 py-3 flex items-center">
+                  <span className="text-slate-600 text-[10px]">คลิกดูรายละเอียด →</span>
+                </div>
+              </div>
+            ))}
+            {weighedRolls.length === 0 && (
+              <div className="flex items-center justify-center h-40 text-slate-600 text-sm">
+                ยังไม่มีม้วน — ชั่งแล้วกดบันทึก
+              </div>
             )}
           </div>
-        </div>
-      )}
 
-      <div className="bg-slate-900 border-2 border-slate-700 rounded-3xl px-8 py-6 w-full max-w-xl text-center shadow-2xl">
-        <p className="text-slate-500 text-xs uppercase tracking-widest mb-2">Gross Weight</p>
-        <div className={`font-mono text-7xl font-black tracking-tight leading-none mb-1 transition-colors ${stable ? 'text-white' : 'text-amber-300'}`}>
-          {fmt(gross, dec)}
-        </div>
-        <p className={`mb-4 text-sm font-semibold ${stable ? 'text-slate-500' : 'text-amber-500 animate-pulse'}`}>
-          {stable ? 'Kgs. ✓' : 'Kgs. ⟳ กำลังอ่านค่า...'}
-        </p>
-        <div className="flex items-center justify-center gap-5">
-          <div className="text-center bg-slate-800 rounded-xl px-4 py-2">
-            <p className="text-slate-500 text-[10px]">Core</p>
-            <p className="text-slate-300 font-bold">{fmt(core, dec)} Kgs.</p>
-          </div>
-          <div className="text-2xl text-slate-700">−</div>
-          <div className="text-center">
-            <p className="text-slate-500 text-[10px]">Net Weight</p>
-            <p className="text-brand-400 font-black text-3xl">{fmt(net, dec)}</p>
-            <p className="text-brand-400/60 text-xs">Kgs.</p>
-          </div>
-        </div>
-        <button onClick={readScale}
-          className={`mt-3 flex items-center gap-1.5 mx-auto text-sm font-semibold px-5 py-2 rounded-xl transition-all ${stable ? 'bg-slate-700 hover:bg-slate-600 text-white' : 'bg-amber-500/20 text-amber-400 cursor-not-allowed'}`}>
-          <RefreshCw size={13} className={stable ? '' : 'animate-spin'} />
-          {stable ? 'วางม้วน / อ่านค่าใหม่' : 'กำลังอ่านค่า...'}
-        </button>
-      </div>
-
-      <div className="flex items-center gap-3 w-full max-w-xl">
-        <div className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 flex items-center gap-2 shrink-0">
-          <span className="text-slate-500 text-xs">Roll</span>
-          <button onClick={() => setRollNo(r => Math.max(1,r-1))} className="text-slate-500 hover:text-white w-5 text-center">−</button>
-          <span className="text-white font-black text-base w-8 text-center">{rollNo}</span>
-          <button onClick={() => setRollNo(r => r+1)} className="text-slate-500 hover:text-white w-5 text-center">+</button>
-        </div>
-        <button onClick={handleSave} disabled={saving || net <= 0 || !stable}
-          className={`flex-1 py-4 rounded-2xl text-white font-black text-lg flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg disabled:opacity-40 ${!stable ? 'bg-slate-700 cursor-not-allowed' : 'bg-brand-600 hover:bg-brand-500'}`}>
-          <Save size={20} />
-          {saving ? 'กำลังบันทึก...' : !stable ? 'รอค่านิ่งก่อน...' : `บันทึก Roll ${rollNo} · ${fmt(net,dec)} Kgs.`}
-        </button>
-      </div>
-
-      {lastRoll && (
-        <div className="w-full max-w-xl bg-green-500/10 border border-green-500/25 rounded-2xl px-5 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 size={16} className="text-green-400" />
-            <div>
-              <p className="text-green-300 font-semibold text-sm">Roll {lastRoll.roll_no} · {fmt(lastRoll.weight,dec)} Kgs. ✓</p>
-              <p className="text-green-400/50 text-xs">Gross {fmt(lastRoll.gross_weight,dec)} · Core {fmt(core,dec)}</p>
+          {/* Footer sum */}
+          {weighedRolls.length > 0 && (
+            <div className="border-t border-slate-700 bg-slate-900 px-4 py-2 grid grid-cols-5 gap-0 shrink-0">
+              <div className="text-slate-400 text-xs font-semibold col-span-3">รวม {weighedRolls.length} ม้วน</div>
+              <div className="text-brand-300 font-black">{fmt(weighedKg, dec)}</div>
+              <div/>
             </div>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={() => printLabel(profile, lastRoll.roll_no, lastRoll.gross_weight, lastRoll.weight, 'short')}
-              className="flex items-center gap-1 bg-slate-700 hover:bg-slate-600 text-white text-xs px-2.5 py-1.5 rounded-lg transition-colors">
-              <Printer size={11}/> <span className="text-[9px]">สั้น</span>
-            </button>
-            <button onClick={() => printLabel(profile, lastRoll.roll_no, lastRoll.gross_weight, lastRoll.weight, 'long')}
-              className="flex items-center gap-1 bg-slate-700 hover:bg-slate-600 text-white text-xs px-2.5 py-1.5 rounded-lg transition-colors">
-              <Printer size={11}/> <span className="text-[9px]">ยาว</span>
-            </button>
-            <span className="text-slate-600 text-[10px] self-center">พิมพ์ซ้ำ</span>
+          )}
+        </div>
+      </div>
+
+      {/* ── Modal: ประวัติม้วน ─────────────────────────────── */}
+      {selectedRoll && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+          onClick={() => setSelectedRoll(null)}>
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm shadow-2xl"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
+              <div>
+                <p className="text-white font-bold">Roll #{selectedRoll.roll_no}</p>
+                <p className="text-slate-400 text-xs">{profile.machine_no} · {profile.lotNo}</p>
+              </div>
+              <button onClick={() => setSelectedRoll(null)}>
+                <X size={18} className="text-slate-400 hover:text-white"/>
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-3">
+              {/* น้ำหนัก */}
+              <div className="grid grid-cols-3 gap-2 text-center">
+                {[
+                  { label:'นน.เต็ม', val: fmt(selectedRoll.weight+(selectedRoll.core_weight??0), dec), cls:'text-slate-300' },
+                  { label:'นน.แกน',  val: fmt(selectedRoll.core_weight??0, dec),  cls:'text-slate-500' },
+                  { label:'นน.สุทธิ',val: fmt(selectedRoll.weight, dec),          cls:'text-brand-400 font-black text-2xl' },
+                ].map(item => (
+                  <div key={item.label} className="bg-slate-800 rounded-xl py-3">
+                    <p className="text-slate-500 text-[9px] mb-1">{item.label}</p>
+                    <p className={`font-bold text-lg ${item.cls}`}>{item.val}</p>
+                    <p className="text-slate-600 text-[9px]">Kgs.</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="text-center text-slate-500 text-xs">
+                {new Date(selectedRoll.created_at).toLocaleDateString('th-TH')} · {new Date(selectedRoll.created_at).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})}
+              </div>
+
+              {/* QR Code */}
+              <div className="flex flex-col items-center gap-2 bg-white rounded-xl p-4">
+                <QRCode value={makeQrData(selectedRoll)} size={160} level="M"/>
+                <p className="text-slate-500 text-[9px] text-center">สแกนเพื่อดูข้อมูลม้วน</p>
+              </div>
+            </div>
+
+            {/* Reprint */}
+            <div className="flex gap-2 px-5 py-4 border-t border-slate-800">
+              <button onClick={() => printLabel(profile, selectedRoll.roll_no, selectedRoll.gross_weight??selectedRoll.weight+(selectedRoll.core_weight??0), selectedRoll.weight, 'short')}
+                className="flex-1 flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white text-sm py-2.5 rounded-xl transition-colors">
+                <Printer size={14}/> พิมพ์ใบสั้น
+              </button>
+              <button onClick={() => printLabel(profile, selectedRoll.roll_no, selectedRoll.gross_weight??selectedRoll.weight+(selectedRoll.core_weight??0), selectedRoll.weight, 'long')}
+                className="flex-1 flex items-center justify-center gap-1.5 bg-brand-600 hover:bg-brand-700 text-white text-sm py-2.5 rounded-xl transition-colors font-semibold">
+                <Printer size={14}/> พิมพ์ใบยาว
+              </button>
+            </div>
           </div>
         </div>
       )}

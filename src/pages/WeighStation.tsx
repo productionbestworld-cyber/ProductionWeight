@@ -4,8 +4,9 @@ import QRCode from 'react-qr-code'
 import { supabase } from '../lib/supabase'
 import { loadProfiles, type MachineProfile } from './MachineSettings'
 
-function fmt(n: number, d: 1|2 = 2) {
-  return n.toLocaleString('th-TH', { minimumFractionDigits: d, maximumFractionDigits: d })
+function fmt(n: number | null | undefined, d: 1|2 = 2) {
+  if (n === null || n === undefined || isNaN(n as number)) return (0).toFixed(d)
+  return (n as number).toLocaleString('th-TH', { minimumFractionDigits: d, maximumFractionDigits: d })
 }
 function thaiDate() {
   const d = new Date()

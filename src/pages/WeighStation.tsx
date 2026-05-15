@@ -68,9 +68,10 @@ html,body{font-family:'Sarabun','Tahoma',sans-serif;font-size:8.5pt;color:#000;b
 <div class="wrap">
   <div class="title">บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด
     ${rollType !== 'good' ? `<span style="font-size:8pt;font-weight:700;color:#c00;margin-left:4mm">[${
-      rollType === 'bad' ? 'ม้วนกรอ' :
+      rollType === 'bad'         ? 'ม้วนกรอ' :
       rollType === 'scrap_clear' ? 'เศษเสีย (ใส)' :
-      rollType === 'scrap_color' ? 'เศษเสีย (สี)' : 'เศษก้อน'
+      rollType === 'scrap_color' ? 'เศษเสีย (สี)' :
+      rollType === 'scrap_lump'  ? 'เศษก้อน' : ''
     }]</span>` : ''}
   </div>
   ${reason ? `<div style="font-size:7.5pt;color:#c00;text-align:center;margin-bottom:1mm">เหตุผล: ${reason}</div>` : ''}
@@ -84,7 +85,8 @@ html,body{font-family:'Sarabun','Tahoma',sans-serif;font-size:8.5pt;color:#000;b
       <span style="font-size:8pt">MFG Date &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span><b style="font-size:9pt">${mfgDate}</b>
     </div>
     <div class="hc3">
-      <span style="font-size:8pt">Roll No. &nbsp;</span><b style="font-size:9pt">${rollNo}</b>
+      <span style="font-size:8pt">${rollType.startsWith('scrap') ? 'ถุงเศษ' : rollType==='bad' ? 'กรอ No.' : 'Roll No.'} &nbsp;</span>
+      <b style="font-size:9pt">${rollNo === 0 ? '—' : rollNo}</b>
     </div>
   </div>
 
@@ -245,8 +247,10 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
   const [lastRoll,     setLastRoll]     = useState<any>(null)
   const [weighedKg,    setWeighedKg]    = useState(0)
   const [weighedRolls, setWeighedRolls] = useState<any[]>([])
-  const [weighType,    setWeighType]    = useState<'good'|'bad'|'scrap_clear'|'scrap_color'|'scrap_lump'>('good')
+  const [weighType,    setWeighType]    = useState<'good'|'bad'|'scrap'>('good')
+  const [scrapSub,     setScrapSub]     = useState<'scrap_clear'|'scrap_color'|'scrap_lump'>('scrap_clear')
   const [badReason,    setBadReason]    = useState('')
+  const [badRollNo,    setBadRollNo]    = useState(1)  // ม้วนกรอเริ่มที่ 1 ของงานนี้
   const [stable,       setStable]       = useState(true)
   const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -270,8 +274,11 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
         const total = goodRolls.reduce((s: number, r: any) => s + (r.weight ?? 0), 0)
         setWeighedKg(parseFloat(total.toFixed(dec)))
         setWeighedRolls(data as any[])
-        const lastRollNo = Math.max(0, ...goodRolls.map((r:any) => r.roll_no ?? 0))
+        const lastRollNo    = Math.max(0, ...goodRolls.map((r:any) => r.roll_no ?? 0))
+        const badRolls      = (data as any[]).filter(r => r.roll_type === 'bad')
+        const lastBadRollNo = Math.max(0, ...badRolls.map((r:any) => r.roll_no ?? 0))
         setRollNo(lastRollNo + 1)
+        setBadRollNo(lastBadRollNo + 1)
       })
     startIdle()
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
@@ -314,10 +321,10 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
     }, 100)
   }
 
-  const isScrap = weighType.startsWith('scrap')
+  const isScrap = weighType === 'scrap'
   const isGood  = weighType === 'good'
   const isBad   = weighType === 'bad'
-  // เศษใช้ gross โดยตรง, ม้วนดี/กรอใช้ net
+  // เศษใช้ gross โดยตรง (มาเป็นถุง ไม่หักแกน), ม้วนดี/กรอใช้ net
   const saveWeight = isScrap ? gross : net
 
   async function handleSave() {
@@ -325,31 +332,33 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
     if (isBad && !badReason.trim()) { alert('กรุณาระบุเหตุผลม้วนกรอ'); return }
     setSaving(true)
     try {
+      const actualType = isScrap ? scrapSub : weighType
+      const useRollNo  = isBad ? badRollNo : isGood ? rollNo : null
+
       const { data } = await supabase.from('production_rolls').insert({
         job_id:       null,
-        roll_no:      rollNo,
-        roll_type:    weighType,
+        roll_no:      useRollNo,
+        roll_type:    actualType,
         weight:       parseFloat(saveWeight.toFixed(dec)),
         gross_weight: gross,
         core_weight:  isScrap ? 0 : core,
         remark:       isBad ? badReason : null,
       }).select().single()
 
-      setLastRoll({ ...data, weighType })
+      setLastRoll({ ...data, weighType: actualType })
+      setWeighedRolls(prev => [...prev, data])
+
       if (isGood) {
-        const newTotal = parseFloat((weighedKg + saveWeight).toFixed(dec))
-        setWeighedKg(newTotal)
-        setWeighedRolls(prev => [...prev, data])
+        setWeighedKg(prev => parseFloat((prev + saveWeight).toFixed(dec)))
         setRollNo(r => r + 1)
         printLabel(profile, rollNo, gross, saveWeight, profile.labelSize ?? 'long', 'good')
       } else if (isBad) {
-        setWeighedRolls(prev => [...prev, data])
-        setRollNo(r => r + 1)
-        printLabel(profile, rollNo, gross, saveWeight, profile.labelSize ?? 'long', 'bad', badReason)
+        setBadRollNo(r => r + 1)
+        printLabel(profile, badRollNo, gross, saveWeight, profile.labelSize ?? 'long', 'bad', badReason)
         setBadReason('')
       } else {
-        // เศษ — ไม่นับ roll_no
-        printLabel(profile, rollNo, gross, gross, profile.labelSize ?? 'long', weighType)
+        // เศษ — ไม่มี roll_no ไม่นับม้วน พิมพ์ label แยก
+        printLabel(profile, 0, gross, gross, profile.labelSize ?? 'long', actualType)
       }
       setGross(0)
       startIdle()
@@ -415,20 +424,34 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
         <div className="w-[380px] shrink-0 flex flex-col gap-2.5 p-4 border-r border-slate-800 overflow-y-auto">
 
           {/* Type selector */}
-          <div className="grid grid-cols-5 gap-1">
+          <div className="grid grid-cols-3 gap-1.5">
             {([
-              { key:'good',        label:'ม้วนดี',     color:'bg-brand-600 text-white',   inactive:'bg-slate-800 text-slate-400 hover:text-white' },
-              { key:'bad',         label:'ม้วนกรอ',    color:'bg-orange-600 text-white',  inactive:'bg-slate-800 text-slate-400 hover:text-white' },
-              { key:'scrap_clear', label:'เศษใส',       color:'bg-slate-500 text-white',   inactive:'bg-slate-800 text-slate-400 hover:text-white' },
-              { key:'scrap_color', label:'เศษสี',       color:'bg-purple-600 text-white',  inactive:'bg-slate-800 text-slate-400 hover:text-white' },
-              { key:'scrap_lump',  label:'เศษก้อน',    color:'bg-amber-600 text-white',   inactive:'bg-slate-800 text-slate-400 hover:text-white' },
+              { key:'good',  label:'ม้วนดี',  color:'bg-brand-600 text-white',   inactive:'bg-slate-800 text-slate-400 hover:text-white' },
+              { key:'bad',   label:'ม้วนกรอ', color:'bg-orange-600 text-white',  inactive:'bg-slate-800 text-slate-400 hover:text-white' },
+              { key:'scrap', label:'เศษเสีย', color:'bg-amber-600 text-white',   inactive:'bg-slate-800 text-slate-400 hover:text-white' },
             ] as const).map(t => (
               <button key={t.key} onClick={() => setWeighType(t.key)}
-                className={`py-2 rounded-xl text-[10px] font-bold transition-colors text-center ${weighType===t.key ? t.color : t.inactive}`}>
+                className={`py-2.5 rounded-xl text-sm font-bold transition-colors text-center ${weighType===t.key ? t.color : t.inactive}`}>
                 {t.label}
               </button>
             ))}
           </div>
+
+          {/* เศษ sub-select */}
+          {isScrap && (
+            <div className="grid grid-cols-3 gap-1">
+              {([
+                { key:'scrap_clear', label:'เศษใส',   color:'bg-slate-600' },
+                { key:'scrap_color', label:'เศษสี',   color:'bg-purple-700' },
+                { key:'scrap_lump',  label:'เศษก้อน', color:'bg-amber-700' },
+              ] as const).map(s => (
+                <button key={s.key} onClick={() => setScrapSub(s.key)}
+                  className={`py-1.5 rounded-lg text-xs font-semibold transition-colors ${scrapSub===s.key ? s.color+' text-white' : 'bg-slate-800 text-slate-500 hover:text-white'}`}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Bad reason */}
           {isBad && (
@@ -483,25 +506,24 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
           <div className="flex items-center gap-2">
             {(isGood || isBad) && (
               <div className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 flex items-center gap-2 shrink-0">
-                <span className="text-slate-500 text-xs">Roll</span>
-                <button onClick={() => setRollNo(r => Math.max(1,r-1))} className="text-slate-500 hover:text-white w-5 text-center">−</button>
-                <span className="text-white font-black w-7 text-center">{rollNo}</span>
-                <button onClick={() => setRollNo(r => r+1)} className="text-slate-500 hover:text-white w-5 text-center">+</button>
+                <span className="text-slate-500 text-xs">{isBad ? 'กรอ' : 'Roll'}</span>
+                <span className="text-white font-black w-7 text-center">
+                  {isBad ? badRollNo : rollNo}
+                </span>
               </div>
             )}
             <button onClick={handleSave} disabled={saving || saveWeight <= 0 || !stable || (isBad && !badReason.trim())}
               className={`flex-1 py-3 rounded-xl text-white font-black flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-40 ${
                 !stable ? 'bg-slate-700 cursor-not-allowed' :
-                weighType==='good'        ? 'bg-brand-600 hover:bg-brand-500' :
-                weighType==='bad'         ? 'bg-orange-600 hover:bg-orange-500' :
-                weighType==='scrap_clear' ? 'bg-slate-600 hover:bg-slate-500' :
-                weighType==='scrap_color' ? 'bg-purple-600 hover:bg-purple-500' :
-                                            'bg-amber-600 hover:bg-amber-500'
+                isGood  ? 'bg-brand-600 hover:bg-brand-500' :
+                isBad   ? 'bg-orange-600 hover:bg-orange-500' :
+                          'bg-amber-600 hover:bg-amber-500'
               }`}>
               <Save size={17}/>
               {saving ? 'บันทึก...' : !stable ? 'รอค่านิ่ง...' :
-                isScrap ? `บันทึก ${fmt(gross,dec)} Kgs.` :
-                `Roll ${rollNo} · ${fmt(saveWeight,dec)} Kgs.`}
+                isScrap ? `บันทึกเศษ ${fmt(gross,dec)} Kgs.` :
+                isBad   ? `กรอ #${badRollNo} · ${fmt(saveWeight,dec)} Kgs.` :
+                          `Roll #${rollNo} · ${fmt(saveWeight,dec)} Kgs.`}
             </button>
           </div>
 

@@ -1,5 +1,6 @@
-﻿import { useState } from 'react'
-import { Plus, Trash2, Save, ChevronDown, ChevronUp } from 'lucide-react'
+﻿import { useState, useEffect } from 'react'
+import { Plus, Trash2, Save, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
+import { supabase } from '../lib/supabase'
 
 // ── Full Machine Profile ──────────────────────────────────────────────────────
 export interface MachineProfile {
@@ -36,8 +37,55 @@ const EMPTY_PROFILE: MachineProfile = {
   plannedQty:'', labelSize:'long',
 }
 
-const STORAGE_KEY = 'bwp_machine_profiles'
+// ── DB ↔ App type conversion ──────────────────────────────────────────────────
+function dbToProfile(row: any): MachineProfile {
+  return {
+    machine_no:  row.machine_no,
+    custCode:    row.cust_code    ?? '',
+    custName:    row.cust_name    ?? '',
+    custAddress: row.cust_address ?? '',
+    decimal:     (row.decimal_places ?? 2) as 1|2,
+    matCode:     row.mat_code     ?? '',
+    productCode: row.product_code ?? '',
+    productName: row.product_name ?? '',
+    widthCm:     row.width_cm     ?? '',
+    thickMc:     row.thick_mc     ?? '',
+    lotNo:       row.lot_no       ?? '',
+    length:      row.length       ?? '',
+    pcs:         row.pcs          ?? '',
+    coreWeight:  row.core_weight  ?? '1.25',
+    inspector:   row.inspector    ?? '',
+    locked:      row.locked       ?? true,
+    plannedQty:  row.planned_qty  ?? '',
+    labelSize:   (row.label_size  ?? 'long') as 'long'|'short',
+  }
+}
+function profileToDb(p: MachineProfile) {
+  return {
+    machine_no:    p.machine_no,
+    cust_code:     p.custCode,
+    cust_name:     p.custName,
+    cust_address:  p.custAddress,
+    decimal_places: p.decimal,
+    mat_code:      p.matCode,
+    product_code:  p.productCode,
+    product_name:  p.productName,
+    width_cm:      p.widthCm,
+    thick_mc:      p.thickMc,
+    lot_no:        p.lotNo,
+    length:        p.length,
+    pcs:           p.pcs,
+    core_weight:   p.coreWeight,
+    inspector:     p.inspector,
+    locked:        p.locked,
+    planned_qty:   p.plannedQty,
+    label_size:    p.labelSize,
+    updated_at:    new Date().toISOString(),
+  }
+}
 
+// ── เผื่อ fallback localStorage ───────────────────────────────────────────────
+const STORAGE_KEY = 'bwp_machine_profiles'
 export function loadProfiles(): MachineProfile[] {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]') } catch { return [] }
 }
@@ -170,20 +218,43 @@ function ProfileCard({ p, i, onChange, onRemove }: {
 
 // ─── Main Settings Page ───────────────────────────────────────────────────────
 export default function MachineSettings() {
-  const [profiles, setProfiles] = useState<MachineProfile[]>(loadProfiles)
-  const [saved, setSaved]       = useState(false)
+  const [profiles, setProfiles] = useState<MachineProfile[]>([])
+  const [saved,    setSaved]    = useState(false)
+  const [loading,  setLoading]  = useState(true)
+
+  // โหลดจาก Supabase เมื่อเปิดหน้า
+  useEffect(() => {
+    supabase.from('machine_profiles').select('*').order('machine_no')
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          const loaded = data.map(dbToProfile)
+          setProfiles(loaded)
+          saveProfiles(loaded) // sync localStorage
+        } else {
+          setProfiles(loadProfiles()) // fallback
+        }
+        setLoading(false)
+      })
+  }, [])
 
   function add() {
     setProfiles(p => [...p, { ...EMPTY_PROFILE }])
   }
   function remove(i: number) {
     if (!confirm('ลบเครื่องนี้?')) return
-    setProfiles(p => p.filter((_, idx) => idx !== i))
+    const p = profiles[i]
+    if (p.machine_no) supabase.from('machine_profiles').delete().eq('machine_no', p.machine_no)
+    setProfiles(prev => prev.filter((_, idx) => idx !== i))
   }
   function update(i: number, k: keyof MachineProfile, v: any) {
     setProfiles(p => p.map((m, idx) => idx === i ? { ...m, [k]: v } : m))
   }
-  function handleSave() {
+  async function handleSave() {
+    const valid = profiles.filter(p => p.machine_no)
+    for (const p of valid) {
+      await supabase.from('machine_profiles')
+        .upsert(profileToDb(p), { onConflict: 'machine_no' })
+    }
     saveProfiles(profiles)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
@@ -222,7 +293,13 @@ export default function MachineSettings() {
         <Plus size={16} /> เพิ่มเครื่อง
       </button>
 
-      {profiles.length === 0 && (
+      {loading && (
+        <div className="text-center py-10 text-slate-500 flex items-center justify-center gap-2">
+          <RefreshCw size={16} className="animate-spin" /> กำลังโหลดจาก Supabase...
+        </div>
+      )}
+
+      {!loading && profiles.length === 0 && (
         <div className="text-center py-8 space-y-2">
           <p className="text-slate-500 text-sm">ยังไม่มีเครื่อง — กด "เพิ่มเครื่อง"</p>
           <p className="text-slate-600 text-xs">กรอกข้อมูลครบทุกเครื่องก่อน แล้วบันทึก<br/>พนักงานจะแตะเครื่องแล้วชั่งได้ทันที</p>

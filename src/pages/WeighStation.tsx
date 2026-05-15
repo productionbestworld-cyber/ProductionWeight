@@ -252,7 +252,7 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
   useEffect(() => {
     const today = new Date(); today.setHours(0,0,0,0)
     supabase.from('production_rolls')
-      .select('roll_no, weight')
+      .select('*')
       .eq('roll_type', 'good')
       .gte('created_at', today.toISOString())
       .order('roll_no', { ascending: true })

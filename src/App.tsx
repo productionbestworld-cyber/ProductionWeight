@@ -3,10 +3,16 @@ import { Scale, LayoutDashboard, Settings } from 'lucide-react'
 import WeighStation from './pages/WeighStation'
 import Dashboard from './pages/Dashboard'
 import MachineSettings from './pages/MachineSettings'
+import RollDetail from './pages/RollDetail'
 
 type Page = 'weigh' | 'dashboard' | 'settings'
 
 export default function App() {
+  // ถ้า URL มี ?roll= ให้แสดงหน้า Roll Detail แทน
+  if (new URLSearchParams(window.location.search).get('roll')) {
+    return <RollDetail />
+  }
+
   const [page, setPage] = useState<Page>('weigh')
 
   return (

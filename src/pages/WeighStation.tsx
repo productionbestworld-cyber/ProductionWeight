@@ -20,14 +20,21 @@ function printLabel(p: MachineProfile, rollNo: number, gross: number, net: numbe
   const dec     = p.decimal
   const mfgDate = thaiDate()
   const core    = parseFloat(p.coreWeight) || 0
-  const qrData  = JSON.stringify({
+  // QR เป็น URL → เมื่อสแกนเปิดหน้า Roll Detail ครบถ้วน
+  const rollData = JSON.stringify({
     mat: p.matCode, lot: p.lotNo, roll: rollNo,
-    net: fmt(net,dec), gross: fmt(gross,dec),
+    net: fmt(net,dec), gross: fmt(gross,dec), core: fmt(core,dec),
     machine: p.machine_no, date: mfgDate,
+    time: new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}),
     customer: p.custName, product: p.productName,
+    width: p.widthCm, thick: p.thickMc, length: p.length,
+    inspector: p.inspector, planned: p.plannedQty,
   })
+  const base64Data = btoa(unescape(encodeURIComponent(rollData)))
+  const appUrl     = window.location.origin
+  const detailUrl  = `${appUrl}/?roll=${base64Data}`
   const qrUrl = (s: number) =>
-    `https://api.qrserver.com/v1/create-qr-code/?size=${s}x${s}&data=${encodeURIComponent(qrData)}&margin=2`
+    `https://api.qrserver.com/v1/create-qr-code/?size=${s}x${s}&data=${encodeURIComponent(detailUrl)}&margin=2`
 
   // ═══════════════════════════════════════════════════════
   // ใบยาว 165 × 101.5 mm (landscape) — compact fit
@@ -321,16 +328,20 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
 
   const [selectedRoll, setSelectedRoll] = useState<any>(null)
 
-  // QR data สำหรับม้วนที่เลือก
-  function makeQrData(r: any) {
-    return JSON.stringify({
+  // สร้าง URL สำหรับม้วนที่เลือก (ใช้ใน QR บน label เท่านั้น)
+  function makeRollUrl(r: any) {
+    const d = JSON.stringify({
       mat: profile.matCode, lot: profile.lotNo,
       roll: r.roll_no, net: fmt(r.weight, dec),
       gross: fmt(r.gross_weight ?? 0, dec), core: fmt(r.core_weight ?? 0, dec),
-      machine: profile.machine_no, date: new Date(r.created_at).toLocaleDateString('th-TH'),
-      time: new Date(r.created_at).toLocaleTimeString('th-TH', {hour:'2-digit',minute:'2-digit'}),
+      machine: profile.machine_no,
+      date: new Date(r.created_at).toLocaleDateString('th-TH'),
+      time: new Date(r.created_at).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}),
       customer: profile.custName, product: profile.productName,
+      width: profile.widthCm, thick: profile.thickMc,
+      length: profile.length, inspector: profile.inspector, planned: profile.plannedQty,
     })
+    return `${window.location.origin}/?roll=${btoa(unescape(encodeURIComponent(d)))}`
   }
 
   return (
@@ -509,29 +520,39 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
             </div>
 
             <div className="px-5 py-4 space-y-3">
-              {/* น้ำหนัก */}
+              {/* น้ำหนัก 3 ค่า */}
               <div className="grid grid-cols-3 gap-2 text-center">
                 {[
-                  { label:'นน.เต็ม', val: fmt(selectedRoll.weight+(selectedRoll.core_weight??0), dec), cls:'text-slate-300' },
-                  { label:'นน.แกน',  val: fmt(selectedRoll.core_weight??0, dec),  cls:'text-slate-500' },
-                  { label:'นน.สุทธิ',val: fmt(selectedRoll.weight, dec),          cls:'text-brand-400 font-black text-2xl' },
+                  { label:'นน.เต็ม',  val: fmt((selectedRoll.weight??0)+(selectedRoll.core_weight??0), dec), cls:'text-slate-300 text-lg' },
+                  { label:'นน.แกน',   val: fmt(selectedRoll.core_weight??0, dec),  cls:'text-slate-500 text-lg' },
+                  { label:'นน.สุทธิ', val: fmt(selectedRoll.weight??0, dec),       cls:'text-brand-400 font-black text-2xl' },
                 ].map(item => (
                   <div key={item.label} className="bg-slate-800 rounded-xl py-3">
                     <p className="text-slate-500 text-[9px] mb-1">{item.label}</p>
-                    <p className={`font-bold text-lg ${item.cls}`}>{item.val}</p>
+                    <p className={`font-bold ${item.cls}`}>{item.val}</p>
                     <p className="text-slate-600 text-[9px]">Kgs.</p>
                   </div>
                 ))}
               </div>
 
-              <div className="text-center text-slate-500 text-xs">
-                {new Date(selectedRoll.created_at).toLocaleDateString('th-TH')} · {new Date(selectedRoll.created_at).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})}
-              </div>
-
-              {/* QR Code */}
-              <div className="flex flex-col items-center gap-2 bg-white rounded-xl p-4">
-                <QRCode value={makeQrData(selectedRoll)} size={160} level="M"/>
-                <p className="text-slate-500 text-[9px] text-center">สแกนเพื่อดูข้อมูลม้วน</p>
+              {/* รายละเอียด */}
+              <div className="bg-slate-800 rounded-xl px-4 py-3 space-y-2">
+                {[
+                  { k:'ลูกค้า',      v: profile.custName },
+                  { k:'สินค้า',      v: profile.productName },
+                  { k:'Mat Code',    v: profile.matCode,    mono:true },
+                  { k:'Lot No',      v: profile.lotNo,      mono:true },
+                  { k:'ขนาด',        v: profile.widthCm && profile.thickMc ? `${profile.widthCm} cm × ${profile.thickMc} mc` : '—' },
+                  { k:'ความยาว',     v: profile.length ? `${profile.length} Ms.` : '—' },
+                  { k:'เครื่อง',     v: profile.machine_no },
+                  { k:'ผู้ตรวจสอบ', v: profile.inspector || '—' },
+                  { k:'วันที่ชั่ง',  v: `${new Date(selectedRoll.created_at).toLocaleDateString('th-TH')} ${new Date(selectedRoll.created_at).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})}` },
+                ].map(row => (
+                  <div key={row.k} className="flex justify-between items-baseline gap-2">
+                    <span className="text-slate-500 text-xs shrink-0">{row.k}</span>
+                    <span className={`text-right text-sm font-semibold text-slate-200 truncate ${(row as any).mono ? 'font-mono' : ''}`}>{row.v}</span>
+                  </div>
+                ))}
               </div>
             </div>
 

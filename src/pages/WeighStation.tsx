@@ -536,73 +536,116 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
           )}
         </div>
 
-        {/* ── RIGHT: ตารางม้วน ──────────────────────────────── */}
-        <div className="flex-1 flex flex-col min-w-0">
-          <div className="px-4 py-2.5 border-b border-slate-800 flex items-center justify-between shrink-0">
-            <p className="text-white font-semibold text-sm">รายการม้วน</p>
-            <p className="text-slate-500 text-xs">{weighedRolls.length} ม้วน</p>
+        {/* ── RIGHT: ตารางแยก ──────────────────────────────── */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+
+          {/* Summary bar */}
+          <div className="px-4 py-2 border-b border-slate-800 bg-slate-900 flex gap-4 shrink-0 text-xs">
+            <span className="text-slate-500">ม้วนดี <b className="text-brand-300">{weighedRolls.filter((r:any)=>r.roll_type==='good').length} ม้วน · {fmt(weighedKg,dec)} Kgs.</b></span>
+            <span className="text-slate-700">|</span>
+            <span className="text-slate-500">ม้วนกรอ <b className="text-orange-300">{weighedRolls.filter((r:any)=>r.roll_type==='bad').length} ม้วน · {fmt(weighedRolls.filter((r:any)=>r.roll_type==='bad').reduce((s:number,r:any)=>s+(r.weight??0),0),dec)} Kgs.</b></span>
+            <span className="text-slate-700">|</span>
+            <span className="text-slate-500">เศษรวม <b className="text-amber-300">{fmt(weighedRolls.filter((r:any)=>r.roll_type?.startsWith('scrap')).reduce((s:number,r:any)=>s+(r.weight??0),0),dec)} Kgs.</b></span>
           </div>
 
-          {/* Table header */}
-          <div className="grid grid-cols-6 gap-0 border-b border-slate-800 bg-slate-800/30 shrink-0">
-            {['เวลา','ม้วน','ประเภท','นน.เต็ม','นน.แกน','นน.สุทธิ/เศษ'].map(h => (
-              <div key={h} className="px-3 py-2 text-slate-500 text-[9px] font-semibold uppercase tracking-wider">{h}</div>
-            ))}
-          </div>
+          {/* 2 tables side by side */}
+          <div className="flex flex-1 min-h-0 divide-x divide-slate-800">
 
-          {/* Rows */}
-          <div className="flex-1 overflow-y-auto divide-y divide-slate-800/50">
-            {[...weighedRolls].reverse().map((r, idx) => {
-              const isNew = lastRoll?.id === r.id
-              const typeLabel: Record<string,{label:string;cls:string}> = {
-                good:        {label:'ม้วนดี',  cls:'bg-brand-500/20 text-brand-300'},
-                bad:         {label:'กรอ',     cls:'bg-orange-500/20 text-orange-300'},
-                scrap_clear: {label:'เศษใส',   cls:'bg-slate-600/40 text-slate-300'},
-                scrap_color: {label:'เศษสี',   cls:'bg-purple-500/20 text-purple-300'},
-                scrap_lump:  {label:'เศษก้อน', cls:'bg-amber-500/20 text-amber-300'},
-              }
-              const tl = typeLabel[r.roll_type] ?? {label:r.roll_type,cls:'bg-slate-700 text-slate-400'}
-              const time = new Date(r.created_at).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})
-              return (
-              <div key={r.id ?? idx}
-                onClick={() => setSelectedRoll(r)}
-                className={`grid grid-cols-6 gap-0 hover:bg-slate-800/40 cursor-pointer transition-colors ${isNew ? 'bg-green-500/5' : ''}`}>
-                <div className="px-3 py-3 text-slate-500 text-xs">{time}</div>
-                <div className="px-3 py-3">
-                  <span className="text-white font-bold font-mono text-sm">
-                    {r.roll_type==='good'||r.roll_type==='bad' ? `#${r.roll_no}` : '—'}
-                  </span>
-                  {isNew && <span className="ml-1 text-[9px] text-green-400">NEW</span>}
-                </div>
-                <div className="px-3 py-3">
-                  <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${tl.cls}`}>{tl.label}</span>
-                </div>
-                <div className="px-3 py-3 text-slate-400 text-sm">{fmt((r.weight??0)+(r.core_weight??0), dec)}</div>
-                <div className="px-3 py-3 text-slate-500 text-sm">{fmt(r.core_weight??0, dec)}</div>
-                <div className={`px-3 py-3 font-black text-sm ${r.roll_type==='good'?'text-brand-300':r.roll_type==='bad'?'text-orange-300':'text-amber-300'}`}>
-                  {fmt(r.weight??0, dec)}
-                </div>
+            {/* ── ม้วนดี ─────────────────────── */}
+            <div className="flex-1 flex flex-col min-w-0">
+              <div className="px-3 py-2 bg-brand-500/10 border-b border-brand-500/20 shrink-0">
+                <span className="text-brand-300 text-xs font-bold">● ม้วนดี</span>
               </div>
-              )
-            })}
-            {weighedRolls.length === 0 && (
-              <div className="flex items-center justify-center h-40 text-slate-600 text-sm">
-                ยังไม่มีม้วน — ชั่งแล้วกดบันทึก
+              <div className="grid grid-cols-4 border-b border-slate-800 bg-slate-800/20 shrink-0">
+                {['เวลา','ม้วน','นน.เต็ม','นน.สุทธิ'].map(h=>(
+                  <div key={h} className="px-3 py-1.5 text-slate-500 text-[9px] font-semibold uppercase">{h}</div>
+                ))}
               </div>
-            )}
-          </div>
-
-          {/* Footer sum */}
-          {weighedRolls.length > 0 && (
-            <div className="border-t border-slate-700 bg-slate-900 px-4 py-2 flex items-center justify-between shrink-0">
-              <div className="flex gap-3 text-xs">
-                <span className="text-slate-500">ดี <b className="text-brand-300">{weighedRolls.filter((r:any)=>r.roll_type==='good').length}</b></span>
-                <span className="text-slate-500">กรอ <b className="text-orange-300">{weighedRolls.filter((r:any)=>r.roll_type==='bad').length}</b></span>
-                <span className="text-slate-500">เศษ <b className="text-amber-300">{weighedRolls.filter((r:any)=>r.roll_type?.startsWith('scrap')).length}</b></span>
+              <div className="flex-1 overflow-y-auto divide-y divide-slate-800/40">
+                {[...weighedRolls].filter((r:any)=>r.roll_type==='good').reverse().map((r:any) => {
+                  const isNew = lastRoll?.id === r.id
+                  const time  = new Date(r.created_at).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})
+                  return (
+                    <div key={r.id} onClick={()=>setSelectedRoll(r)}
+                      className={`grid grid-cols-4 hover:bg-slate-800/40 cursor-pointer transition-colors ${isNew?'bg-green-500/5':''}`}>
+                      <div className="px-3 py-2.5 text-slate-500 text-xs">{time}</div>
+                      <div className="px-3 py-2.5">
+                        <span className="text-white font-bold font-mono">#{r.roll_no}</span>
+                        {isNew && <span className="ml-1 text-[9px] text-green-400">NEW</span>}
+                      </div>
+                      <div className="px-3 py-2.5 text-slate-400 text-xs">{fmt((r.weight??0)+(r.core_weight??0),dec)}</div>
+                      <div className="px-3 py-2.5 text-brand-300 font-black">{fmt(r.weight??0,dec)}</div>
+                    </div>
+                  )
+                })}
+                {weighedRolls.filter((r:any)=>r.roll_type==='good').length===0 && (
+                  <div className="py-8 text-center text-slate-600 text-xs">ยังไม่มีม้วนดี</div>
+                )}
               </div>
-              <span className="text-brand-300 font-black text-sm">{fmt(weighedKg, dec)} Kgs.</span>
+              {/* good footer */}
+              <div className="border-t border-slate-800 px-3 py-1.5 bg-slate-900 flex justify-between text-xs shrink-0">
+                <span className="text-slate-500">{weighedRolls.filter((r:any)=>r.roll_type==='good').length} ม้วน</span>
+                <span className="text-brand-300 font-black">{fmt(weighedKg,dec)} Kgs.</span>
+              </div>
             </div>
-          )}
+
+            {/* ── ม้วนกรอ ────────────────────── */}
+            <div className="flex-1 flex flex-col min-w-0">
+              <div className="px-3 py-2 bg-orange-500/10 border-b border-orange-500/20 shrink-0">
+                <span className="text-orange-300 text-xs font-bold">● ม้วนกรอ</span>
+              </div>
+              <div className="grid grid-cols-4 border-b border-slate-800 bg-slate-800/20 shrink-0">
+                {['เวลา','ม้วน','นน.กรอ','เหตุผล'].map(h=>(
+                  <div key={h} className="px-3 py-1.5 text-slate-500 text-[9px] font-semibold uppercase">{h}</div>
+                ))}
+              </div>
+              <div className="flex-1 overflow-y-auto divide-y divide-slate-800/40">
+                {[...weighedRolls].filter((r:any)=>r.roll_type==='bad').reverse().map((r:any) => {
+                  const isNew = lastRoll?.id === r.id
+                  const time  = new Date(r.created_at).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})
+                  return (
+                    <div key={r.id} onClick={()=>setSelectedRoll(r)}
+                      className={`grid grid-cols-4 hover:bg-slate-800/40 cursor-pointer transition-colors ${isNew?'bg-orange-500/5':''}`}>
+                      <div className="px-3 py-2.5 text-slate-500 text-xs">{time}</div>
+                      <div className="px-3 py-2.5">
+                        <span className="text-orange-200 font-bold font-mono">#{r.roll_no}</span>
+                        {isNew && <span className="ml-1 text-[9px] text-orange-400">NEW</span>}
+                      </div>
+                      <div className="px-3 py-2.5 text-orange-300 font-black">{fmt(r.weight??0,dec)}</div>
+                      <div className="px-3 py-2.5 text-slate-400 text-xs truncate">{r.remark||'—'}</div>
+                    </div>
+                  )
+                })}
+                {weighedRolls.filter((r:any)=>r.roll_type==='bad').length===0 && (
+                  <div className="py-8 text-center text-slate-600 text-xs">ยังไม่มีม้วนกรอ</div>
+                )}
+              </div>
+              {/* bad footer + scrap summary */}
+              <div className="border-t border-slate-800 px-3 py-1.5 bg-slate-900 flex justify-between text-xs shrink-0">
+                <span className="text-slate-500">{weighedRolls.filter((r:any)=>r.roll_type==='bad').length} ม้วน</span>
+                <span className="text-orange-300 font-black">{fmt(weighedRolls.filter((r:any)=>r.roll_type==='bad').reduce((s:number,r:any)=>s+(r.weight??0),0),dec)} Kgs.</span>
+              </div>
+              {/* เศษ summary */}
+              {weighedRolls.some((r:any)=>r.roll_type?.startsWith('scrap')) && (
+                <div className="border-t border-slate-700 bg-slate-800/30 px-3 py-2 space-y-1 shrink-0">
+                  <p className="text-amber-400 text-[9px] font-bold uppercase">เศษเสีย</p>
+                  {(['scrap_clear','scrap_color','scrap_lump'] as const).map(t => {
+                    const rows = weighedRolls.filter((r:any)=>r.roll_type===t)
+                    if (!rows.length) return null
+                    const label = t==='scrap_clear'?'ใส':t==='scrap_color'?'สี':'ก้อน'
+                    const total = rows.reduce((s:number,r:any)=>s+(r.weight??0),0)
+                    return (
+                      <div key={t} className="flex justify-between text-xs">
+                        <span className="text-slate-500">เศษ{label} ({rows.length})</span>
+                        <span className="text-amber-300 font-semibold">{fmt(total,dec)} Kgs.</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+          </div>
         </div>
       </div>
 

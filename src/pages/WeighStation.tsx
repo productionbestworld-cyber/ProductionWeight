@@ -269,7 +269,8 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
       .select('*')
       .gte('created_at', today.toISOString())
       .order('created_at', { ascending: true })
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) { console.warn('load rolls error:', error.message); return }
         if (!data?.length) return
         const goodRolls = (data as any[]).filter(r => r.roll_type === 'good')
         const total = goodRolls.reduce((s: number, r: any) => s + (r.weight ?? 0), 0)
@@ -348,6 +349,21 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
 
       setLastRoll({ ...data, weighType: actualType })
       setWeighedRolls(prev => [...prev, data])
+
+      // บันทึก log ทุกการชั่ง
+      supabase.from('weigh_logs').insert({
+        machine_no:   profile.machine_no,
+        lot_no:       profile.lotNo,
+        mat_code:     profile.matCode,
+        product_name: profile.productName,
+        customer:     profile.custName,
+        roll_no:      useRollNo,
+        roll_type:    actualType,
+        gross_weight: gross,
+        core_weight:  isScrap ? 0 : core,
+        net_weight:   parseFloat(saveWeight.toFixed(dec)),
+        remark:       isBad ? badReason : null,
+      }).then(({ error }) => { if (error) console.warn('log error:', error.message) })
 
       if (isGood) {
         setWeighedKg(prev => parseFloat((prev + saveWeight).toFixed(dec)))

@@ -16,7 +16,7 @@ function barcodeUrl(text: string, h = 10) {
 }
 
 // ── Print Label ───────────────────────────────────────────────────────────────
-function printLabel(p: MachineProfile, rollNo: number, gross: number, net: number, size: 'long'|'short' = 'long') {
+function printLabel(p: MachineProfile, rollNo: number, gross: number, net: number, size: 'long'|'short' = 'long', rollType: string = 'good', reason = '') {
   const dec     = p.decimal
   const mfgDate = thaiDate()
   const core    = parseFloat(p.coreWeight) || 0
@@ -66,7 +66,14 @@ html,body{font-family:'Sarabun','Tahoma',sans-serif;font-size:8.5pt;color:#000;b
 @media print{@page{size:165mm 70mm;margin:0}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style>
 <div class="wrap">
-  <div class="title">บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด</div>
+  <div class="title">บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด
+    ${rollType !== 'good' ? `<span style="font-size:8pt;font-weight:700;color:#c00;margin-left:4mm">[${
+      rollType === 'bad' ? 'ม้วนกรอ' :
+      rollType === 'scrap_clear' ? 'เศษเสีย (ใส)' :
+      rollType === 'scrap_color' ? 'เศษเสีย (สี)' : 'เศษก้อน'
+    }]</span>` : ''}
+  </div>
+  ${reason ? `<div style="font-size:7.5pt;color:#c00;text-align:center;margin-bottom:1mm">เหตุผล: ${reason}</div>` : ''}
 
   <!-- Header: ไม่มี barcode แค่ text -->
   <div class="hdr">
@@ -238,6 +245,8 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
   const [lastRoll,     setLastRoll]     = useState<any>(null)
   const [weighedKg,    setWeighedKg]    = useState(0)
   const [weighedRolls, setWeighedRolls] = useState<any[]>([])
+  const [weighType,    setWeighType]    = useState<'good'|'bad'|'scrap_clear'|'scrap_color'|'scrap_lump'>('good')
+  const [badReason,    setBadReason]    = useState('')
   const [stable,       setStable]       = useState(true)
   const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -253,15 +262,16 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
     const today = new Date(); today.setHours(0,0,0,0)
     supabase.from('production_rolls')
       .select('*')
-      .eq('roll_type', 'good')
       .gte('created_at', today.toISOString())
-      .order('roll_no', { ascending: true })
+      .order('created_at', { ascending: true })
       .then(({ data }) => {
         if (!data?.length) return
-        const total = (data as any[]).reduce((s, r) => s + (r.weight ?? 0), 0)
+        const goodRolls = (data as any[]).filter(r => r.roll_type === 'good')
+        const total = goodRolls.reduce((s: number, r: any) => s + (r.weight ?? 0), 0)
         setWeighedKg(parseFloat(total.toFixed(dec)))
         setWeighedRolls(data as any[])
-        setRollNo(data.length + 1)
+        const lastRollNo = Math.max(0, ...goodRolls.map((r:any) => r.roll_no ?? 0))
+        setRollNo(lastRollNo + 1)
       })
     startIdle()
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
@@ -304,20 +314,43 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
     }, 100)
   }
 
+  const isScrap = weighType.startsWith('scrap')
+  const isGood  = weighType === 'good'
+  const isBad   = weighType === 'bad'
+  // เศษใช้ gross โดยตรง, ม้วนดี/กรอใช้ net
+  const saveWeight = isScrap ? gross : net
+
   async function handleSave() {
-    if (net <= 0 || !stable) return
+    if (saveWeight <= 0 || !stable) return
+    if (isBad && !badReason.trim()) { alert('กรุณาระบุเหตุผลม้วนกรอ'); return }
     setSaving(true)
     try {
       const { data } = await supabase.from('production_rolls').insert({
-        job_id: null, roll_no: rollNo, roll_type: 'good',
-        weight: net, gross_weight: gross, core_weight: core,
+        job_id:       null,
+        roll_no:      rollNo,
+        roll_type:    weighType,
+        weight:       parseFloat(saveWeight.toFixed(dec)),
+        gross_weight: gross,
+        core_weight:  isScrap ? 0 : core,
+        remark:       isBad ? badReason : null,
       }).select().single()
-      const newTotal = parseFloat((weighedKg + net).toFixed(dec))
-      setLastRoll(data)
-      setWeighedKg(newTotal)
-      setWeighedRolls(prev => [...prev, { roll_no: rollNo, weight: net }])
-      setRollNo(r => r + 1)
-      printLabel(profile, rollNo, gross, net, profile.labelSize ?? 'long')
+
+      setLastRoll({ ...data, weighType })
+      if (isGood) {
+        const newTotal = parseFloat((weighedKg + saveWeight).toFixed(dec))
+        setWeighedKg(newTotal)
+        setWeighedRolls(prev => [...prev, data])
+        setRollNo(r => r + 1)
+        printLabel(profile, rollNo, gross, saveWeight, profile.labelSize ?? 'long', 'good')
+      } else if (isBad) {
+        setWeighedRolls(prev => [...prev, data])
+        setRollNo(r => r + 1)
+        printLabel(profile, rollNo, gross, saveWeight, profile.labelSize ?? 'long', 'bad', badReason)
+        setBadReason('')
+      } else {
+        // เศษ — ไม่นับ roll_no
+        printLabel(profile, rollNo, gross, gross, profile.labelSize ?? 'long', weighType)
+      }
       setGross(0)
       startIdle()
     } catch { alert('บันทึกไม่สำเร็จ') }
@@ -379,64 +412,116 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
       <div className="flex flex-1 min-h-0">
 
         {/* ── LEFT: เครื่องชั่ง ─────────────────────────────── */}
-        <div className="w-[340px] shrink-0 flex flex-col gap-3 p-4 border-r border-slate-800 overflow-y-auto">
+        <div className="w-[380px] shrink-0 flex flex-col gap-2.5 p-4 border-r border-slate-800 overflow-y-auto">
+
+          {/* Type selector */}
+          <div className="grid grid-cols-5 gap-1">
+            {([
+              { key:'good',        label:'ม้วนดี',     color:'bg-brand-600 text-white',   inactive:'bg-slate-800 text-slate-400 hover:text-white' },
+              { key:'bad',         label:'ม้วนกรอ',    color:'bg-orange-600 text-white',  inactive:'bg-slate-800 text-slate-400 hover:text-white' },
+              { key:'scrap_clear', label:'เศษใส',       color:'bg-slate-500 text-white',   inactive:'bg-slate-800 text-slate-400 hover:text-white' },
+              { key:'scrap_color', label:'เศษสี',       color:'bg-purple-600 text-white',  inactive:'bg-slate-800 text-slate-400 hover:text-white' },
+              { key:'scrap_lump',  label:'เศษก้อน',    color:'bg-amber-600 text-white',   inactive:'bg-slate-800 text-slate-400 hover:text-white' },
+            ] as const).map(t => (
+              <button key={t.key} onClick={() => setWeighType(t.key)}
+                className={`py-2 rounded-xl text-[10px] font-bold transition-colors text-center ${weighType===t.key ? t.color : t.inactive}`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Bad reason */}
+          {isBad && (
+            <input value={badReason} onChange={e => setBadReason(e.target.value)}
+              placeholder="เหตุผลม้วนกรอ (จำเป็น)..."
+              className="w-full bg-slate-800 border border-orange-500/40 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-orange-500 placeholder-slate-500" />
+          )}
 
           {/* Scale display */}
-          <div className="bg-slate-900 border-2 border-slate-700 rounded-2xl px-5 py-5 text-center shadow-xl">
+          <div className={`border-2 rounded-2xl px-5 py-6 text-center shadow-xl ${
+            weighType==='good' ? 'bg-slate-900 border-slate-700' :
+            weighType==='bad'  ? 'bg-orange-500/5 border-orange-500/30' :
+            'bg-slate-900 border-slate-700'
+          }`}>
             <p className="text-slate-500 text-[10px] uppercase tracking-widest mb-1">Gross Weight</p>
-            <div className={`font-mono text-6xl font-black tracking-tight leading-none mb-1 transition-colors ${stable ? 'text-white' : 'text-amber-300'}`}>
+            <div className={`font-mono text-[72px] font-black tracking-tight leading-none mb-1 transition-colors ${stable ? 'text-white' : 'text-amber-300'}`}>
               {fmt(gross, dec)}
             </div>
-            <p className={`text-xs font-semibold mb-3 ${stable ? 'text-slate-500' : 'text-amber-500 animate-pulse'}`}>
+            <p className={`text-xs font-semibold mb-4 ${stable ? 'text-slate-500' : 'text-amber-500 animate-pulse'}`}>
               {stable ? 'Kgs. ✓' : 'Kgs. ⟳ อ่านค่า...'}
             </p>
 
-            <div className="flex items-center justify-center gap-4 mb-3">
-              <div className="text-center bg-slate-800 rounded-xl px-3 py-1.5">
-                <p className="text-slate-500 text-[9px]">Core</p>
-                <p className="text-slate-300 font-bold text-sm">{fmt(core, dec)}</p>
+            {!isScrap && (
+              <div className="flex items-center justify-center gap-5 mb-4">
+                <div className="text-center bg-slate-800 rounded-xl px-4 py-2">
+                  <p className="text-slate-500 text-[9px]">Core</p>
+                  <p className="text-slate-300 font-bold">{fmt(core, dec)} Kgs.</p>
+                </div>
+                <span className="text-slate-700 text-xl">−</span>
+                <div className="text-center">
+                  <p className="text-slate-500 text-[9px]">Net</p>
+                  <p className="text-brand-400 font-black text-3xl">{fmt(net, dec)}</p>
+                  <p className="text-brand-400/60 text-xs">Kgs.</p>
+                </div>
               </div>
-              <span className="text-slate-700 text-lg">−</span>
-              <div className="text-center">
-                <p className="text-slate-500 text-[9px]">Net</p>
-                <p className="text-brand-400 font-black text-2xl">{fmt(net, dec)}</p>
-                <p className="text-brand-400/60 text-[9px]">Kgs.</p>
+            )}
+            {isScrap && (
+              <div className="text-center mb-4">
+                <p className="text-slate-500 text-xs">น้ำหนักเศษ (Gross)</p>
+                <p className="text-amber-400 font-black text-3xl">{fmt(gross, dec)} Kgs.</p>
               </div>
-            </div>
+            )}
 
             <button onClick={readScale}
-              className={`w-full py-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all ${stable ? 'bg-slate-700 hover:bg-slate-600 text-white' : 'bg-amber-500/20 text-amber-400 cursor-not-allowed'}`}>
-              <RefreshCw size={13} className={stable ? '' : 'animate-spin'}/>
+              className={`w-full py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all ${stable ? 'bg-slate-700 hover:bg-slate-600 text-white' : 'bg-amber-500/20 text-amber-400 cursor-not-allowed'}`}>
+              <RefreshCw size={14} className={stable ? '' : 'animate-spin'}/>
               {stable ? 'วางม้วน / อ่านค่าใหม่' : 'กำลังอ่านค่า...'}
             </button>
           </div>
 
           {/* Roll No + Save */}
           <div className="flex items-center gap-2">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 flex items-center gap-2 shrink-0">
-              <span className="text-slate-500 text-xs">Roll</span>
-              <button onClick={() => setRollNo(r => Math.max(1,r-1))} className="text-slate-500 hover:text-white w-5 text-center">−</button>
-              <span className="text-white font-black w-7 text-center">{rollNo}</span>
-              <button onClick={() => setRollNo(r => r+1)} className="text-slate-500 hover:text-white w-5 text-center">+</button>
-            </div>
-            <button onClick={handleSave} disabled={saving || net <= 0 || !stable}
-              className={`flex-1 py-3 rounded-xl text-white font-black flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-40 ${!stable ? 'bg-slate-700 cursor-not-allowed' : 'bg-brand-600 hover:bg-brand-500'}`}>
+            {(isGood || isBad) && (
+              <div className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 flex items-center gap-2 shrink-0">
+                <span className="text-slate-500 text-xs">Roll</span>
+                <button onClick={() => setRollNo(r => Math.max(1,r-1))} className="text-slate-500 hover:text-white w-5 text-center">−</button>
+                <span className="text-white font-black w-7 text-center">{rollNo}</span>
+                <button onClick={() => setRollNo(r => r+1)} className="text-slate-500 hover:text-white w-5 text-center">+</button>
+              </div>
+            )}
+            <button onClick={handleSave} disabled={saving || saveWeight <= 0 || !stable || (isBad && !badReason.trim())}
+              className={`flex-1 py-3 rounded-xl text-white font-black flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-40 ${
+                !stable ? 'bg-slate-700 cursor-not-allowed' :
+                weighType==='good'        ? 'bg-brand-600 hover:bg-brand-500' :
+                weighType==='bad'         ? 'bg-orange-600 hover:bg-orange-500' :
+                weighType==='scrap_clear' ? 'bg-slate-600 hover:bg-slate-500' :
+                weighType==='scrap_color' ? 'bg-purple-600 hover:bg-purple-500' :
+                                            'bg-amber-600 hover:bg-amber-500'
+              }`}>
               <Save size={17}/>
-              {saving ? 'บันทึก...' : !stable ? 'รอค่านิ่ง...' : `Roll ${rollNo} · ${fmt(net,dec)}`}
+              {saving ? 'บันทึก...' : !stable ? 'รอค่านิ่ง...' :
+                isScrap ? `บันทึก ${fmt(gross,dec)} Kgs.` :
+                `Roll ${rollNo} · ${fmt(saveWeight,dec)} Kgs.`}
             </button>
           </div>
 
-          {/* Last saved flash */}
+          {/* Last saved */}
           {lastRoll && (
-            <div className="bg-green-500/10 border border-green-500/25 rounded-xl px-4 py-2.5 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 size={14} className="text-green-400"/>
-                <p className="text-green-300 text-sm font-semibold">Roll {lastRoll.roll_no} · {fmt(lastRoll.weight,dec)} Kgs. ✓</p>
-              </div>
+            <div className={`rounded-xl px-4 py-2.5 flex items-center gap-2 border ${
+              (lastRoll.weighType||lastRoll.roll_type)==='good' ? 'bg-green-500/10 border-green-500/25' :
+              (lastRoll.weighType||lastRoll.roll_type)==='bad'  ? 'bg-orange-500/10 border-orange-500/25' :
+              'bg-slate-800 border-slate-700'
+            }`}>
+              <CheckCircle2 size={14} className="text-green-400 shrink-0"/>
+              <p className="text-green-300 text-sm font-semibold truncate">
+                {(lastRoll.weighType||lastRoll.roll_type)==='good' ? `Roll ${lastRoll.roll_no} · ${fmt(lastRoll.weight,dec)} Kgs. ✓` :
+                 (lastRoll.weighType||lastRoll.roll_type)==='bad'  ? `กรอ Roll ${lastRoll.roll_no} · ${fmt(lastRoll.weight,dec)} Kgs.` :
+                 `เศษ · ${fmt(lastRoll.weight||lastRoll.gross_weight,dec)} Kgs.`}
+              </p>
             </div>
           )}
 
-          {/* Progress detail */}
+          {/* Progress */}
           {planned > 0 && (
             <div className={`rounded-xl p-3 border ${done ? 'bg-green-500/10 border-green-500/30' : 'bg-slate-900 border-slate-800'}`}>
               <div className="flex justify-between text-xs mb-1.5">
@@ -446,7 +531,7 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
               <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
                 <div className={`h-full rounded-full ${progressColor}`} style={{width:`${pct}%`}}/>
               </div>
-              <p className="text-slate-600 text-[10px] mt-1">{weighedRolls.length} ม้วน · {pct}% · เป้า {fmt(planned,dec)} Kgs.</p>
+              <p className="text-slate-600 text-[10px] mt-1">{weighedRolls.filter((r:any)=>r.roll_type==='good').length} ม้วนดี · {pct}% · เป้า {fmt(planned,dec)} Kgs.</p>
             </div>
           )}
         </div>
@@ -459,32 +544,47 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
           </div>
 
           {/* Table header */}
-          <div className="grid grid-cols-5 gap-0 border-b border-slate-800 bg-slate-800/30 shrink-0">
-            {['ม้วนที่','นน.เต็ม (Kgs.)','นน.แกน (Kgs.)','นน.สุทธิ (Kgs.)',''].map(h => (
-              <div key={h} className="px-4 py-2 text-slate-500 text-[10px] font-semibold uppercase tracking-wider">{h}</div>
+          <div className="grid grid-cols-6 gap-0 border-b border-slate-800 bg-slate-800/30 shrink-0">
+            {['เวลา','ม้วน','ประเภท','นน.เต็ม','นน.แกน','นน.สุทธิ/เศษ'].map(h => (
+              <div key={h} className="px-3 py-2 text-slate-500 text-[9px] font-semibold uppercase tracking-wider">{h}</div>
             ))}
           </div>
 
           {/* Rows */}
           <div className="flex-1 overflow-y-auto divide-y divide-slate-800/50">
-            {[...weighedRolls].reverse().map(r => (
-              <div key={r.roll_no}
+            {[...weighedRolls].reverse().map((r, idx) => {
+              const isNew = lastRoll?.id === r.id
+              const typeLabel: Record<string,{label:string;cls:string}> = {
+                good:        {label:'ม้วนดี',  cls:'bg-brand-500/20 text-brand-300'},
+                bad:         {label:'กรอ',     cls:'bg-orange-500/20 text-orange-300'},
+                scrap_clear: {label:'เศษใส',   cls:'bg-slate-600/40 text-slate-300'},
+                scrap_color: {label:'เศษสี',   cls:'bg-purple-500/20 text-purple-300'},
+                scrap_lump:  {label:'เศษก้อน', cls:'bg-amber-500/20 text-amber-300'},
+              }
+              const tl = typeLabel[r.roll_type] ?? {label:r.roll_type,cls:'bg-slate-700 text-slate-400'}
+              const time = new Date(r.created_at).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})
+              return (
+              <div key={r.id ?? idx}
                 onClick={() => setSelectedRoll(r)}
-                className={`grid grid-cols-5 gap-0 hover:bg-slate-800/40 cursor-pointer transition-colors ${lastRoll?.roll_no === r.roll_no ? 'bg-green-500/5' : ''}`}>
-                <div className="px-4 py-3">
-                  <span className="text-white font-bold font-mono">#{r.roll_no}</span>
-                  {lastRoll?.roll_no === r.roll_no && (
-                    <span className="ml-2 text-[9px] text-green-400">NEW</span>
-                  )}
+                className={`grid grid-cols-6 gap-0 hover:bg-slate-800/40 cursor-pointer transition-colors ${isNew ? 'bg-green-500/5' : ''}`}>
+                <div className="px-3 py-3 text-slate-500 text-xs">{time}</div>
+                <div className="px-3 py-3">
+                  <span className="text-white font-bold font-mono text-sm">
+                    {r.roll_type==='good'||r.roll_type==='bad' ? `#${r.roll_no}` : '—'}
+                  </span>
+                  {isNew && <span className="ml-1 text-[9px] text-green-400">NEW</span>}
                 </div>
-                <div className="px-4 py-3 text-slate-400">{fmt(r.weight + (r.core_weight??0), dec)}</div>
-                <div className="px-4 py-3 text-slate-500">{fmt(r.core_weight ?? 0, dec)}</div>
-                <div className="px-4 py-3 text-brand-300 font-black text-base">{fmt(r.weight, dec)}</div>
-                <div className="px-4 py-3 flex items-center">
-                  <span className="text-slate-600 text-[10px]">คลิกดูรายละเอียด →</span>
+                <div className="px-3 py-3">
+                  <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${tl.cls}`}>{tl.label}</span>
+                </div>
+                <div className="px-3 py-3 text-slate-400 text-sm">{fmt((r.weight??0)+(r.core_weight??0), dec)}</div>
+                <div className="px-3 py-3 text-slate-500 text-sm">{fmt(r.core_weight??0, dec)}</div>
+                <div className={`px-3 py-3 font-black text-sm ${r.roll_type==='good'?'text-brand-300':r.roll_type==='bad'?'text-orange-300':'text-amber-300'}`}>
+                  {fmt(r.weight??0, dec)}
                 </div>
               </div>
-            ))}
+              )
+            })}
             {weighedRolls.length === 0 && (
               <div className="flex items-center justify-center h-40 text-slate-600 text-sm">
                 ยังไม่มีม้วน — ชั่งแล้วกดบันทึก
@@ -494,10 +594,13 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
 
           {/* Footer sum */}
           {weighedRolls.length > 0 && (
-            <div className="border-t border-slate-700 bg-slate-900 px-4 py-2 grid grid-cols-5 gap-0 shrink-0">
-              <div className="text-slate-400 text-xs font-semibold col-span-3">รวม {weighedRolls.length} ม้วน</div>
-              <div className="text-brand-300 font-black">{fmt(weighedKg, dec)}</div>
-              <div/>
+            <div className="border-t border-slate-700 bg-slate-900 px-4 py-2 flex items-center justify-between shrink-0">
+              <div className="flex gap-3 text-xs">
+                <span className="text-slate-500">ดี <b className="text-brand-300">{weighedRolls.filter((r:any)=>r.roll_type==='good').length}</b></span>
+                <span className="text-slate-500">กรอ <b className="text-orange-300">{weighedRolls.filter((r:any)=>r.roll_type==='bad').length}</b></span>
+                <span className="text-slate-500">เศษ <b className="text-amber-300">{weighedRolls.filter((r:any)=>r.roll_type?.startsWith('scrap')).length}</b></span>
+              </div>
+              <span className="text-brand-300 font-black text-sm">{fmt(weighedKg, dec)} Kgs.</span>
             </div>
           )}
         </div>
@@ -558,13 +661,13 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
 
             {/* Reprint */}
             <div className="flex gap-2 px-5 py-4 border-t border-slate-800">
-              <button onClick={() => printLabel(profile, selectedRoll.roll_no, selectedRoll.gross_weight??selectedRoll.weight+(selectedRoll.core_weight??0), selectedRoll.weight, 'short')}
+              <button onClick={() => printLabel(profile, selectedRoll.roll_no, selectedRoll.gross_weight??0, selectedRoll.weight??0, 'short', selectedRoll.roll_type, selectedRoll.remark??'')}
                 className="flex-1 flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white text-sm py-2.5 rounded-xl transition-colors">
-                <Printer size={14}/> พิมพ์ใบสั้น
+                <Printer size={14}/> ใบสั้น
               </button>
-              <button onClick={() => printLabel(profile, selectedRoll.roll_no, selectedRoll.gross_weight??selectedRoll.weight+(selectedRoll.core_weight??0), selectedRoll.weight, 'long')}
+              <button onClick={() => printLabel(profile, selectedRoll.roll_no, selectedRoll.gross_weight??0, selectedRoll.weight??0, 'long', selectedRoll.roll_type, selectedRoll.remark??'')}
                 className="flex-1 flex items-center justify-center gap-1.5 bg-brand-600 hover:bg-brand-700 text-white text-sm py-2.5 rounded-xl transition-colors font-semibold">
-                <Printer size={14}/> พิมพ์ใบยาว
+                <Printer size={14}/> ใบยาว
               </button>
             </div>
           </div>

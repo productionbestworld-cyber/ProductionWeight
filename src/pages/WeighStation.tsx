@@ -347,8 +347,9 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
         remark:       isBad ? badReason : null,
       }).select().single()
 
+      if (!data) throw new Error('insert returned null')
       setLastRoll({ ...data, weighType: actualType })
-      setWeighedRolls(prev => [...prev, data])
+      setWeighedRolls(prev => [...prev, data].filter(Boolean))
 
       // บันทึก log ทุกการชั่ง
       supabase.from('weigh_logs').insert({
@@ -581,7 +582,7 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
               <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
                 <div className={`h-full rounded-full ${progressColor}`} style={{width:`${pct}%`}}/>
               </div>
-              <p className="text-slate-600 text-[10px] mt-1">{weighedRolls.filter((r:any)=>r.roll_type==='good').length} ม้วนดี · {pct}% · เป้า {fmt(planned,dec)} Kgs.</p>
+              <p className="text-slate-600 text-[10px] mt-1">{weighedRolls.filter((r:any)=>r?.roll_type==='good').length} ม้วนดี · {pct}% · เป้า {fmt(planned,dec)} Kgs.</p>
             </div>
           )}
         </div>
@@ -591,11 +592,11 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
 
           {/* Summary bar */}
           <div className="px-4 py-2 border-b border-slate-800 bg-slate-900 flex gap-4 shrink-0 text-xs">
-            <span className="text-slate-500">ม้วนดี <b className="text-brand-300">{weighedRolls.filter((r:any)=>r.roll_type==='good').length} ม้วน · {fmt(weighedKg,dec)} Kgs.</b></span>
+            <span className="text-slate-500">ม้วนดี <b className="text-brand-300">{weighedRolls.filter((r:any)=>r?.roll_type==='good').length} ม้วน · {fmt(weighedKg,dec)} Kgs.</b></span>
             <span className="text-slate-700">|</span>
-            <span className="text-slate-500">ม้วนกรอ <b className="text-orange-300">{weighedRolls.filter((r:any)=>r.roll_type==='bad').length} ม้วน · {fmt(weighedRolls.filter((r:any)=>r.roll_type==='bad').reduce((s:number,r:any)=>s+(r.weight??0),0),dec)} Kgs.</b></span>
+            <span className="text-slate-500">ม้วนกรอ <b className="text-orange-300">{weighedRolls.filter((r:any)=>r?.roll_type==='bad').length} ม้วน · {fmt(weighedRolls.filter((r:any)=>r?.roll_type==='bad').reduce((s:number,r:any)=>s+(r.weight??0),0),dec)} Kgs.</b></span>
             <span className="text-slate-700">|</span>
-            <span className="text-slate-500">เศษรวม <b className="text-amber-300">{fmt(weighedRolls.filter((r:any)=>r.roll_type?.startsWith('scrap')).reduce((s:number,r:any)=>s+(r.weight??0),0),dec)} Kgs.</b></span>
+            <span className="text-slate-500">เศษรวม <b className="text-amber-300">{fmt(weighedRolls.filter((r:any)=>r?.roll_type?.startsWith('scrap')).reduce((s:number,r:any)=>s+(r.weight??0),0),dec)} Kgs.</b></span>
           </div>
 
           {/* 2 tables side by side */}
@@ -628,13 +629,13 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
                     </div>
                   )
                 })}
-                {weighedRolls.filter((r:any)=>r.roll_type==='good').length===0 && (
+                {weighedRolls.filter((r:any)=>r?.roll_type==='good').length===0 && (
                   <div className="py-8 text-center text-slate-600 text-xs">ยังไม่มีม้วนดี</div>
                 )}
               </div>
               {/* good footer */}
               <div className="border-t border-slate-800 px-3 py-1.5 bg-slate-900 flex justify-between text-xs shrink-0">
-                <span className="text-slate-500">{weighedRolls.filter((r:any)=>r.roll_type==='good').length} ม้วน</span>
+                <span className="text-slate-500">{weighedRolls.filter((r:any)=>r?.roll_type==='good').length} ม้วน</span>
                 <span className="text-brand-300 font-black">{fmt(weighedKg,dec)} Kgs.</span>
               </div>
             </div>
@@ -666,14 +667,14 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
                     </div>
                   )
                 })}
-                {weighedRolls.filter((r:any)=>r.roll_type==='bad').length===0 && (
+                {weighedRolls.filter((r:any)=>r?.roll_type==='bad').length===0 && (
                   <div className="py-8 text-center text-slate-600 text-xs">ยังไม่มีม้วนกรอ</div>
                 )}
               </div>
               {/* bad footer + scrap summary */}
               <div className="border-t border-slate-800 px-3 py-1.5 bg-slate-900 flex justify-between text-xs shrink-0">
-                <span className="text-slate-500">{weighedRolls.filter((r:any)=>r.roll_type==='bad').length} ม้วน</span>
-                <span className="text-orange-300 font-black">{fmt(weighedRolls.filter((r:any)=>r.roll_type==='bad').reduce((s:number,r:any)=>s+(r.weight??0),0),dec)} Kgs.</span>
+                <span className="text-slate-500">{weighedRolls.filter((r:any)=>r?.roll_type==='bad').length} ม้วน</span>
+                <span className="text-orange-300 font-black">{fmt(weighedRolls.filter((r:any)=>r?.roll_type==='bad').reduce((s:number,r:any)=>s+(r.weight??0),0),dec)} Kgs.</span>
               </div>
               {/* เศษ summary */}
               {weighedRolls.some((r:any)=>r.roll_type?.startsWith('scrap')) && (

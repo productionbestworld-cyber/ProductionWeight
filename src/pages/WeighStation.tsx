@@ -362,7 +362,9 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
       }
       setGross(0)
       startIdle()
-    } catch { alert('บันทึกไม่สำเร็จ') }
+    } catch (e: any) {
+      alert('บันทึกไม่สำเร็จ: ' + (e?.message ?? JSON.stringify(e)))
+    }
     finally { setSaving(false) }
   }
 
@@ -526,6 +528,15 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
                           `Roll #${rollNo} · ${fmt(saveWeight,dec)} Kgs.`}
             </button>
           </div>
+
+          {/* hint ทำไมกดไม่ได้ */}
+          {(saveWeight <= 0 || !stable || (isBad && !badReason.trim())) && (
+            <p className="text-center text-slate-600 text-xs">
+              {!stable ? '⟳ รอค่าชั่งนิ่งก่อน' :
+               saveWeight <= 0 ? '▲ กด "วางม้วน / อ่านค่าใหม่" ก่อนบันทึก' :
+               isBad && !badReason.trim() ? '▲ กรอกเหตุผลม้วนกรอก่อน' : ''}
+            </p>
+          )}
 
           {/* Last saved */}
           {lastRoll && (

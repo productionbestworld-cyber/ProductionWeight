@@ -1,93 +1,127 @@
-// หน้านี้แสดงเมื่อสแกน QR จากใบปะหน้า
-// URL: /?roll=BASE64_JSON
-
+// หน้านี้แสดงเมื่อสแกน QR — URL: /?roll=<uuid>
+import { useEffect, useState } from 'react'
 import QRCode from 'react-qr-code'
+import { supabase } from '../lib/supabase'
 
-interface RollData {
-  mat:      string
-  lot:      string
-  roll:     number
-  net:      string
-  gross:    string
-  core:     string
-  machine:  string
-  date:     string
-  time:     string
-  customer: string
-  product:  string
-  width?:   string
-  thick?:   string
-  length?:  string
-  inspector?:string
-  planned?: string
+function fmt(n: number | null | undefined, d = 2) {
+  if (n == null || isNaN(n as number)) return '—'
+  return (n as number).toLocaleString('th-TH', { minimumFractionDigits: d, maximumFractionDigits: d })
 }
 
 export default function RollDetail() {
-  const params = new URLSearchParams(window.location.search)
-  const raw    = params.get('roll')
+  const raw = new URLSearchParams(window.location.search).get('roll')
+  const [roll, setRoll]   = useState<any>(null)
+  const [error, setError] = useState('')
 
-  if (!raw) return null
+  useEffect(() => {
+    if (!raw) { setError('ไม่พบข้อมูล'); return }
 
-  let d: RollData
-  try {
-    d = JSON.parse(atob(raw))
-  } catch {
-    return (
-      <div className="min-h-screen bg-[#0a0f1e] flex items-center justify-center text-red-400">
-        ข้อมูลไม่ถูกต้อง
+    // UUID format → ดึงจาก DB
+    const uuidRe = /^[0-9a-f-]{36}$/i
+    if (uuidRe.test(raw)) {
+      supabase.from('production_rolls').select('*').eq('id', raw).single()
+        .then(({ data, error: err }) => {
+          if (err || !data) setError('ไม่พบม้วนนี้ในระบบ')
+          else setRoll(data)
+        })
+    } else {
+      // fallback: base64 JSON เก่า
+      try {
+        const d = JSON.parse(atob(raw))
+        setRoll({
+          roll_no:      d.roll,
+          weight:       parseFloat(d.net)   || 0,
+          gross_weight: parseFloat(d.gross) || 0,
+          core_weight:  parseFloat(d.core)  || 0,
+          machine_no:   d.machine,
+          lot_no:       d.lot,
+          product_name: d.product,
+          customer:     d.customer,
+          inspector:    d.inspector,
+          created_at:   new Date().toISOString(),
+          _legacy: true,
+        })
+      } catch {
+        setError('ข้อมูล QR ไม่ถูกต้อง')
+      }
+    }
+  }, [raw])
+
+  if (error) return (
+    <div className="min-h-screen bg-[#0a0f1e] flex items-center justify-center p-6">
+      <div className="text-center">
+        <p className="text-4xl mb-3">⚠️</p>
+        <p className="text-red-400 font-bold">{error}</p>
+        <p className="text-slate-500 text-sm mt-1">ลองสแกน QR ใหม่อีกครั้ง</p>
       </div>
-    )
-  }
+    </div>
+  )
 
+  if (!roll) return (
+    <div className="min-h-screen bg-[#0a0f1e] flex items-center justify-center">
+      <div className="text-center">
+        <div className="w-10 h-10 border-2 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"/>
+        <p className="text-slate-400 text-sm">กำลังโหลดข้อมูล...</p>
+      </div>
+    </div>
+  )
+
+  const createdAt  = new Date(roll.created_at)
+  const dateStr    = createdAt.toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit', year:'numeric' })
+  const timeStr    = createdAt.toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit' })
   const currentUrl = window.location.href
+
+  const typeLabel  = roll.roll_type === 'good' ? 'FG ✓' : roll.roll_type === 'scrap' ? 'ของเสีย' : 'กรอ/ซ่อม'
+  const typeBg     = roll.roll_type === 'good' ? 'bg-brand-700' : roll.roll_type === 'scrap' ? 'bg-red-800' : 'bg-amber-700'
 
   return (
     <div className="min-h-screen bg-[#0a0f1e] flex items-center justify-center p-4">
       <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
 
         {/* Header */}
-        <div className="bg-brand-700 px-5 py-4 text-center">
+        <div className={`${typeBg} px-5 py-4 text-center`}>
           <p className="text-white/70 text-xs">บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด</p>
-          <p className="text-white font-black text-xl mt-0.5">ม้วนที่ #{d.roll}</p>
-          <p className="text-brand-200 text-sm">{d.machine} · {d.date} {d.time}</p>
+          <p className="text-white font-black text-xl mt-0.5">
+            {roll.roll_no ? `ม้วนที่ #${roll.roll_no}` : typeLabel}
+          </p>
+          <p className="text-white/70 text-sm">{roll.machine_no} · {dateStr} {timeStr}</p>
+          <span className="inline-block mt-1.5 text-[10px] bg-white/20 text-white px-2 py-0.5 rounded-full">{typeLabel}</span>
         </div>
 
         {/* น้ำหนัก */}
         <div className="grid grid-cols-3 divide-x divide-slate-800 border-b border-slate-800">
           {[
-            { label: 'นน.เต็ม',  val: d.gross, cls: 'text-slate-300' },
-            { label: 'นน.แกน',   val: d.core,  cls: 'text-slate-500' },
-            { label: 'นน.สุทธิ', val: d.net,   cls: 'text-brand-400 font-black text-2xl' },
+            { label:'นน.เต็ม',  val: fmt(roll.gross_weight), cls:'text-slate-300 text-lg' },
+            { label:'นน.แกน',   val: fmt(roll.core_weight),  cls:'text-slate-500 text-lg' },
+            { label:'นน.สุทธิ', val: fmt(roll.weight),       cls:'text-brand-400 font-black text-2xl' },
           ].map(item => (
             <div key={item.label} className="py-4 text-center">
               <p className="text-slate-500 text-[10px] uppercase tracking-wider mb-1">{item.label}</p>
-              <p className={`font-bold text-xl ${item.cls}`}>{item.val}</p>
+              <p className={`font-bold ${item.cls}`}>{item.val}</p>
               <p className="text-slate-600 text-[9px]">Kgs.</p>
             </div>
           ))}
         </div>
 
-        {/* รายละเอียดสินค้า */}
-        <div className="px-5 py-4 space-y-2 border-b border-slate-800">
-          <Row label="ลูกค้า"       val={d.customer} />
-          <Row label="สินค้า"       val={d.product}  />
-          <Row label="Mat Code"     val={d.mat}       mono />
-          <Row label="Lot No"       val={d.lot}       mono />
-          {d.width  && <Row label="ขนาด" val={`${d.width} cm × ${d.thick} mc`} />}
-          {d.length && <Row label="ความยาว" val={`${d.length} Ms.`} />}
-          <Row label="เครื่อง"      val={d.machine}  />
-          {d.inspector && <Row label="ผู้ตรวจสอบ" val={d.inspector} />}
-          {d.planned   && <Row label="ยอดสั่งผลิต" val={`${d.planned} Kgs.`} />}
-          <Row label="วันที่ชั่ง"   val={`${d.date} เวลา ${d.time}`} />
+        {/* รายละเอียด */}
+        <div className="px-5 py-4 space-y-2.5 border-b border-slate-800">
+          <Row label="ลูกค้า"      val={roll.customer     || '—'} />
+          <Row label="สินค้า"      val={roll.product_name || '—'} />
+          <Row label="Lot No"      val={roll.lot_no       || '—'} mono />
+          <Row label="เครื่องจักร" val={roll.machine_no   || '—'} />
+          {roll.inspector && <Row label="ผู้ตรวจสอบ" val={roll.inspector} />}
+          {roll.remark    && <Row label="หมายเหตุ"   val={roll.remark} />}
+          <Row label="วันที่ชั่ง"  val={`${dateStr}  ${timeStr}`} />
+          <Row label="สถานะโอน"   val={roll.transferred ? `✓ โอนแล้ว · ${roll.transferred_by || ''}` : 'รอโอนเข้าคลัง'} />
         </div>
 
-        {/* QR ของหน้านี้ (สแกนซ้ำได้) */}
+        {/* QR สแกนซ้ำ */}
         <div className="flex flex-col items-center gap-2 px-5 py-4">
           <p className="text-slate-500 text-[10px] uppercase tracking-wider">QR Code ม้วนนี้</p>
           <div className="bg-white p-3 rounded-xl">
-            <QRCode value={currentUrl} size={140} level="M" />
+            <QRCode value={currentUrl} size={130} level="M" />
           </div>
-          <p className="text-slate-600 text-[9px] text-center">สแกนเพื่อแชร์ข้อมูลม้วนนี้</p>
+          <p className="text-slate-600 text-[9px] text-center break-all">{currentUrl}</p>
         </div>
 
       </div>

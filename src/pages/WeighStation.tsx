@@ -17,25 +17,17 @@ function barcodeUrl(text: string, h = 10) {
 }
 
 // ── Print Label ───────────────────────────────────────────────────────────────
-function printLabel(p: MachineProfile, rollNo: number, gross: number, net: number, size: 'long'|'short' = 'long', rollType: string = 'good', reason = '') {
+function printLabel(p: MachineProfile, rollNo: number, gross: number, net: number, size: 'long'|'short' = 'long', rollType: string = 'good', reason = '', rollId?: string) {
   const dec     = p.decimal
   const mfgDate = thaiDate()
   const core    = parseFloat(p.coreWeight) || 0
-  // QR เป็น URL → เมื่อสแกนเปิดหน้า Roll Detail ครบถ้วน
-  const rollData = JSON.stringify({
-    mat: p.matCode, lot: p.lotNo, roll: rollNo,
-    net: fmt(net,dec), gross: fmt(gross,dec), core: fmt(core,dec),
-    machine: p.machine_no, date: mfgDate,
-    time: new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}),
-    customer: p.custName, product: p.productName,
-    width: p.widthCm, thick: p.thickMc, length: p.length,
-    inspector: p.inspector, planned: p.plannedQty,
-  })
-  const base64Data = btoa(unescape(encodeURIComponent(rollData)))
-  const appUrl     = window.location.origin
-  const detailUrl  = `${appUrl}/?roll=${base64Data}`
+  // QR encode แค่ roll ID → URL สั้น สแกนง่าย → หน้าเว็บดึงข้อมูลจาก DB
+  const appUrl    = window.location.origin
+  const detailUrl = rollId
+    ? `${appUrl}/?roll=${rollId}`
+    : `${appUrl}/?roll=0`
   const qrUrl = (s: number) =>
-    `https://api.qrserver.com/v1/create-qr-code/?size=${s}x${s}&data=${encodeURIComponent(detailUrl)}&margin=2`
+    `https://api.qrserver.com/v1/create-qr-code/?size=${s}x${s}&data=${encodeURIComponent(detailUrl)}&margin=2&ecc=M`
 
   // ═══════════════════════════════════════════════════════
   // ใบยาว 165 × 101.5 mm (landscape) — compact fit
@@ -660,14 +652,14 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       if (isGood) {
         setWeighedKg(prev => parseFloat((prev + saveWeight).toFixed(dec)))
         setRollNo(r => r + 1)
-        printLabel({...profile, inspector}, rollNo, gross, saveWeight, profile.labelSize ?? 'long', 'good')
+        printLabel({...profile, inspector}, rollNo, gross, saveWeight, profile.labelSize ?? 'long', 'good', '', data.id)
       } else if (isBad) {
         setBadRollNo(r => r + 1)
-        printLabel({...profile, inspector}, badRollNo, gross, saveWeight, profile.labelSize ?? 'long', 'bad', badReason)
+        printLabel({...profile, inspector}, badRollNo, gross, saveWeight, profile.labelSize ?? 'long', 'bad', badReason, data.id)
         setBadReason('')
       } else {
         // เศษ — ไม่มี roll_no ไม่นับม้วน พิมพ์ label แยก
-        printLabel({...profile, inspector}, 0, gross, gross, profile.labelSize ?? 'long', actualType)
+        printLabel({...profile, inspector}, 0, gross, gross, profile.labelSize ?? 'long', actualType, '', data.id)
       }
       setGross(0)
     } catch (e: any) {
@@ -680,20 +672,9 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
 
   const [selectedRoll, setSelectedRoll] = useState<any>(null)
 
-  // สร้าง URL สำหรับม้วนที่เลือก (ใช้ใน QR บน label เท่านั้น)
+  // สร้าง URL สำหรับม้วนที่เลือก — ใช้ ID สั้นๆ เท่านั้น
   function makeRollUrl(r: any) {
-    const d = JSON.stringify({
-      mat: profile.matCode, lot: profile.lotNo,
-      roll: r.roll_no, net: fmt(r.weight, dec),
-      gross: fmt(r.gross_weight ?? 0, dec), core: fmt(r.core_weight ?? 0, dec),
-      machine: profile.machine_no,
-      date: new Date(r.created_at).toLocaleDateString('th-TH'),
-      time: new Date(r.created_at).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}),
-      customer: profile.custName, product: profile.productName,
-      width: profile.widthCm, thick: profile.thickMc,
-      length: profile.length, inspector: profile.inspector, planned: profile.plannedQty,
-    })
-    return `${window.location.origin}/?roll=${btoa(unescape(encodeURIComponent(d)))}`
+    return `${window.location.origin}/?roll=${r.id}`
   }
 
   return (

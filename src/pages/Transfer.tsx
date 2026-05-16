@@ -160,20 +160,20 @@ function buildTransferSheet(
     ['ผู้โอน :',      staff,  '',  'เครื่อง :', machines, 'Lot :', lots],
     ['สินค้า :',     products,'',  'จำนวน :', `${rolls.length} ม้วน`, 'น้ำหนักรวม (สุทธิ) :', `${totalKg.toFixed(2)} Kgs.`],
     [],
-    // column headers
-    ['ลำดับ','เครื่อง','ม้วนที่','สินค้า','ลูกค้า','Lot','นน.เต็ม (Kgs.)','นน.แกน (Kgs.)','นน.สุทธิ (Kgs.)','ผู้ตรวจสอบ','เวลาชั่ง','เวลาโอน','ผู้โอน'],
+    // column headers — ลำดับ ม้วนที่ นนม้วน นนแกน นนสุทธิ แล้วรายละเอียดตาม
+    ['ลำดับ','ม้วนที่','นน.ม้วน (Kgs.)','นน.แกน (Kgs.)','นน.สุทธิ (Kgs.)','เครื่อง','สินค้า','ลูกค้า','Lot','ผู้ตรวจสอบ','เวลาชั่ง','เวลาโอน','ผู้โอน'],
   ]
 
   const dataRows = rolls.map((r, i) => [
     i + 1,
-    r.machine_no ?? '',
     r.roll_no,
-    r.product_name ?? '',
-    r.customer ?? '',
-    r.lot_no ?? '',
     Number(((r.weight??0)+(r.core_weight??0)).toFixed(2)),
     Number((r.core_weight??0).toFixed(2)),
     Number((r.weight??0).toFixed(2)),
+    r.machine_no ?? '',
+    r.product_name ?? '',
+    r.customer ?? '',
+    r.lot_no ?? '',
     r.inspector ?? '',
     new Date(r.created_at).toLocaleString('th-TH'),
     r.transferred_at ? new Date(r.transferred_at).toLocaleString('th-TH') : '',
@@ -181,14 +181,14 @@ function buildTransferSheet(
   ])
 
   // total row
-  dataRows.push(['', '', '', `รวม ${rolls.length} ม้วน`, '', '', '', '', Number(totalKg.toFixed(2)), '', '', '', ''])
+  dataRows.push(['', `รวม ${rolls.length} ม้วน`, '', '', Number(totalKg.toFixed(2)), '', '', '', '', '', '', '', ''])
 
   const ws = XLSX.utils.aoa_to_sheet([...header, ...dataRows])
 
   // column widths
   ws['!cols'] = [
-    {wch:6},{wch:8},{wch:8},{wch:26},{wch:20},{wch:14},
-    {wch:16},{wch:14},{wch:16},{wch:12},{wch:20},{wch:20},{wch:14},
+    {wch:6},{wch:8},{wch:16},{wch:14},{wch:16},
+    {wch:8},{wch:26},{wch:20},{wch:14},{wch:12},{wch:20},{wch:20},{wch:14},
   ]
 
   // merge title rows A1:M1 and A2:M2

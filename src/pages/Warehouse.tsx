@@ -305,13 +305,24 @@ export default function Warehouse() {
 
   function exportStockExcel() {
     const rows = filteredStock.map((r, i) => ({
-      'ลำดับ': i+1, 'Lot': r.lot_no??'', 'สินค้า': r.product_name??'', 'ลูกค้า': r.customer??'',
-      'เครื่อง': r.machine_no??'', 'ม้วนที่': r.roll_no,
-      'นน.สุทธิ (Kgs.)': r.weight??0, 'ผู้ตรวจ': r.inspector??'',
-      'วันผลิต': fmtDT(r.created_at), 'วันรับโอน': r.transferred_at ? fmtDT(r.transferred_at) : '',
+      'ลำดับ':           i + 1,
+      'ม้วนที่':         r.roll_no,
+      'นน.ม้วน (Kgs.)': Number(((r.weight??0)+(r.core_weight??0)).toFixed(2)),
+      'นน.แกน (Kgs.)':  Number((r.core_weight??0).toFixed(2)),
+      'นน.สุทธิ (Kgs.)':Number((r.weight??0).toFixed(2)),
+      'เครื่อง':        r.machine_no ?? '',
+      'สินค้า':         r.product_name ?? '',
+      'ลูกค้า':         r.customer ?? '',
+      'Lot':            r.lot_no ?? '',
+      'ผู้ตรวจสอบ':     r.inspector ?? '',
+      'วันผลิต':        fmtDT(r.created_at),
+      'วันรับโอน':      r.transferred_at ? fmtDT(r.transferred_at) : '',
     }))
     const ws = XLSX.utils.json_to_sheet(rows)
-    ws['!cols'] = [{wch:6},{wch:14},{wch:24},{wch:20},{wch:8},{wch:8},{wch:16},{wch:12},{wch:18},{wch:18}]
+    ws['!cols'] = [
+      {wch:6},{wch:8},{wch:16},{wch:14},{wch:16},
+      {wch:8},{wch:26},{wch:20},{wch:14},{wch:12},{wch:18},{wch:18},
+    ]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Stock')
     XLSX.writeFile(wb, `warehouse_stock_${new Date().toISOString().slice(0,10)}.xlsx`)

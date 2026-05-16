@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Save, Printer, RefreshCw, CheckCircle2, ArrowLeft, Wind, Lock, X } from 'lucide-react'
 import QRCode from 'react-qr-code'
+import QRCodeLib from 'qrcode'
 import { supabase } from '../lib/supabase'
 import { loadProfiles, saveProfiles, type MachineProfile } from './MachineSettings'
 
@@ -17,17 +18,22 @@ function barcodeUrl(text: string, h = 10) {
 }
 
 // ── Print Label ───────────────────────────────────────────────────────────────
-function printLabel(p: MachineProfile, rollNo: number, gross: number, net: number, size: 'long'|'short' = 'long', rollType: string = 'good', reason = '', rollId?: string) {
+async function printLabel(p: MachineProfile, rollNo: number, gross: number, net: number, size: 'long'|'short' = 'long', rollType: string = 'good', reason = '', rollId?: string) {
   const dec     = p.decimal
   const mfgDate = thaiDate()
   const core    = parseFloat(p.coreWeight) || 0
-  // QR encode แค่ roll ID → URL สั้น สแกนง่าย → หน้าเว็บดึงข้อมูลจาก DB
+  // QR encode แค่ roll ID → URL สั้น → generate เป็น data URL ฝังใน HTML ทันที
   const appUrl    = window.location.origin
-  const detailUrl = rollId
-    ? `${appUrl}/?roll=${rollId}`
-    : `${appUrl}/?roll=0`
-  const qrUrl = (s: number) =>
-    `https://api.qrserver.com/v1/create-qr-code/?size=${s}x${s}&data=${encodeURIComponent(detailUrl)}&margin=2&ecc=M`
+  const detailUrl = rollId ? `${appUrl}/?roll=${rollId}` : `${appUrl}/`
+
+  // generate QR เป็น PNG data URL (ไม่ต้องพึ่ง internet)
+  const makeQR = async (px: number) => {
+    try {
+      return await QRCodeLib.toDataURL(detailUrl, { width: px, margin: 1, errorCorrectionLevel: 'M' })
+    } catch { return '' }
+  }
+  const [qr72, qr56] = await Promise.all([makeQR(144), makeQR(112)])
+  const qrUrl = (s: 72|56) => s === 72 ? qr72 : qr56
 
   // ═══════════════════════════════════════════════════════
   // ใบยาว 165 × 101.5 mm (landscape) — compact fit
@@ -119,7 +125,7 @@ html,body{font-family:'Sarabun','Tahoma',sans-serif;font-size:8.5pt;color:#000;b
           <div class="bcno" style="width:24mm"></div>
           <div style="margin-top:1mm;font-size:8pt">ผู้ตรวจสอบ &nbsp;<b>${p.inspector}</b></div>
         </div>
-        <img src="${qrUrl(72)}" width="72" height="72" style="flex-shrink:0"/>
+        <img src="${qrUrl(72)}" width="72" height="72" style="flex-shrink:0;image-rendering:pixelated"/>
       </div>
     </div>
   </div>
@@ -156,7 +162,7 @@ html,body{font-family:'Sarabun','Tahoma',sans-serif;font-size:7pt;color:#000;bac
       </div>
       <div style="margin-top:1mm;font-size:6pt">ผู้ตรวจ: <b>${p.inspector}</b></div>
     </div>
-    <img src="${qrUrl(56)}" width="56" height="56"/>
+    <img src="${qrUrl(56)}" width="56" height="56" style="image-rendering:pixelated"/>
   </div>
 </div>`
 
@@ -652,14 +658,14 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       if (isGood) {
         setWeighedKg(prev => parseFloat((prev + saveWeight).toFixed(dec)))
         setRollNo(r => r + 1)
-        printLabel({...profile, inspector}, rollNo, gross, saveWeight, profile.labelSize ?? 'long', 'good', '', data.id)
+        await printLabel({...profile, inspector}, rollNo, gross, saveWeight, profile.labelSize ?? 'long', 'good', '', data.id)
       } else if (isBad) {
         setBadRollNo(r => r + 1)
-        printLabel({...profile, inspector}, badRollNo, gross, saveWeight, profile.labelSize ?? 'long', 'bad', badReason, data.id)
+        await printLabel({...profile, inspector}, badRollNo, gross, saveWeight, profile.labelSize ?? 'long', 'bad', badReason, data.id)
         setBadReason('')
       } else {
         // เศษ — ไม่มี roll_no ไม่นับม้วน พิมพ์ label แยก
-        printLabel({...profile, inspector}, 0, gross, gross, profile.labelSize ?? 'long', actualType, '', data.id)
+        await printLabel({...profile, inspector}, 0, gross, gross, profile.labelSize ?? 'long', actualType, '', data.id)
       }
       setGross(0)
     } catch (e: any) {
@@ -1182,11 +1188,11 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
 
             {/* Reprint */}
             <div className="flex gap-2 px-5 py-4 border-t border-slate-800">
-              <button onClick={() => printLabel({...profile, inspector: selectedRoll.inspector || profile.inspector}, selectedRoll.roll_no, selectedRoll.gross_weight??0, selectedRoll.weight??0, 'short', selectedRoll.roll_type, selectedRoll.remark??'')}
+              <button onClick={() => printLabel({...profile, inspector: selectedRoll.inspector || profile.inspector}, selectedRoll.roll_no, selectedRoll.gross_weight??0, selectedRoll.weight??0, 'short', selectedRoll.roll_type, selectedRoll.remark??'', selectedRoll.id)}
                 className="flex-1 flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white text-sm py-2.5 rounded-xl transition-colors">
                 <Printer size={14}/> ใบสั้น
               </button>
-              <button onClick={() => printLabel({...profile, inspector: selectedRoll.inspector || profile.inspector}, selectedRoll.roll_no, selectedRoll.gross_weight??0, selectedRoll.weight??0, 'long', selectedRoll.roll_type, selectedRoll.remark??'')}
+              <button onClick={() => printLabel({...profile, inspector: selectedRoll.inspector || profile.inspector}, selectedRoll.roll_no, selectedRoll.gross_weight??0, selectedRoll.weight??0, 'long', selectedRoll.roll_type, selectedRoll.remark??'', selectedRoll.id)}
                 className="flex-1 flex items-center justify-center gap-1.5 bg-brand-600 hover:bg-brand-700 text-white text-sm py-2.5 rounded-xl transition-colors font-semibold">
                 <Printer size={14}/> ใบยาว
               </button>

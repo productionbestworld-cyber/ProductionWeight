@@ -33,8 +33,17 @@ export interface MachineProfile {
 const EMPTY_PROFILE: MachineProfile = {
   machine_no:'', custCode:'', custName:'', custAddress:'', decimal:2,
   matCode:'', productCode:'', productName:'', widthCm:'', thickMc:'',
-  lotNo:'', length:'', pcs:'', coreWeight:'1.25', inspector:'', locked:true,
+  lotNo:'', length:'', pcs:'', coreWeight:'1.25', inspector:'', locked:false,
   plannedQty:'', labelSize:'long',
+}
+
+function nextMachineNo(profiles: MachineProfile[]): string {
+  const nums = profiles
+    .map(p => p.machine_no.match(/^BL[-\s]?(\d+)$/i))
+    .filter(Boolean)
+    .map(m => parseInt(m![1]))
+  const next = nums.length > 0 ? Math.max(...nums) + 1 : 1
+  return `BL${String(next).padStart(2, '0')}`
 }
 
 // ── DB ↔ App type conversion ──────────────────────────────────────────────────
@@ -143,7 +152,7 @@ function ProfileCard({ p, i, onChange, onRemove }: {
         <div className="px-4 pb-4 border-t border-slate-800 pt-3 space-y-3">
           {/* เครื่อง */}
           <div>
-            <F label="หมายเลขเครื่อง *" k="machine_no" ph="B-01" half />
+            <F label="หมายเลขเครื่อง *" k="machine_no" ph="BL01" half />
           </div>
 
           <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">ลูกค้า</p>
@@ -228,7 +237,7 @@ export default function MachineSettings() {
   }, [])
 
   function add() {
-    setProfiles(p => [...p, { ...EMPTY_PROFILE }])
+    setProfiles(p => [...p, { ...EMPTY_PROFILE, machine_no: nextMachineNo(p) }])
   }
   function remove(i: number) {
     if (!confirm('ลบเครื่องนี้?')) return
@@ -263,6 +272,10 @@ export default function MachineSettings() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={add}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors">
+            <Plus size={14}/> เพิ่มเครื่อง
+          </button>
           <button onClick={handleSave}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
               saved ? 'bg-green-600 text-white' : 'bg-brand-600 hover:bg-brand-500 text-white'

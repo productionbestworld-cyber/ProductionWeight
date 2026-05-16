@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Save, Printer, RefreshCw, CheckCircle2, ArrowLeft, Wind, Lock, X } from 'lucide-react'
 import QRCode from 'react-qr-code'
 import { supabase } from '../lib/supabase'
-import { loadProfiles, type MachineProfile } from './MachineSettings'
+import { loadProfiles, saveProfiles, type MachineProfile } from './MachineSettings'
 
 function fmt(n: number | null | undefined, d: 1|2 = 2) {
   if (n === null || n === undefined || isNaN(n as number)) return (0).toFixed(d)
@@ -185,56 +185,216 @@ html,body{font-family:'Sarabun','Tahoma',sans-serif;font-size:7pt;color:#000;bac
 }
 
 // ── Machine Picker ────────────────────────────────────────────────────────────
-function MachinePicker({ profiles, onSelect }: {
+function MachinePicker({ profiles, onSelect, onProfileUpdated }: {
   profiles: MachineProfile[]
   onSelect: (p: MachineProfile) => void
+  onProfileUpdated: () => void
 }) {
-  const ready    = profiles.filter(p => p.machine_no && p.custName && p.productName && p.matCode && p.lotNo)
-  const notReady = profiles.filter(p => !p.machine_no || !p.custName || !p.productName || !p.matCode || !p.lotNo)
+  const [editing, setEditing] = useState<MachineProfile | null>(null)
+  // เรียงตามชื่อเครื่อง
+  const sorted = [...profiles].sort((a,b) => (a.machine_no||'').localeCompare(b.machine_no||'', undefined, { numeric: true }))
+
+  function isReady(p: MachineProfile) {
+    return !!(p.machine_no && p.custName && p.productName && p.matCode && p.lotNo)
+  }
 
   return (
-    <div className="min-h-[calc(100vh-48px)] bg-[#0a0f1e] p-6 flex flex-col items-center">
-      <div className="w-full max-w-4xl">
-        <div className="mb-6">
+    <div className="min-h-[calc(100vh-48px)] bg-[#0a0f1e] p-6">
+      <div className="max-w-6xl mx-auto">
+        <div className="mb-5">
           <h1 className="text-white font-bold text-xl flex items-center gap-2">
-            <Wind size={20} className="text-brand-400" /> เลือกเครื่องที่ต้องการชั่ง
+            <Wind size={20} className="text-brand-400" /> เลือกเครื่อง
           </h1>
-          <p className="text-slate-400 text-sm mt-1">แตะเครื่องเพื่อเริ่มชั่งทันที — ข้อมูลถูกตั้งค่าไว้แล้ว</p>
+          <p className="text-slate-400 text-sm mt-1">เครื่องว่าง → คลิกเพื่อกรอกข้อมูลงาน · เครื่องพร้อม → คลิกเพื่อเริ่มชั่ง</p>
         </div>
 
-        {ready.length > 0 ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
-            {ready.map((p, i) => (
-              <button key={i} onClick={() => onSelect(p)}
-                className="bg-slate-900 border border-slate-700 hover:border-brand-500 hover:bg-brand-500/8 rounded-2xl p-4 text-left transition-all active:scale-95 group">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="bg-brand-600 text-white font-black text-lg w-12 h-12 rounded-xl flex items-center justify-center group-hover:bg-brand-500 transition-colors">
-                    {p.machine_no}
+        {/* Grid — แสดงทุกเครื่อง, size เท่ากันหมด */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          {sorted.map((p, i) => {
+            const ready = isReady(p)
+            return (
+              <button key={i}
+                onClick={() => ready ? onSelect(p) : setEditing(p)}
+                className={`h-48 rounded-2xl p-4 text-left transition-all active:scale-95 group flex flex-col ${
+                  ready
+                    ? 'bg-slate-900 border border-slate-700 hover:border-brand-500 hover:bg-brand-500/8'
+                    : 'bg-slate-900/40 border-2 border-dashed border-slate-700 hover:border-brand-500 hover:bg-slate-900'
+                }`}>
+                {/* Header */}
+                <div className="flex items-center justify-between mb-2.5">
+                  <div className={`w-14 h-14 rounded-xl flex items-center justify-center font-black text-lg ${
+                    ready
+                      ? 'bg-brand-600 text-white group-hover:bg-brand-500'
+                      : 'bg-slate-800 text-slate-500 border border-slate-700'
+                  }`}>
+                    {p.machine_no || '?'}
                   </div>
-                  {p.locked && <Lock size={12} className="text-red-400" />}
+                  <div className="flex flex-col items-end gap-1">
+                    {ready ? (
+                      <span className="text-[10px] bg-green-500/15 text-green-400 px-2 py-0.5 rounded-full font-semibold">● พร้อมใช้</span>
+                    ) : (
+                      <span className="text-[10px] bg-slate-700 text-slate-400 px-2 py-0.5 rounded-full font-semibold">○ ว่าง</span>
+                    )}
+                    {ready && p.locked && <Lock size={11} className="text-red-400" />}
+                  </div>
                 </div>
-                <p className="text-white font-semibold text-sm leading-tight truncate">{p.productName}</p>
-                <p className="text-slate-400 text-xs mt-0.5 truncate">{p.custName}</p>
-                <div className="flex gap-1 flex-wrap mt-1.5">
-                  <span className="text-[9px] bg-slate-800 text-slate-500 px-1.5 py-0.5 rounded">Lot {p.lotNo.slice(-6)}</span>
-                  {p.widthCm && <span className="text-[9px] bg-slate-800 text-slate-500 px-1.5 py-0.5 rounded">{p.widthCm}cm×{p.thickMc}mc</span>}
-                </div>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-16 bg-slate-900 border border-slate-800 rounded-2xl mb-6">
-            <Wind size={40} className="text-slate-700 mx-auto mb-3" />
-            <p className="text-slate-400 font-semibold">ยังไม่มีเครื่องพร้อม</p>
-            <p className="text-slate-600 text-sm mt-1">ไปตั้งค่า Profile เครื่องที่ Tab "ตั้งค่าเครื่อง" ก่อน</p>
-          </div>
-        )}
 
-        {notReady.length > 0 && (
-          <div className="bg-amber-500/8 border border-amber-500/20 rounded-xl px-4 py-3 text-xs text-amber-400">
-            ⚠️ เครื่องยังไม่พร้อม {notReady.length} เครื่อง ({notReady.map(p=>p.machine_no||'?').join(', ')}) — กรอกข้อมูลให้ครบในหน้าตั้งค่า
+                {/* Content */}
+                {ready ? (
+                  <div className="flex-1 min-h-0">
+                    <p className="text-white font-semibold text-sm leading-tight line-clamp-2 mb-1">{p.productName}</p>
+                    <p className="text-slate-400 text-xs truncate">{p.custName}</p>
+                    <div className="flex gap-1 flex-wrap mt-2">
+                      <span className="text-[9px] bg-slate-800 text-slate-500 px-1.5 py-0.5 rounded">Lot {p.lotNo.slice(-6)}</span>
+                      {p.widthCm && <span className="text-[9px] bg-slate-800 text-slate-500 px-1.5 py-0.5 rounded">{p.widthCm}×{p.thickMc}mc</span>}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center text-center">
+                    <p className="text-slate-500 text-xs">เครื่องว่าง</p>
+                    <p className="text-slate-600 text-[10px] mt-1">คลิกเพื่อกรอกข้อมูลงาน</p>
+                    <span className="mt-2 text-[10px] bg-brand-500/15 text-brand-300 border border-brand-500/30 px-3 py-1 rounded-full">+ กรอกข้อมูล</span>
+                  </div>
+                )}
+              </button>
+            )
+          })}
+
+          {sorted.length === 0 && (
+            <div className="col-span-full text-center py-16 bg-slate-900 border border-slate-800 rounded-2xl">
+              <Wind size={40} className="text-slate-700 mx-auto mb-3" />
+              <p className="text-slate-400 font-semibold">ยังไม่มีเครื่อง</p>
+              <p className="text-slate-600 text-sm mt-1">ไปตั้งค่าเพิ่มเครื่องที่ Tab "ตั้งค่าเครื่อง"</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Quick edit modal */}
+      {editing && (
+        <QuickEditModal profile={editing} onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); onProfileUpdated() }} />
+      )}
+    </div>
+  )
+}
+
+// ── Quick Edit Modal (กรอกข้อมูลงานใหม่) ─────────────────────────────────────
+function QuickEditModal({ profile, onClose, onSaved }: {
+  profile: MachineProfile; onClose: () => void; onSaved: () => void
+}) {
+  const [p, setP] = useState({ ...profile })
+  const [saving, setSaving] = useState(false)
+  const set = (k: keyof MachineProfile, v: any) => setP(prev => ({ ...prev, [k]: v }))
+
+  const ok = p.machine_no && p.custName && p.productName && p.matCode && p.lotNo && p.plannedQty
+
+  async function save() {
+    if (!ok) return
+    setSaving(true)
+    try {
+      await supabase.from('machine_profiles').upsert({
+        machine_no:    p.machine_no,
+        cust_code:     p.custCode,
+        cust_name:     p.custName,
+        cust_address:  p.custAddress,
+        decimal_places: p.decimal,
+        mat_code:      p.matCode,
+        product_code:  p.productCode,
+        product_name:  p.productName,
+        width_cm:      p.widthCm,
+        thick_mc:      p.thickMc,
+        lot_no:        p.lotNo,
+        length:        p.length,
+        pcs:           p.pcs,
+        core_weight:   p.coreWeight,
+        inspector:     p.inspector,
+        locked:        p.locked,
+        planned_qty:   p.plannedQty,
+        label_size:    p.labelSize,
+        updated_at:    new Date().toISOString(),
+      }, { onConflict: 'machine_no' })
+      onSaved()
+    } catch (e: any) {
+      alert('บันทึกไม่สำเร็จ: ' + (e?.message ?? e))
+    } finally { setSaving(false) }
+  }
+
+  const Field = ({ label, k, ph, half }: { label: string; k: keyof MachineProfile; ph?: string; half?: boolean }) => (
+    <div className={half ? '' : 'col-span-2'}>
+      <label className="block text-[10px] text-slate-500 mb-1">{label}</label>
+      <input value={(p[k] as string) ?? ''} onChange={e => set(k, e.target.value)} placeholder={ph}
+        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-brand-500" />
+    </div>
+  )
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl shadow-2xl max-h-[92vh] flex flex-col">
+        <div className="px-5 py-4 border-b border-slate-800 shrink-0 flex items-center justify-between">
+          <div>
+            <p className="text-white font-bold">กรอกข้อมูลงานใหม่ — เครื่อง {p.machine_no}</p>
+            <p className="text-slate-400 text-xs">เครื่องนี้ว่าง — กรอกข้อมูลงานก่อนเริ่มชั่ง</p>
           </div>
-        )}
+          <button onClick={onClose} className="text-slate-400 hover:text-white">✕</button>
+        </div>
+
+        <div className="px-5 py-4 overflow-y-auto space-y-3">
+          <p className="text-brand-400 text-[10px] font-bold uppercase tracking-wider">ลูกค้า</p>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="รหัสลูกค้า" k="custCode" ph="C-001" half />
+            <div>
+              <label className="block text-[10px] text-slate-500 mb-1">ทศนิยม</label>
+              <div className="flex gap-1">
+                {([1,2] as const).map(d => (
+                  <button key={d} onClick={() => set('decimal', d)}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold ${p.decimal===d ? 'bg-brand-600 text-white' : 'bg-slate-800 text-slate-400'}`}>
+                    {d} ตำแหน่ง
+                  </button>
+                ))}
+              </div>
+            </div>
+            <Field label="ชื่อลูกค้า *" k="custName" ph="บริษัท ..." />
+            <Field label="ที่อยู่"      k="custAddress" ph="" />
+          </div>
+
+          <p className="text-brand-400 text-[10px] font-bold uppercase tracking-wider pt-2">สินค้า</p>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Mat Code *"      k="matCode"     ph="60004224"      half />
+            <Field label="Product Code"    k="productCode" ph="60004224"      half />
+            <Field label="ชื่อสินค้า *"   k="productName" ph="PE Shrink Film" />
+            <Field label="กว้าง (cm)"     k="widthCm"     ph="45"             half />
+            <Field label="หนา (mc)"       k="thickMc"     ph="25"             half />
+            <Field label="Lot No *"       k="lotNo"       ph="69S0100010001"  half />
+            <Field label="Length (Ms.)"   k="length"      ph="4800"           half />
+          </div>
+
+          <p className="text-brand-400 text-[10px] font-bold uppercase tracking-wider pt-2">เครื่อง</p>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Core Weight (kg)"  k="coreWeight" ph="1.25" half />
+            <Field label="ผู้ตรวจสอบ"        k="inspector"  ph="" half />
+            <Field label="ยอดสั่งผลิต (kg) *" k="plannedQty" ph="5000" half />
+            <div>
+              <label className="block text-[10px] text-slate-500 mb-1">ใบปะหน้า</label>
+              <div className="flex gap-1">
+                {(['long','short'] as const).map(s => (
+                  <button key={s} onClick={() => set('labelSize', s)}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold ${p.labelSize===s ? 'bg-brand-600 text-white' : 'bg-slate-800 text-slate-400'}`}>
+                    {s === 'long' ? 'ยาว 165×70' : 'สั้น 76×76'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-2 px-5 py-4 border-t border-slate-800 shrink-0">
+          <button onClick={onClose} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-400 py-2.5 rounded-xl text-sm">ยกเลิก</button>
+          <button onClick={save} disabled={!ok || saving}
+            className="flex-[2] bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white py-2.5 rounded-xl font-bold">
+            {saving ? 'บันทึก...' : '✓ บันทึก + พร้อมใช้งาน'}
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -248,6 +408,23 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
   const [lastRoll,     setLastRoll]     = useState<any>(null)
   const [weighedKg,    setWeighedKg]    = useState(0)
   const [weighedRolls, setWeighedRolls] = useState<any[]>([])
+  const [showCloseModal, setShowCloseModal] = useState(false)
+  const [closing,        setClosing]        = useState(false)
+  const [inspector,    setInspector]    = useState('')
+  const [inspectorSetAt, setInspectorSetAt] = useState<number>(0)
+  const [showInspectorPrompt, setShowInspectorPrompt] = useState(true)
+  const [inspectorInput, setInspectorInput] = useState(profile.inspector || '')
+
+  function confirmInspector(name: string) {
+    if (!name.trim()) return
+    setInspector(name.trim())
+    setInspectorSetAt(Date.now())
+    setShowInspectorPrompt(false)
+  }
+
+  // เตือนทุก 4 ชั่วโมง
+  const hoursSinceSet = inspectorSetAt ? (Date.now() - inspectorSetAt) / 3600000 : 999
+  const isStale = inspector && hoursSinceSet >= 4
   const [weighType,    setWeighType]    = useState<'good'|'bad'|'scrap'>('good')
   const [scrapSub,     setScrapSub]     = useState<'scrap_clear'|'scrap_color'|'scrap_lump'>('scrap_clear')
   const [badReason,    setBadReason]    = useState('')
@@ -267,6 +444,8 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
     const today = new Date(); today.setHours(0,0,0,0)
     supabase.from('production_rolls')
       .select('*')
+      .eq('machine_no', profile.machine_no)
+      .eq('lot_no', profile.lotNo)
       .gte('created_at', today.toISOString())
       .order('created_at', { ascending: true })
       .then(({ data, error }) => {
@@ -282,7 +461,7 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
         setRollNo(lastRollNo + 1)
         setBadRollNo(lastBadRollNo + 1)
       })
-    startIdle()
+    setStable(true)
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, [])
 
@@ -299,28 +478,132 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
   function readScale() {
     if (timerRef.current) clearInterval(timerRef.current)
     const target = parseFloat((22 + Math.random() * 6).toFixed(dec))
-    setStable(false)
-    let tick = 0
-    const TOTAL = 25
+    setGross(target)
+    setStable(true)
+    // jitter เบาๆ ให้เหมือนเครื่องชั่งจริง
     timerRef.current = setInterval(() => {
-      tick++
-      const progress   = Math.min(1, tick / TOTAL)
-      const approaching = target * Math.min(1, progress * 1.4)
-      const noise      = tick < TOTAL
-        ? (Math.random() - 0.5) * 3 * (1 - progress)
-        : (Math.random() - 0.5) * 0.02
-      const cur = parseFloat(Math.max(0, approaching + noise).toFixed(dec))
-      setGross(cur)
-      if (tick >= TOTAL) {
-        clearInterval(timerRef.current!)
-        setGross(target)
-        setStable(true)
-        timerRef.current = setInterval(() => {
-          const n = (Math.random() - 0.5) * 0.02
-          setGross(parseFloat((target + n).toFixed(dec)))
-        }, 200)
-      }
-    }, 100)
+      const n = (Math.random() - 0.5) * 0.02
+      setGross(parseFloat((target + n).toFixed(dec)))
+    }, 250)
+  }
+
+  // คำนวณสรุปยอด
+  const goodRolls = weighedRolls.filter((r:any)=>r?.roll_type==='good')
+  const badRolls  = weighedRolls.filter((r:any)=>r?.roll_type==='bad')
+  const scrapRolls= weighedRolls.filter((r:any)=>r?.roll_type?.startsWith?.('scrap'))
+  const transferredKg = goodRolls.filter((r:any)=>r.transferred).reduce((s:number,r:any)=>s+(r.weight??0),0)
+  const goodKg    = goodRolls.reduce((s:number,r:any)=>s+(r.weight??0),0)
+  const badKg     = badRolls.reduce((s:number,r:any)=>s+(r.weight??0),0)
+  const scrapKg   = scrapRolls.reduce((s:number,r:any)=>s+(r.weight??0),0)
+  const totalProduced = goodKg + badKg + scrapKg
+  const yieldPct  = totalProduced > 0 ? Math.round(goodKg / totalProduced * 100) : 0
+
+  function printJobSummary() {
+    const win = window.open('', '_blank', 'width=900,height=700')
+    if (!win) return
+    const date  = new Date().toLocaleDateString('th-TH')
+    const time  = new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding:10mm}
+.head{text-align:center;border-bottom:2px solid #000;padding-bottom:3mm;margin-bottom:4mm}
+.head h1{font-size:14pt;font-weight:800}
+.head h2{font-size:18pt;font-weight:900;margin-top:2mm}
+.box{border:1px solid #aaa;padding:3mm 4mm;margin-bottom:3mm}
+.box h3{font-size:11pt;font-weight:700;border-bottom:1px solid #ddd;padding-bottom:1.5mm;margin-bottom:2mm}
+.row{display:flex;justify-content:space-between;padding:1mm 0;font-size:10pt}
+.kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:3mm;margin-bottom:3mm}
+.kpi-box{border:1px solid #aaa;padding:3mm;text-align:center}
+.kpi-box .lbl{font-size:8pt;color:#666;text-transform:uppercase}
+.kpi-box .val{font-size:18pt;font-weight:800;color:#003087;margin-top:1mm}
+.sign{display:flex;justify-content:space-around;margin-top:15mm;gap:10mm}
+.sign-box{flex:1;text-align:center}
+.sign-line{border-top:1px solid #000;margin-top:18mm;padding-top:1mm;font-size:9pt}
+@media print{@page{size:A4;margin:10mm}}
+</style></head><body>
+<div class="head">
+  <h1>บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด</h1>
+  <h2>สรุปการผลิต — Production Report</h2>
+  <p style="font-size:9pt;color:#555">วันที่ปิดงาน ${date} ${time}</p>
+</div>
+<div class="box">
+  <h3>ข้อมูลงาน</h3>
+  <div class="row"><span>ลูกค้า</span><b>${profile.custName}</b></div>
+  <div class="row"><span>สินค้า</span><b>${profile.productName}</b></div>
+  <div class="row"><span>Mat Code</span><b>${profile.matCode}</b></div>
+  <div class="row"><span>Lot No</span><b>${profile.lotNo}</b></div>
+  <div class="row"><span>เครื่อง</span><b>${profile.machine_no}</b></div>
+  <div class="row"><span>ขนาด</span><b>${profile.widthCm} cm × ${profile.thickMc} mc</b></div>
+</div>
+<div class="kpi">
+  <div class="kpi-box"><div class="lbl">ยอดสั่ง</div><div class="val">${planned.toLocaleString('th-TH')}</div><div style="font-size:8pt">Kgs.</div></div>
+  <div class="kpi-box" style="background:#e8f5e9"><div class="lbl">ผลิตดี</div><div class="val">${goodKg.toLocaleString('th-TH',{minimumFractionDigits:2})}</div><div style="font-size:8pt">${goodRolls.length} ม้วน</div></div>
+  <div class="kpi-box" style="background:#fff3e0"><div class="lbl">Yield</div><div class="val">${yieldPct}%</div></div>
+</div>
+<div class="box">
+  <h3>รายละเอียดการผลิต</h3>
+  <div class="row"><span>ม้วนดี</span><b style="color:#1976d2">${goodKg.toLocaleString('th-TH',{minimumFractionDigits:2})} Kgs. (${goodRolls.length} ม้วน)</b></div>
+  <div class="row"><span>ม้วนกรอ</span><b style="color:#f57c00">${badKg.toLocaleString('th-TH',{minimumFractionDigits:2})} Kgs. (${badRolls.length} ม้วน)</b></div>
+  <div class="row"><span>เศษเสีย</span><b style="color:#d32f2f">${scrapKg.toLocaleString('th-TH',{minimumFractionDigits:2})} Kgs. (${scrapRolls.length} ถุง)</b></div>
+  <div class="row" style="border-top:1px solid #000;padding-top:2mm;margin-top:1mm;font-size:12pt">
+    <span><b>รวมทั้งหมด</b></span><b>${totalProduced.toLocaleString('th-TH',{minimumFractionDigits:2})} Kgs.</b>
+  </div>
+</div>
+<div class="box">
+  <h3>การโอนเข้าคลัง</h3>
+  <div class="row"><span>โอนไปแล้ว</span><b style="color:#2e7d32">${transferredKg.toLocaleString('th-TH',{minimumFractionDigits:2})} Kgs.</b></div>
+  <div class="row"><span>ยังไม่โอน</span><b>${(goodKg-transferredKg).toLocaleString('th-TH',{minimumFractionDigits:2})} Kgs.</b></div>
+</div>
+<div class="sign">
+  <div class="sign-box"><div class="sign-line"></div><div><b>${inspector||'—'}</b></div><div style="font-size:9pt;color:#555">ผู้ตรวจสอบ</div></div>
+  <div class="sign-box"><div class="sign-line"></div><div>...........................</div><div style="font-size:9pt;color:#555">หัวหน้างาน</div></div>
+  <div class="sign-box"><div class="sign-line"></div><div>...........................</div><div style="font-size:9pt;color:#555">ผู้อนุมัติ</div></div>
+</div>
+<script>window.onload=()=>{setTimeout(()=>window.print(),400)}<\/script>
+</body></html>`)
+    win.document.close()
+  }
+
+  async function handleCloseJob() {
+    setClosing(true)
+    try {
+      await supabase.from('job_summaries').insert({
+        machine_no:     profile.machine_no,
+        lot_no:         profile.lotNo,
+        product_name:   profile.productName,
+        customer:       profile.custName,
+        mat_code:       profile.matCode,
+        planned_qty:    planned,
+        good_kg:        parseFloat(goodKg.toFixed(2)),
+        good_rolls:     goodRolls.length,
+        bad_kg:         parseFloat(badKg.toFixed(2)),
+        bad_rolls:      badRolls.length,
+        scrap_kg:       parseFloat(scrapKg.toFixed(2)),
+        transferred_kg: parseFloat(transferredKg.toFixed(2)),
+        yield_pct:      yieldPct,
+        closed_at:      new Date().toISOString(),
+        closed_by:      inspector || null,
+        inspector:      inspector || null,
+      })
+      printJobSummary()
+      // เคลียร์ข้อมูลงาน (เก็บแต่ machine_no, core_weight, label_size, locked)
+      await supabase.from('machine_profiles').update({
+        cust_code: '', cust_name: '', cust_address: '',
+        mat_code: '', product_code: '', product_name: '',
+        width_cm: '', thick_mc: '',
+        lot_no: '', length: '', pcs: '',
+        planned_qty: '',
+        inspector: '',
+      }).eq('machine_no', profile.machine_no)
+      alert('✓ ปิดงานสำเร็จ — เครื่อง ' + profile.machine_no + ' พร้อมรับงานใหม่ (กรอกข้อมูลที่หน้าตั้งค่า)')
+      onBack()
+    } catch (e: any) {
+      alert('ปิดงานไม่สำเร็จ: ' + (e?.message ?? e))
+    } finally {
+      setClosing(false)
+      setShowCloseModal(false)
+    }
   }
 
   const isScrap = weighType === 'scrap'
@@ -331,13 +614,14 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
 
   async function handleSave() {
     if (saveWeight <= 0 || !stable) return
+    if (!inspector.trim()) { setShowInspectorPrompt(true); return }
     if (isBad && !badReason.trim()) { alert('กรุณาระบุเหตุผลม้วนกรอ'); return }
     setSaving(true)
     try {
       const actualType = isScrap ? scrapSub : weighType
-      const useRollNo  = isBad ? badRollNo : isGood ? rollNo : null
+      const useRollNo  = isBad ? badRollNo : isGood ? rollNo : 0
 
-      const { data } = await supabase.from('production_rolls').insert({
+      const { data, error: insertErr } = await supabase.from('production_rolls').insert({
         job_id:       null,
         roll_no:      useRollNo,
         roll_type:    actualType,
@@ -345,8 +629,14 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
         gross_weight: gross,
         core_weight:  isScrap ? 0 : core,
         remark:       isBad ? badReason : null,
+        inspector:    inspector || null,
+        machine_no:   profile.machine_no,
+        lot_no:       profile.lotNo,
+        product_name: profile.productName,
+        customer:     profile.custName,
       }).select().single()
 
+      if (insertErr) throw new Error(insertErr.message)
       if (!data) throw new Error('insert returned null')
       setLastRoll({ ...data, weighType: actualType })
       setWeighedRolls(prev => [...prev, data].filter(Boolean))
@@ -364,22 +654,22 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
         core_weight:  isScrap ? 0 : core,
         net_weight:   parseFloat(saveWeight.toFixed(dec)),
         remark:       isBad ? badReason : null,
+        inspector:    inspector || null,
       }).then(({ error }) => { if (error) console.warn('log error:', error.message) })
 
       if (isGood) {
         setWeighedKg(prev => parseFloat((prev + saveWeight).toFixed(dec)))
         setRollNo(r => r + 1)
-        printLabel(profile, rollNo, gross, saveWeight, profile.labelSize ?? 'long', 'good')
+        printLabel({...profile, inspector}, rollNo, gross, saveWeight, profile.labelSize ?? 'long', 'good')
       } else if (isBad) {
         setBadRollNo(r => r + 1)
-        printLabel(profile, badRollNo, gross, saveWeight, profile.labelSize ?? 'long', 'bad', badReason)
+        printLabel({...profile, inspector}, badRollNo, gross, saveWeight, profile.labelSize ?? 'long', 'bad', badReason)
         setBadReason('')
       } else {
         // เศษ — ไม่มี roll_no ไม่นับม้วน พิมพ์ label แยก
-        printLabel(profile, 0, gross, gross, profile.labelSize ?? 'long', actualType)
+        printLabel({...profile, inspector}, 0, gross, gross, profile.labelSize ?? 'long', actualType)
       }
       setGross(0)
-      startIdle()
     } catch (e: any) {
       alert('บันทึกไม่สำเร็จ: ' + (e?.message ?? JSON.stringify(e)))
     }
@@ -430,6 +720,12 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
               </div>
             </div>
           )}
+          <button onClick={() => setShowCloseModal(true)}
+            className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg transition-colors font-semibold ${
+              done ? 'bg-green-600 hover:bg-green-500 text-white animate-pulse' : 'bg-slate-800 hover:bg-slate-700 text-slate-400'
+            }`}>
+            🏁 ปิดงาน
+          </button>
           <button onClick={onBack}
             className="flex items-center gap-1 text-slate-500 hover:text-white text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg transition-colors">
             <ArrowLeft size={12}/> เปลี่ยนเครื่อง
@@ -444,6 +740,25 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
         <div className="w-[380px] shrink-0 flex flex-col gap-2.5 p-4 border-r border-slate-800 overflow-y-auto">
 
           {/* Type selector */}
+          {/* ผู้ตรวจสอบ — แสดง badge + เตือนเมื่อนาน */}
+          <button onClick={() => { setInspectorInput(inspector); setShowInspectorPrompt(true) }}
+            className={`w-full flex items-center justify-between gap-2 rounded-xl px-3 py-2 border transition-colors ${
+              !inspector  ? 'bg-red-500/10 border-red-500/30 hover:bg-red-500/15' :
+              isStale     ? 'bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/15' :
+                            'bg-slate-800 border-slate-700 hover:bg-slate-700/50'
+            }`}>
+            <div className="flex items-center gap-2 text-left">
+              <span className="text-slate-500 text-xs">ผู้ตรวจสอบ:</span>
+              <span className={`font-bold text-sm ${!inspector ? 'text-red-400' : isStale ? 'text-amber-300' : 'text-white'}`}>
+                {inspector || '⚠️ ยังไม่ได้กรอก!'}
+              </span>
+              {isStale && inspector && (
+                <span className="text-[10px] text-amber-400">· ผ่านมา {Math.floor(hoursSinceSet)} ชม. — กดยืนยันใหม่</span>
+              )}
+            </div>
+            <span className="text-slate-500 text-[10px]">เปลี่ยน ▸</span>
+          </button>
+
           <div className="grid grid-cols-3 gap-1.5">
             {([
               { key:'good',  label:'ม้วนดี',  color:'bg-brand-600 text-white',   inactive:'bg-slate-800 text-slate-400 hover:text-white' },
@@ -486,13 +801,15 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
             weighType==='bad'  ? 'bg-orange-500/5 border-orange-500/30' :
             'bg-slate-900 border-slate-700'
           }`}>
-            <p className="text-slate-500 text-[10px] uppercase tracking-widest mb-1">Gross Weight</p>
-            <div className={`font-mono text-[72px] font-black tracking-tight leading-none mb-1 transition-colors ${stable ? 'text-white' : 'text-amber-300'}`}>
-              {fmt(gross, dec)}
-            </div>
-            <p className={`text-xs font-semibold mb-4 ${stable ? 'text-slate-500' : 'text-amber-500 animate-pulse'}`}>
-              {stable ? 'Kgs. ✓' : 'Kgs. ⟳ อ่านค่า...'}
-            </p>
+            <p className="text-slate-500 text-[10px] uppercase tracking-widest mb-1">Gross Weight (พิมพ์ได้)</p>
+            <input
+              type="number" step="0.01" inputMode="decimal"
+              value={gross || ''}
+              onChange={e => { setGross(parseFloat(e.target.value)||0); setStable(true) }}
+              placeholder="0.00"
+              className="w-full font-mono text-[72px] font-black tracking-tight leading-none mb-1 text-white bg-transparent text-center outline-none placeholder-slate-700 focus:bg-slate-800/50 rounded-xl"
+            />
+            <p className="text-slate-500 text-xs font-semibold mb-4">Kgs.</p>
 
             {!isScrap && (
               <div className="flex items-center justify-center gap-5 mb-4">
@@ -516,9 +833,8 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
             )}
 
             <button onClick={readScale}
-              className={`w-full py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all ${stable ? 'bg-slate-700 hover:bg-slate-600 text-white' : 'bg-amber-500/20 text-amber-400 cursor-not-allowed'}`}>
-              <RefreshCw size={14} className={stable ? '' : 'animate-spin'}/>
-              {stable ? 'วางม้วน / อ่านค่าใหม่' : 'กำลังอ่านค่า...'}
+              className="w-full py-1.5 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-500 hover:text-white transition-colors">
+              <RefreshCw size={11}/> สุ่มค่าทดสอบ
             </button>
           </div>
 
@@ -551,7 +867,7 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
           {(saveWeight <= 0 || !stable || (isBad && !badReason.trim())) && (
             <p className="text-center text-slate-600 text-xs">
               {!stable ? '⟳ รอค่าชั่งนิ่งก่อน' :
-               saveWeight <= 0 ? '▲ กด "วางม้วน / อ่านค่าใหม่" ก่อนบันทึก' :
+               saveWeight <= 0 ? '▲ พิมพ์น้ำหนักหรือกดสุ่มค่าก่อน' :
                isBad && !badReason.trim() ? '▲ กรอกเหตุผลม้วนกรอก่อน' : ''}
             </p>
           )}
@@ -596,7 +912,39 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
             <span className="text-slate-700">|</span>
             <span className="text-slate-500">ม้วนกรอ <b className="text-orange-300">{weighedRolls.filter((r:any)=>r?.roll_type==='bad').length} ม้วน · {fmt(weighedRolls.filter((r:any)=>r?.roll_type==='bad').reduce((s:number,r:any)=>s+(r.weight??0),0),dec)} Kgs.</b></span>
             <span className="text-slate-700">|</span>
-            <span className="text-slate-500">เศษรวม <b className="text-amber-300">{fmt(weighedRolls.filter((r:any)=>r?.roll_type?.startsWith('scrap')).reduce((s:number,r:any)=>s+(r.weight??0),0),dec)} Kgs.</b></span>
+            {(() => {
+              const clear = weighedRolls.filter((r:any)=>r?.roll_type==='scrap_clear')
+              const color = weighedRolls.filter((r:any)=>r?.roll_type==='scrap_color')
+              const lump  = weighedRolls.filter((r:any)=>r?.roll_type==='scrap_lump')
+              const sum   = (a:any[]) => a.reduce((s:number,r:any)=>s+(r.weight??0),0)
+              const total = sum(clear)+sum(color)+sum(lump)
+              return (
+                <span className="relative group">
+                  <span className="text-slate-500 cursor-help">เศษรวม <b className="text-amber-300 underline decoration-dotted">{fmt(total,dec)} Kgs.</b></span>
+                  <div className="absolute left-0 top-full mt-1 hidden group-hover:block z-20 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 shadow-2xl whitespace-nowrap">
+                    <p className="text-amber-400 text-[10px] font-bold uppercase mb-1.5">แยกตามประเภท</p>
+                    <div className="space-y-1 text-xs">
+                      <div className="flex justify-between gap-6">
+                        <span className="text-slate-400">เศษใส <span className="text-slate-600">({clear.length})</span></span>
+                        <b className="text-slate-200">{fmt(sum(clear),dec)} Kgs.</b>
+                      </div>
+                      <div className="flex justify-between gap-6">
+                        <span className="text-slate-400">เศษสี <span className="text-slate-600">({color.length})</span></span>
+                        <b className="text-purple-300">{fmt(sum(color),dec)} Kgs.</b>
+                      </div>
+                      <div className="flex justify-between gap-6">
+                        <span className="text-slate-400">เศษก้อน <span className="text-slate-600">({lump.length})</span></span>
+                        <b className="text-amber-300">{fmt(sum(lump),dec)} Kgs.</b>
+                      </div>
+                      <div className="flex justify-between gap-6 border-t border-slate-700 pt-1 mt-1">
+                        <span className="text-slate-300 font-semibold">รวม</span>
+                        <b className="text-amber-300">{fmt(total,dec)} Kgs.</b>
+                      </div>
+                    </div>
+                  </div>
+                </span>
+              )
+            })()}
           </div>
 
           {/* 2 tables side by side */}
@@ -614,18 +962,20 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
               </div>
               <div className="flex-1 overflow-y-auto divide-y divide-slate-800/40">
                 {[...weighedRolls].filter((r:any)=>r.roll_type==='good').reverse().map((r:any) => {
-                  const isNew = lastRoll?.id === r.id
-                  const time  = new Date(r.created_at).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})
+                  const isNew  = lastRoll?.id === r.id
+                  const isDone = r.transferred
+                  const time   = new Date(r.created_at).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})
                   return (
                     <div key={r.id} onClick={()=>setSelectedRoll(r)}
-                      className={`grid grid-cols-4 hover:bg-slate-800/40 cursor-pointer transition-colors ${isNew?'bg-green-500/5':''}`}>
-                      <div className="px-3 py-2.5 text-slate-500 text-xs">{time}</div>
+                      className={`grid grid-cols-4 hover:bg-slate-800/40 cursor-pointer transition-colors ${isNew?'bg-green-500/5':''} ${isDone?'opacity-60':''}`}>
+                      <div className={`px-3 py-2.5 text-xs ${isDone?'text-slate-600 line-through':'text-slate-500'}`}>{time}</div>
                       <div className="px-3 py-2.5">
-                        <span className="text-white font-bold font-mono">#{r.roll_no}</span>
+                        <span className={`font-bold font-mono ${isDone?'text-slate-500 line-through':'text-white'}`}>#{r.roll_no}</span>
                         {isNew && <span className="ml-1 text-[9px] text-green-400">NEW</span>}
+                        {isDone && <span className="ml-1 text-[9px] text-green-400">📦</span>}
                       </div>
-                      <div className="px-3 py-2.5 text-slate-400 text-xs">{fmt((r.weight??0)+(r.core_weight??0),dec)}</div>
-                      <div className="px-3 py-2.5 text-brand-300 font-black">{fmt(r.weight??0,dec)}</div>
+                      <div className={`px-3 py-2.5 text-xs ${isDone?'text-slate-600 line-through':'text-slate-400'}`}>{fmt((r.weight??0)+(r.core_weight??0),dec)}</div>
+                      <div className={`px-3 py-2.5 font-black ${isDone?'text-slate-600 line-through':'text-brand-300'}`}>{fmt(r.weight??0,dec)}</div>
                     </div>
                   )
                 })}
@@ -701,6 +1051,102 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
       </div>
 
       {/* ── Modal: ประวัติม้วน ─────────────────────────────── */}
+      {/* ── Modal ปิดงาน ─────────────────────────────────── */}
+      {showCloseModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 border-2 border-green-500/40 rounded-2xl w-full max-w-lg shadow-2xl">
+            <div className="px-6 py-4 border-b border-slate-800">
+              <p className="text-white font-bold text-lg flex items-center gap-2">🏁 ปิดงาน · พิมพ์สรุปการผลิต</p>
+              <p className="text-slate-400 text-xs mt-1">{profile.productName} · Lot {profile.lotNo}</p>
+            </div>
+
+            <div className="px-6 py-4 space-y-3">
+              {/* KPI */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="bg-slate-800 rounded-xl p-3 text-center">
+                  <p className="text-slate-500 text-[10px]">ยอดสั่ง</p>
+                  <p className="text-white font-black text-xl">{fmt(planned,dec)}</p>
+                  <p className="text-slate-600 text-[9px]">Kgs.</p>
+                </div>
+                <div className="bg-green-500/10 border border-green-500/25 rounded-xl p-3 text-center">
+                  <p className="text-green-400 text-[10px]">ผลิตดี</p>
+                  <p className="text-green-300 font-black text-xl">{fmt(goodKg,dec)}</p>
+                  <p className="text-slate-500 text-[9px]">{goodRolls.length} ม้วน</p>
+                </div>
+                <div className="bg-brand-500/10 border border-brand-500/25 rounded-xl p-3 text-center">
+                  <p className="text-brand-400 text-[10px]">Yield</p>
+                  <p className="text-brand-300 font-black text-xl">{yieldPct}%</p>
+                  <p className="text-slate-500 text-[9px]">เทียบผลิตรวม</p>
+                </div>
+              </div>
+
+              {/* Details */}
+              <div className="bg-slate-800 rounded-xl p-3 space-y-1.5 text-sm">
+                <div className="flex justify-between"><span className="text-slate-400">ม้วนกรอ</span><b className="text-orange-300">{fmt(badKg,dec)} Kgs. ({badRolls.length})</b></div>
+                <div className="flex justify-between"><span className="text-slate-400">เศษเสีย</span><b className="text-amber-300">{fmt(scrapKg,dec)} Kgs. ({scrapRolls.length})</b></div>
+                <div className="flex justify-between border-t border-slate-700 pt-1.5"><span className="text-slate-400">โอนเข้าคลัง</span><b className="text-green-300">{fmt(transferredKg,dec)} Kgs.</b></div>
+                <div className="flex justify-between"><span className="text-slate-400">ยังไม่โอน</span><b className="text-amber-300">{fmt(goodKg-transferredKg,dec)} Kgs.</b></div>
+              </div>
+
+              {goodKg-transferredKg > 0 && (
+                <div className="bg-amber-500/10 border border-amber-500/25 rounded-xl px-3 py-2 text-xs text-amber-300">
+                  ⚠️ ยังมี <b>{fmt(goodKg-transferredKg)} Kgs.</b> ที่ยังไม่ได้โอนเข้าคลัง
+                </div>
+              )}
+              <p className="text-slate-500 text-xs text-center">เลือกการดำเนินการ:</p>
+            </div>
+
+            <div className="flex gap-2 px-6 py-4 border-t border-slate-800">
+              <button onClick={() => setShowCloseModal(false)} disabled={closing}
+                className="flex-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-400 py-3 rounded-xl text-sm transition-colors">
+                ยกเลิก
+              </button>
+              <button onClick={handleCloseJob} disabled={closing}
+                className="flex-[2] bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white py-3 rounded-xl font-bold transition-colors">
+                {closing ? 'กำลังปิด...' : '🏁 ปิดงาน + เริ่มงานใหม่'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal บังคับกรอกผู้ตรวจสอบ ─────────────────── */}
+      {showInspectorPrompt && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4">
+          <div className="bg-slate-900 border-2 border-brand-500/40 rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="px-6 py-5 text-center">
+              <div className="w-14 h-14 mx-auto rounded-full bg-brand-500/20 flex items-center justify-center mb-3">
+                <span className="text-3xl">👤</span>
+              </div>
+              <p className="text-white font-bold text-lg">ผู้ตรวจสอบกะนี้คือใคร?</p>
+              <p className="text-slate-400 text-sm mt-1">{profile.machine_no} · {profile.productName}</p>
+              {isStale && inspector && (
+                <p className="text-amber-400 text-xs mt-2">⚠️ ผ่านมา {Math.floor(hoursSinceSet)} ชั่วโมง — เปลี่ยนกะหรือยัง?</p>
+              )}
+
+              <input value={inspectorInput} onChange={e => setInspectorInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') confirmInspector(inspectorInput) }}
+                placeholder="ชื่อผู้ตรวจสอบ..."
+                autoFocus
+                className="w-full mt-4 bg-slate-800 border-2 border-slate-700 rounded-xl px-4 py-3 text-white text-lg text-center outline-none focus:border-brand-500" />
+            </div>
+            <div className="flex gap-2 px-6 py-4 border-t border-slate-800">
+              {inspector && (
+                <button onClick={() => setShowInspectorPrompt(false)}
+                  className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-400 py-2.5 rounded-xl text-sm">
+                  ยังเป็นคนเดิม ({inspector})
+                </button>
+              )}
+              <button onClick={() => confirmInspector(inspectorInput)}
+                disabled={!inspectorInput.trim()}
+                className="flex-1 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white py-2.5 rounded-xl font-bold transition-colors">
+                ✓ ยืนยัน
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {selectedRoll && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
           onClick={() => setSelectedRoll(null)}>
@@ -742,7 +1188,7 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
                   { k:'ขนาด',        v: profile.widthCm && profile.thickMc ? `${profile.widthCm} cm × ${profile.thickMc} mc` : '—' },
                   { k:'ความยาว',     v: profile.length ? `${profile.length} Ms.` : '—' },
                   { k:'เครื่อง',     v: profile.machine_no },
-                  { k:'ผู้ตรวจสอบ', v: profile.inspector || '—' },
+                  { k:'ผู้ตรวจสอบ', v: selectedRoll.inspector || profile.inspector || '—' },
                   { k:'วันที่ชั่ง',  v: `${new Date(selectedRoll.created_at).toLocaleDateString('th-TH')} ${new Date(selectedRoll.created_at).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})}` },
                 ].map(row => (
                   <div key={row.k} className="flex justify-between items-baseline gap-2">
@@ -755,11 +1201,11 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
 
             {/* Reprint */}
             <div className="flex gap-2 px-5 py-4 border-t border-slate-800">
-              <button onClick={() => printLabel(profile, selectedRoll.roll_no, selectedRoll.gross_weight??0, selectedRoll.weight??0, 'short', selectedRoll.roll_type, selectedRoll.remark??'')}
+              <button onClick={() => printLabel({...profile, inspector: selectedRoll.inspector || profile.inspector}, selectedRoll.roll_no, selectedRoll.gross_weight??0, selectedRoll.weight??0, 'short', selectedRoll.roll_type, selectedRoll.remark??'')}
                 className="flex-1 flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white text-sm py-2.5 rounded-xl transition-colors">
                 <Printer size={14}/> ใบสั้น
               </button>
-              <button onClick={() => printLabel(profile, selectedRoll.roll_no, selectedRoll.gross_weight??0, selectedRoll.weight??0, 'long', selectedRoll.roll_type, selectedRoll.remark??'')}
+              <button onClick={() => printLabel({...profile, inspector: selectedRoll.inspector || profile.inspector}, selectedRoll.roll_no, selectedRoll.gross_weight??0, selectedRoll.weight??0, 'long', selectedRoll.roll_type, selectedRoll.remark??'')}
                 className="flex-1 flex items-center justify-center gap-1.5 bg-brand-600 hover:bg-brand-700 text-white text-sm py-2.5 rounded-xl transition-colors font-semibold">
                 <Printer size={14}/> ใบยาว
               </button>
@@ -773,7 +1219,39 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
 
 export default function WeighStation() {
   const [selected, setSelected] = useState<MachineProfile | null>(null)
-  const profiles = loadProfiles()
-  if (!selected) return <MachinePicker profiles={profiles} onSelect={setSelected} />
-  return <WeighPage profile={selected} onBack={() => setSelected(null)} />
+  const [profiles, setProfiles] = useState<MachineProfile[]>(loadProfiles())
+
+  function reload() {
+    supabase.from('machine_profiles').select('*').order('machine_no')
+      .then(({ data }) => {
+        if (!data) return
+        const list = data.map((r: any) => ({
+          machine_no: r.machine_no,
+          custCode:    r.cust_code ?? '',
+          custName:    r.cust_name ?? '',
+          custAddress: r.cust_address ?? '',
+          decimal:    (r.decimal_places ?? 2) as 1|2,
+          matCode:     r.mat_code ?? '',
+          productCode: r.product_code ?? '',
+          productName: r.product_name ?? '',
+          widthCm:     r.width_cm ?? '',
+          thickMc:     r.thick_mc ?? '',
+          lotNo:       r.lot_no ?? '',
+          length:      r.length ?? '',
+          pcs:         r.pcs ?? '',
+          coreWeight:  r.core_weight ?? '1.25',
+          inspector:   r.inspector ?? '',
+          locked:      r.locked ?? true,
+          plannedQty:  r.planned_qty ?? '',
+          labelSize:  (r.label_size ?? 'long') as 'long'|'short',
+        }))
+        setProfiles(list)
+        saveProfiles(list)
+      })
+  }
+
+  useEffect(() => { reload() }, [])
+
+  if (!selected) return <MachinePicker profiles={profiles} onSelect={setSelected} onProfileUpdated={reload} />
+  return <WeighPage profile={selected} onBack={() => { setSelected(null); reload() }} />
 }

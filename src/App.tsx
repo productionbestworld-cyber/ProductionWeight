@@ -1,11 +1,14 @@
 import { useState } from 'react'
-import { Scale, LayoutDashboard, Settings } from 'lucide-react'
+import { Scale, LayoutDashboard, Settings, Package, History } from 'lucide-react'
 import WeighStation from './pages/WeighStation'
 import Dashboard from './pages/Dashboard'
 import MachineSettings from './pages/MachineSettings'
 import RollDetail from './pages/RollDetail'
+import Transfer from './pages/Transfer'
+import HistoryPage from './pages/History'
 
-type Page = 'weigh' | 'dashboard' | 'settings'
+type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'settings'
+
 
 export default function App() {
   // ถ้า URL มี ?roll= ให้แสดงหน้า Roll Detail แทน
@@ -24,7 +27,9 @@ export default function App() {
         </div>
         {([
           { key: 'weigh',     label: 'ชั่งน้ำหนัก',  icon: Scale },
+          { key: 'transfer',  label: 'โอนเข้าคลัง',  icon: Package },
           { key: 'dashboard', label: 'Dashboard',     icon: LayoutDashboard },
+          { key: 'history',   label: 'ประวัติผลิต',   icon: History },
           { key: 'settings',  label: 'ตั้งค่าเครื่อง', icon: Settings },
         ] as const).map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => setPage(key)}
@@ -37,7 +42,9 @@ export default function App() {
       </nav>
       <main className="flex-1 overflow-auto">
         {page === 'weigh'     && <WeighStation />}
+        {page === 'transfer'  && <Transfer />}
         {page === 'dashboard' && <Dashboard />}
+        {page === 'history'   && <HistoryPage />}
         {page === 'settings'  && <MachineSettings />}
       </main>
     </div>

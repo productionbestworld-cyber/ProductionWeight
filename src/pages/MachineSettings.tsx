@@ -134,7 +134,6 @@ function ProfileCard({ p, i, onChange, onRemove }: {
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {p.locked && <span className="text-[10px] bg-red-500/15 text-red-300 border border-red-500/25 px-1.5 py-0.5 rounded-full">ล็อค</span>}
           <span className="text-slate-500">{open ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}</span>
         </div>
       </div>
@@ -142,18 +141,9 @@ function ProfileCard({ p, i, onChange, onRemove }: {
       {/* Form */}
       {open && (
         <div className="px-4 pb-4 border-t border-slate-800 pt-3 space-y-3">
-          {/* เครื่อง + ล็อค */}
-          <div className="grid grid-cols-2 gap-2">
+          {/* เครื่อง */}
+          <div>
             <F label="หมายเลขเครื่อง *" k="machine_no" ph="B-01" half />
-            <div>
-              <label className="block text-[10px] text-slate-500 mb-1">ล็อคเครื่อง</label>
-              <button onClick={() => onChange('locked', !p.locked)}
-                className={`w-full py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                  p.locked ? 'bg-red-500/20 text-red-300 border border-red-500/30' : 'bg-slate-800 text-slate-400 border border-slate-700'
-                }`}>
-                {p.locked ? '🔒 ล็อค (บล็อคถ้าผิด)' : '🔓 ไม่ล็อค (แค่เตือน)'}
-              </button>
-            </div>
           </div>
 
           <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">ลูกค้า</p>

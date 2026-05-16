@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Save, Printer, RefreshCw, CheckCircle2, ArrowLeft, Wind, Lock, X } from 'lucide-react'
+import { Save, Printer, RefreshCw, CheckCircle2, ArrowLeft, Wind, X } from 'lucide-react'
 import QRCode from 'react-qr-code'
 import QRCodeLib from 'qrcode'
 import { supabase } from '../lib/supabase'
@@ -233,7 +233,6 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated }: {
                     ) : (
                       <span className="text-[10px] bg-slate-700 text-slate-400 px-2 py-0.5 rounded-full font-semibold">○ ว่าง</span>
                     )}
-                    {ready && p.locked && <Lock size={11} className="text-red-400" />}
                   </div>
                 </div>
 

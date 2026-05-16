@@ -316,9 +316,9 @@ export default function Dashboard() {
                     <YAxis tickFormatter={fmtKg} tick={{ fontSize: 10 }} width={45}/>
                     <Tooltip content={<CustomTooltip/>}/>
                     <Legend wrapperStyle={{ fontSize: 11 }}/>
-                    <Bar dataKey="FG"      fill="#3b82f6" radius={[3,3,0,0]} label={{ position:'top', formatter: fmtKg, fontSize: 9, fill:'#555' }}/>
-                    <Bar dataKey="ของเสีย" fill="#ef4444" radius={[3,3,0,0]} label={{ position:'top', formatter: fmtKg, fontSize: 9, fill:'#555' }}/>
-                    <Bar dataKey="ซ่อม"   fill="#f97316" radius={[3,3,0,0]} label={{ position:'top', formatter: fmtKg, fontSize: 9, fill:'#555' }}/>
+                    <Bar dataKey="FG"      fill="#3b82f6" radius={[3,3,0,0]} label={{ position:'top', formatter:(v:any)=>fmtKg(Number(v)), fontSize: 9, fill:'#555' }}/>
+                    <Bar dataKey="ของเสีย" fill="#ef4444" radius={[3,3,0,0]} label={{ position:'top', formatter:(v:any)=>fmtKg(Number(v)), fontSize: 9, fill:'#555' }}/>
+                    <Bar dataKey="ซ่อม"   fill="#f97316" radius={[3,3,0,0]} label={{ position:'top', formatter:(v:any)=>fmtKg(Number(v)), fontSize: 9, fill:'#555' }}/>
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -339,7 +339,7 @@ export default function Dashboard() {
                     <YAxis type="category" dataKey="customer" width={60} tick={{ fontSize: 11 }}/>
                     <Tooltip content={<CustomTooltip/>}/>
                     <Bar dataKey="FG" fill="#3b82f6" radius={[0,3,3,0]}
-                      label={{ position:'right', formatter: fmtKg, fontSize: 10, fill:'#555' }}/>
+                      label={{ position:'right', formatter:(v:any)=>fmtKg(Number(v)), fontSize: 10, fill:'#555' }}/>
                   </HBarChart>
                 </ResponsiveContainer>
               )}
@@ -422,7 +422,7 @@ export default function Dashboard() {
                   <YAxis tickFormatter={fmtKg} tick={{ fontSize: 10 }} width={48}/>
                   <Tooltip content={<CustomTooltip/>}/>
                   <Legend wrapperStyle={{ fontSize: 11 }}/>
-                  <Bar dataKey="FG"      fill="#3b82f6" radius={[3,3,0,0]} label={{ position:'top', formatter: fmtKg, fontSize: 8, fill:'#666' }}/>
+                  <Bar dataKey="FG"      fill="#3b82f6" radius={[3,3,0,0]} label={{ position:'top', formatter:(v:any)=>fmtKg(Number(v)), fontSize: 8, fill:'#666' }}/>
                   <Bar dataKey="ของเสีย" fill="#ef4444" radius={[3,3,0,0]}/>
                   <Bar dataKey="ซ่อม"   fill="#f97316" radius={[3,3,0,0]}/>
                 </BarChart>

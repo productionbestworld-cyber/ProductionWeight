@@ -1,5 +1,5 @@
-﻿import { useState, useEffect } from 'react'
-import { Plus, Trash2, Save, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
+﻿import { useState, useEffect, useRef } from 'react'
+import { Plus, Trash2, Save, ChevronDown, ChevronUp, RefreshCw, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 // ── Full Machine Profile ──────────────────────────────────────────────────────
@@ -217,9 +217,12 @@ function ProfileCard({ p, i, onChange, onRemove }: {
 
 // ─── Main Settings Page ───────────────────────────────────────────────────────
 export default function MachineSettings() {
-  const [profiles, setProfiles] = useState<MachineProfile[]>([])
-  const [saved,    setSaved]    = useState(false)
-  const [loading,  setLoading]  = useState(true)
+  const [profiles,    setProfiles]    = useState<MachineProfile[]>([])
+  const [saved,       setSaved]       = useState(false)
+  const [loading,     setLoading]     = useState(true)
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [newMachineNo, setNewMachineNo] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
 
   // โหลดจาก Supabase เมื่อเปิดหน้า
   useEffect(() => {
@@ -236,8 +239,20 @@ export default function MachineSettings() {
       })
   }, [])
 
-  function add() {
-    setProfiles(p => [...p, { ...EMPTY_PROFILE, machine_no: nextMachineNo(p) }])
+  function openAddModal() {
+    setNewMachineNo(nextMachineNo(profiles))
+    setShowAddModal(true)
+    setTimeout(() => inputRef.current?.select(), 50)
+  }
+  function confirmAdd() {
+    const name = newMachineNo.trim()
+    if (!name) return
+    if (profiles.some(p => p.machine_no === name)) {
+      alert(`เครื่อง "${name}" มีอยู่แล้ว`); return
+    }
+    setProfiles(p => [...p, { ...EMPTY_PROFILE, machine_no: name }])
+    setShowAddModal(false)
+    setNewMachineNo('')
   }
   function remove(i: number) {
     if (!confirm('ลบเครื่องนี้?')) return
@@ -261,7 +276,43 @@ export default function MachineSettings() {
 
   const ready = profiles.filter(p => p.machine_no && p.custName && p.productName && p.matCode && p.lotNo).length
 
-  return (
+  return (<>
+    {/* Modal กำหนดชื่อเครื่อง */}
+    {showAddModal && (
+      <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+        <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-xs shadow-2xl">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
+            <p className="text-white font-bold">เพิ่มเครื่องใหม่</p>
+            <button onClick={() => setShowAddModal(false)} className="text-slate-500 hover:text-white"><X size={16}/></button>
+          </div>
+          <div className="px-5 py-4 space-y-3">
+            <div>
+              <label className="block text-xs text-slate-400 mb-1.5">ชื่อ / หมายเลขเครื่อง</label>
+              <input
+                ref={inputRef}
+                value={newMachineNo}
+                onChange={e => setNewMachineNo(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') confirmAdd() }}
+                placeholder="เช่น BL05, BL-06"
+                autoFocus
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-white text-lg font-bold text-center outline-none focus:border-brand-500 tracking-widest"
+              />
+              <p className="text-slate-600 text-[10px] mt-1.5 text-center">ใส่ชื่อแล้วกด Enter หรือกดยืนยัน</p>
+            </div>
+          </div>
+          <div className="flex gap-2 px-5 py-4 border-t border-slate-800">
+            <button onClick={() => setShowAddModal(false)}
+              className="flex-1 py-2.5 rounded-xl border border-slate-700 text-slate-400 hover:text-white text-sm transition-colors">
+              ยกเลิก
+            </button>
+            <button onClick={confirmAdd} disabled={!newMachineNo.trim()}
+              className="flex-1 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white font-bold text-sm transition-colors">
+              <Plus size={14} className="inline mr-1"/> สร้างเครื่อง
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     <div className="p-6 max-w-2xl mx-auto space-y-4">
       <div className="flex items-center justify-between">
         <div>
@@ -272,7 +323,7 @@ export default function MachineSettings() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={add}
+          <button onClick={openAddModal}
             className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors">
             <Plus size={14}/> เพิ่มเครื่อง
           </button>
@@ -291,7 +342,7 @@ export default function MachineSettings() {
           onRemove={() => remove(i)} />
       ))}
 
-      <button onClick={add}
+      <button onClick={openAddModal}
         className="w-full border-2 border-dashed border-slate-700 hover:border-brand-500 text-slate-500 hover:text-brand-400 py-3 rounded-2xl text-sm flex items-center justify-center gap-2 transition-colors">
         <Plus size={16} /> เพิ่มเครื่อง
       </button>
@@ -309,6 +360,6 @@ export default function MachineSettings() {
         </div>
       )}
     </div>
-  )
+  </>)
 }
 

@@ -1,13 +1,14 @@
 import { useState } from 'react'
-import { Scale, LayoutDashboard, Settings, Package, History } from 'lucide-react'
+import { Scale, LayoutDashboard, Settings, Package, History, Warehouse as WarehouseIcon } from 'lucide-react'
 import WeighStation from './pages/WeighStation'
 import Dashboard from './pages/Dashboard'
 import MachineSettings from './pages/MachineSettings'
 import RollDetail from './pages/RollDetail'
 import Transfer from './pages/Transfer'
 import HistoryPage from './pages/History'
+import Warehouse from './pages/Warehouse'
 
-type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'settings'
+type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings'
 
 
 export default function App() {
@@ -28,6 +29,7 @@ export default function App() {
         {([
           { key: 'weigh',     label: 'ชั่งน้ำหนัก',  icon: Scale },
           { key: 'transfer',  label: 'โอนเข้าคลัง',  icon: Package },
+          { key: 'warehouse', label: 'คลังสินค้า',   icon: WarehouseIcon },
           { key: 'dashboard', label: 'Dashboard',     icon: LayoutDashboard },
           { key: 'history',   label: 'ประวัติผลิต',   icon: History },
           { key: 'settings',  label: 'ตั้งค่าเครื่อง', icon: Settings },
@@ -43,6 +45,7 @@ export default function App() {
       <main className="flex-1 overflow-auto">
         {page === 'weigh'     && <WeighStation />}
         {page === 'transfer'  && <Transfer />}
+        {page === 'warehouse' && <Warehouse />}
         {page === 'dashboard' && <Dashboard />}
         {page === 'history'   && <HistoryPage />}
         {page === 'settings'  && <MachineSettings />}

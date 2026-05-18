@@ -235,15 +235,18 @@ function ProfileCard({ p, i, onChange, onRemove }: {
 }
 
 // ─── Main Settings Page ───────────────────────────────────────────────────────
-export default function MachineSettings() {
+export default function MachineSettings({ dept }: { dept?: 'blow'|'print' }) {
   const [profiles,     setProfiles]     = useState<MachineProfile[]>([])
   const [saved,        setSaved]        = useState(false)
   const [loading,      setLoading]      = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
   const [newMachineNo, setNewMachineNo] = useState('')
-  const [newSection,   setNewSection]   = useState<'blow'|'print'>('blow')
-  const [activeTab,    setActiveTab]    = useState<'blow'|'print'>('blow')
+  const [newSection,   setNewSection]   = useState<'blow'|'print'>(dept ?? 'blow')
+  const [activeTab,    setActiveTab]    = useState<'blow'|'print'>(dept ?? 'blow')
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // ถ้า dept เปลี่ยน (เช่นสลับฝั่งแล้วกดตั้งค่า) → sync tab
+  useEffect(() => { if (dept) { setActiveTab(dept); setNewSection(dept) } }, [dept])
 
   // โหลดจาก Supabase เมื่อเปิดหน้า
   useEffect(() => {
@@ -372,30 +375,26 @@ export default function MachineSettings() {
         const secProfiles   = sec === 'blow' ? blowProfiles : printProfiles
 
         return (<>
-          {/* Tab buttons */}
+          {/* Tab buttons — ถ้า dept ถูก lock แสดงแค่ฝั่งเดียว */}
           <div className="flex gap-2">
             {([
               { key:'blow',  emoji:'🌬', label:'ฝั่งเป่า',  count: blowProfiles.length,  ready: blowReady,  color:'blue' },
               { key:'print', emoji:'🖨', label:'ฝั่งพิม',   count: printProfiles.length, ready: printReady, color:'purple' },
-            ] as const).map(t => (
-              <button key={t.key} onClick={() => setActiveTab(t.key)}
+            ] as const).filter(t => !dept || t.key === dept).map(t => (
+              <button key={t.key} onClick={() => !dept && setActiveTab(t.key)}
                 className={`flex-1 flex items-center justify-between px-5 py-3.5 rounded-2xl border-2 transition-all ${
-                  activeTab === t.key
-                    ? t.color === 'blue'
-                      ? 'border-blue-500 bg-blue-500/10'
-                      : 'border-purple-500 bg-purple-500/10'
-                    : 'border-slate-700 bg-slate-900 hover:border-slate-600'
-                }`}>
+                  t.color === 'blue' ? 'border-blue-500 bg-blue-500/10' : 'border-purple-500 bg-purple-500/10'
+                } ${dept ? 'cursor-default' : 'cursor-pointer'}`}>
                 <div className="flex items-center gap-3">
                   <span className="text-2xl">{t.emoji}</span>
                   <div className="text-left">
-                    <p className={`font-bold text-base ${activeTab===t.key ? 'text-white' : 'text-slate-400'}`}>{t.label}</p>
-                    <p className="text-slate-500 text-xs">{t.count} เครื่อง · <span className="text-green-400">{t.ready}/{t.count} พร้อม</span></p>
+                    <p className="font-bold text-base text-white">{t.label}</p>
+                    <p className="text-slate-400 text-xs">{t.count} เครื่อง · <span className="text-green-400">{t.ready}/{t.count} พร้อม</span></p>
                   </div>
                 </div>
-                {activeTab === t.key && (
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${t.color==='blue'?'bg-blue-500/20 text-blue-300':'bg-purple-500/20 text-purple-300'}`}>เปิดอยู่</span>
-                )}
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${t.color==='blue'?'bg-blue-500/20 text-blue-300':'bg-purple-500/20 text-purple-300'}`}>
+                  {dept ? 'ฝั่งนี้' : 'เปิดอยู่'}
+                </span>
               </button>
             ))}
           </div>

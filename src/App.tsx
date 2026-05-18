@@ -16,6 +16,7 @@ export default function App() {
   }
 
   const [page, setPage] = useState<Page>('weigh-blow')
+  const [dept, setDept] = useState<'blow'|'print'>('blow')
   const [showWeighMenu, setShowWeighMenu] = useState(false)
   const weighRef = useRef<HTMLDivElement>(null)
 
@@ -55,7 +56,7 @@ export default function App() {
           {showWeighMenu && (
             <div className="absolute top-full left-0 mt-1 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 overflow-hidden w-44">
               <button
-                onClick={() => { setPage('weigh-blow'); setShowWeighMenu(false) }}
+                onClick={() => { setPage('weigh-blow'); setDept('blow'); setShowWeighMenu(false) }}
                 className={`w-full flex items-center gap-2.5 px-4 py-3 text-sm transition-colors hover:bg-slate-800 ${page==='weigh-blow' ? 'text-brand-300 font-bold' : 'text-slate-300'}`}>
                 <span className="text-lg">🌬</span>
                 <div className="text-left">
@@ -66,7 +67,7 @@ export default function App() {
               </button>
               <div className="border-t border-slate-800"/>
               <button
-                onClick={() => { setPage('weigh-print'); setShowWeighMenu(false) }}
+                onClick={() => { setPage('weigh-print'); setDept('print'); setShowWeighMenu(false) }}
                 className={`w-full flex items-center gap-2.5 px-4 py-3 text-sm transition-colors hover:bg-slate-800 ${page==='weigh-print' ? 'text-brand-300 font-bold' : 'text-slate-300'}`}>
                 <span className="text-lg">🖨</span>
                 <div className="text-left">
@@ -103,7 +104,7 @@ export default function App() {
         {page === 'warehouse'   && <Warehouse />}
         {page === 'dashboard'   && <Dashboard />}
         {page === 'history'     && <HistoryPage />}
-        {page === 'settings'    && <MachineSettings />}
+        {page === 'settings'    && <MachineSettings dept={dept} />}
       </main>
     </div>
   )

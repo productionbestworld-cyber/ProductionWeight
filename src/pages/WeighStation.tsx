@@ -1203,12 +1203,9 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
   )
 }
 
-export default function WeighStation() {
+export default function WeighStation({ dept }: { dept?: 'blow' | 'print' }) {
   const [selected, setSelected] = useState<MachineProfile | null>(null)
   const [profiles, setProfiles] = useState<MachineProfile[]>(loadProfiles())
-
-  // อ่าน ?dept= จาก URL
-  const dept = new URLSearchParams(window.location.search).get('dept') as 'blow'|'print'|null
 
   function reload() {
     supabase.from('machine_profiles').select('*').order('machine_no')
@@ -1242,41 +1239,8 @@ export default function WeighStation() {
 
   useEffect(() => { reload() }, [])
 
-  // filter เครื่องตาม dept (ถ้าไม่มี dept แสดงทั้งหมด)
+  // filter เครื่องตาม dept
   const filtered = dept ? profiles.filter(p => (p.section ?? 'blow') === dept) : profiles
-
-  // ถ้าไม่ระบุ dept → แสดงหน้าเลือกฝั่ง
-  if (!dept) {
-    return (
-      <div className="min-h-screen bg-[#0a0f1e] flex items-center justify-center p-6">
-        <div className="text-center space-y-6 w-full max-w-sm">
-          <div>
-            <div className="w-16 h-16 rounded-2xl bg-brand-600 flex items-center justify-center text-white font-black text-2xl mx-auto mb-3">BWP</div>
-            <h1 className="text-white font-black text-2xl">ระบบชั่งน้ำหนัก</h1>
-            <p className="text-slate-400 text-sm mt-1">เลือกฝั่งการผลิต</p>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <a href="/?dept=blow"
-              className="flex flex-col items-center gap-3 bg-slate-900 border-2 border-slate-700 hover:border-brand-500 hover:bg-brand-500/10 rounded-2xl p-6 transition-all cursor-pointer">
-              <span className="text-4xl">🌬</span>
-              <div>
-                <p className="text-white font-black text-lg">ฝั่งเป่า</p>
-                <p className="text-slate-400 text-xs">{profiles.filter(p=>(p.section??'blow')==='blow').length} เครื่อง</p>
-              </div>
-            </a>
-            <a href="/?dept=print"
-              className="flex flex-col items-center gap-3 bg-slate-900 border-2 border-slate-700 hover:border-brand-500 hover:bg-brand-500/10 rounded-2xl p-6 transition-all cursor-pointer">
-              <span className="text-4xl">🖨</span>
-              <div>
-                <p className="text-white font-black text-lg">ฝั่งพิม</p>
-                <p className="text-slate-400 text-xs">{profiles.filter(p=>p.section==='print').length} เครื่อง</p>
-              </div>
-            </a>
-          </div>
-        </div>
-      </div>
-    )
-  }
 
   if (!selected) return <MachinePicker profiles={filtered} onSelect={setSelected} onProfileUpdated={reload} />
   return <WeighPage profile={selected} onBack={() => { setSelected(null); reload() }} />

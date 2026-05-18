@@ -236,11 +236,13 @@ function ProfileCard({ p, i, onChange, onRemove }: {
 
 // ─── Main Settings Page ───────────────────────────────────────────────────────
 export default function MachineSettings() {
-  const [profiles,    setProfiles]    = useState<MachineProfile[]>([])
-  const [saved,       setSaved]       = useState(false)
-  const [loading,     setLoading]     = useState(true)
+  const [profiles,     setProfiles]     = useState<MachineProfile[]>([])
+  const [saved,        setSaved]        = useState(false)
+  const [loading,      setLoading]      = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
   const [newMachineNo, setNewMachineNo] = useState('')
+  const [newSection,   setNewSection]   = useState<'blow'|'print'>('blow')
+  const [activeTab,    setActiveTab]    = useState<'blow'|'print'>('blow')
   const inputRef = useRef<HTMLInputElement>(null)
 
   // โหลดจาก Supabase เมื่อเปิดหน้า
@@ -258,8 +260,9 @@ export default function MachineSettings() {
       })
   }, [])
 
-  function openAddModal() {
-    setNewMachineNo(nextMachineNo(profiles))
+  function openAddModal(section: 'blow'|'print' = activeTab) {
+    setNewSection(section)
+    setNewMachineNo(nextMachineNo(profiles.filter(p => (p.section??'blow') === section)))
     setShowAddModal(true)
     setTimeout(() => inputRef.current?.select(), 50)
   }
@@ -269,7 +272,7 @@ export default function MachineSettings() {
     if (profiles.some(p => p.machine_no === name)) {
       alert(`เครื่อง "${name}" มีอยู่แล้ว`); return
     }
-    setProfiles(p => [...p, { ...EMPTY_PROFILE, machine_no: name }])
+    setProfiles(p => [...p, { ...EMPTY_PROFILE, machine_no: name, section: newSection }])
     setShowAddModal(false)
     setNewMachineNo('')
   }
@@ -306,13 +309,22 @@ export default function MachineSettings() {
           </div>
           <div className="px-5 py-4 space-y-3">
             <div>
+              <label className="block text-xs text-slate-400 mb-1.5">แผนก</label>
+              <div className="flex gap-2 mb-3">
+                {([{key:'blow',label:'🌬 ฝั่งเป่า'},{key:'print',label:'🖨 ฝั่งพิม'}] as const).map(s=>(
+                  <button key={s.key} onClick={() => setNewSection(s.key)}
+                    className={`flex-1 py-2 rounded-xl text-sm font-bold transition-colors ${newSection===s.key?'bg-brand-600 text-white':'bg-slate-800 text-slate-400 hover:text-white'}`}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
               <label className="block text-xs text-slate-400 mb-1.5">ชื่อ / หมายเลขเครื่อง</label>
               <input
                 ref={inputRef}
                 value={newMachineNo}
                 onChange={e => setNewMachineNo(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') confirmAdd() }}
-                placeholder="เช่น BL05, BL-06"
+                placeholder="เช่น BL05, PM01"
                 autoFocus
                 className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-white text-lg font-bold text-center outline-none focus:border-brand-500 tracking-widest"
               />
@@ -333,6 +345,8 @@ export default function MachineSettings() {
       </div>
     )}
     <div className="p-6 max-w-2xl mx-auto space-y-4">
+
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-white font-bold text-lg">ตั้งค่า Profile เครื่อง</h1>
@@ -341,41 +355,73 @@ export default function MachineSettings() {
             <span className="ml-2 text-green-400 font-semibold">{ready}/{profiles.length} เครื่องพร้อม</span>
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={openAddModal}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors">
-            <Plus size={14}/> เพิ่มเครื่อง
-          </button>
-          <button onClick={handleSave}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-              saved ? 'bg-green-600 text-white' : 'bg-brand-600 hover:bg-brand-500 text-white'
-            }`}>
-            <Save size={14} /> {saved ? 'บันทึกแล้ว ✓' : 'บันทึกทั้งหมด'}
-          </button>
-        </div>
+        <button onClick={handleSave}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+            saved ? 'bg-green-600 text-white' : 'bg-brand-600 hover:bg-brand-500 text-white'
+          }`}>
+          <Save size={14} /> {saved ? 'บันทึกแล้ว ✓' : 'บันทึกทั้งหมด'}
+        </button>
       </div>
 
-      {profiles.map((p, i) => (
-        <ProfileCard key={i} p={p} i={i}
-          onChange={(k, v) => update(i, k, v)}
-          onRemove={() => remove(i)} />
-      ))}
+      {/* Section tabs */}
+      {(['blow','print'] as const).map(sec => {
+        const secProfiles = profiles.filter(p => (p.section ?? 'blow') === sec)
+        const secReady    = secProfiles.filter(p => p.machine_no && p.custName && p.productName && p.matCode && p.lotNo).length
+        const isOpen      = activeTab === sec
+        const label       = sec === 'blow' ? '🌬 ฝั่งเป่า' : '🖨 ฝั่งพิม'
+        const color       = sec === 'blow' ? 'border-blue-500/40 bg-blue-500/5' : 'border-purple-500/40 bg-purple-500/5'
+        const badgeColor  = sec === 'blow' ? 'bg-blue-600' : 'bg-purple-600'
 
-      <button onClick={openAddModal}
-        className="w-full border-2 border-dashed border-slate-700 hover:border-brand-500 text-slate-500 hover:text-brand-400 py-3 rounded-2xl text-sm flex items-center justify-center gap-2 transition-colors">
-        <Plus size={16} /> เพิ่มเครื่อง
-      </button>
+        return (
+          <div key={sec} className={`rounded-2xl border ${isOpen ? color : 'border-slate-800 bg-slate-900'} overflow-hidden transition-all`}>
+
+            {/* Section header */}
+            <div className="flex items-center justify-between px-5 py-3.5 cursor-pointer"
+              onClick={() => setActiveTab(sec)}>
+              <div className="flex items-center gap-3">
+                <span className={`text-xs font-bold px-3 py-1 rounded-full text-white ${badgeColor}`}>{label}</span>
+                <span className="text-slate-400 text-sm">{secProfiles.length} เครื่อง</span>
+                <span className="text-green-400 text-xs font-semibold">{secReady}/{secProfiles.length} พร้อม</span>
+              </div>
+              <button
+                onClick={e => { e.stopPropagation(); openAddModal(sec) }}
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors">
+                <Plus size={12}/> เพิ่มเครื่อง{sec === 'blow' ? 'เป่า' : 'พิม'}
+              </button>
+            </div>
+
+            {/* Machine cards */}
+            {isOpen && (
+              <div className="border-t border-slate-800 p-4 space-y-3">
+                {secProfiles.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-slate-500 text-sm">ยังไม่มีเครื่อง{sec==='blow'?'เป่า':'พิม'}</p>
+                    <button onClick={() => openAddModal(sec)}
+                      className="mt-3 text-brand-400 text-xs hover:text-brand-300">+ เพิ่มเครื่องแรก</button>
+                  </div>
+                ) : (
+                  secProfiles.map(p => {
+                    const i = profiles.indexOf(p)
+                    return (
+                      <ProfileCard key={i} p={p} i={i}
+                        onChange={(k, v) => update(i, k, v)}
+                        onRemove={() => remove(i)} />
+                    )
+                  })
+                )}
+                <button onClick={() => openAddModal(sec)}
+                  className="w-full border-2 border-dashed border-slate-700 hover:border-brand-500 text-slate-500 hover:text-brand-400 py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 transition-colors">
+                  <Plus size={14}/> เพิ่มเครื่อง{sec === 'blow' ? 'เป่า' : 'พิม'}
+                </button>
+              </div>
+            )}
+          </div>
+        )
+      })}
 
       {loading && (
         <div className="text-center py-10 text-slate-500 flex items-center justify-center gap-2">
           <RefreshCw size={16} className="animate-spin" /> กำลังโหลดจาก Supabase...
-        </div>
-      )}
-
-      {!loading && profiles.length === 0 && (
-        <div className="text-center py-8 space-y-2">
-          <p className="text-slate-500 text-sm">ยังไม่มีเครื่อง — กด "เพิ่มเครื่อง"</p>
-          <p className="text-slate-600 text-xs">กรอกข้อมูลครบทุกเครื่องก่อน แล้วบันทึก<br/>พนักงานจะแตะเครื่องแล้วชั่งได้ทันที</p>
         </div>
       )}
     </div>

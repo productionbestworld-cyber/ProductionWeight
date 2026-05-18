@@ -350,8 +350,7 @@ export default function MachineSettings() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-white font-bold text-lg">ตั้งค่า Profile เครื่อง</h1>
-          <p className="text-slate-400 text-xs mt-0.5">
-            ตั้งค่าครั้งเดียว — พนักงานแค่แตะเครื่อง → ชั่งได้เลย
+          <p className="text-slate-400 text-xs mt-0.5">ตั้งค่าครั้งเดียว — พนักงานแค่แตะเครื่อง → ชั่งได้เลย
             <span className="ml-2 text-green-400 font-semibold">{ready}/{profiles.length} เครื่องพร้อม</span>
           </p>
         </div>
@@ -359,65 +358,68 @@ export default function MachineSettings() {
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
             saved ? 'bg-green-600 text-white' : 'bg-brand-600 hover:bg-brand-500 text-white'
           }`}>
-          <Save size={14} /> {saved ? 'บันทึกแล้ว ✓' : 'บันทึกทั้งหมด'}
+          <Save size={14}/> {saved ? 'บันทึกแล้ว ✓' : 'บันทึกทั้งหมด'}
         </button>
       </div>
 
-      {/* Section tabs */}
-      {(['blow','print'] as const).map(sec => {
-        const secProfiles = profiles.filter(p => (p.section ?? 'blow') === sec)
-        const secReady    = secProfiles.filter(p => p.machine_no && p.custName && p.productName && p.matCode && p.lotNo).length
-        const isOpen      = activeTab === sec
-        const label       = sec === 'blow' ? '🌬 ฝั่งเป่า' : '🖨 ฝั่งพิม'
-        const color       = sec === 'blow' ? 'border-blue-500/40 bg-blue-500/5' : 'border-purple-500/40 bg-purple-500/5'
-        const badgeColor  = sec === 'blow' ? 'bg-blue-600' : 'bg-purple-600'
+      {/* Tab switcher */}
+      {(() => {
+        const blowProfiles  = profiles.filter(p => (p.section ?? 'blow') === 'blow')
+        const printProfiles = profiles.filter(p => p.section === 'print')
+        const blowReady     = blowProfiles.filter(p => p.machine_no && p.custName && p.productName && p.matCode && p.lotNo).length
+        const printReady    = printProfiles.filter(p => p.machine_no && p.custName && p.productName && p.matCode && p.lotNo).length
+        const sec           = activeTab
+        const secProfiles   = sec === 'blow' ? blowProfiles : printProfiles
 
-        return (
-          <div key={sec} className={`rounded-2xl border ${isOpen ? color : 'border-slate-800 bg-slate-900'} overflow-hidden transition-all`}>
-
-            {/* Section header */}
-            <div className="flex items-center justify-between px-5 py-3.5 cursor-pointer"
-              onClick={() => setActiveTab(sec)}>
-              <div className="flex items-center gap-3">
-                <span className={`text-xs font-bold px-3 py-1 rounded-full text-white ${badgeColor}`}>{label}</span>
-                <span className="text-slate-400 text-sm">{secProfiles.length} เครื่อง</span>
-                <span className="text-green-400 text-xs font-semibold">{secReady}/{secProfiles.length} พร้อม</span>
-              </div>
-              <button
-                onClick={e => { e.stopPropagation(); openAddModal(sec) }}
-                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors">
-                <Plus size={12}/> เพิ่มเครื่อง{sec === 'blow' ? 'เป่า' : 'พิม'}
-              </button>
-            </div>
-
-            {/* Machine cards */}
-            {isOpen && (
-              <div className="border-t border-slate-800 p-4 space-y-3">
-                {secProfiles.length === 0 ? (
-                  <div className="text-center py-8">
-                    <p className="text-slate-500 text-sm">ยังไม่มีเครื่อง{sec==='blow'?'เป่า':'พิม'}</p>
-                    <button onClick={() => openAddModal(sec)}
-                      className="mt-3 text-brand-400 text-xs hover:text-brand-300">+ เพิ่มเครื่องแรก</button>
+        return (<>
+          {/* Tab buttons */}
+          <div className="flex gap-2">
+            {([
+              { key:'blow',  emoji:'🌬', label:'ฝั่งเป่า',  count: blowProfiles.length,  ready: blowReady,  color:'blue' },
+              { key:'print', emoji:'🖨', label:'ฝั่งพิม',   count: printProfiles.length, ready: printReady, color:'purple' },
+            ] as const).map(t => (
+              <button key={t.key} onClick={() => setActiveTab(t.key)}
+                className={`flex-1 flex items-center justify-between px-5 py-3.5 rounded-2xl border-2 transition-all ${
+                  activeTab === t.key
+                    ? t.color === 'blue'
+                      ? 'border-blue-500 bg-blue-500/10'
+                      : 'border-purple-500 bg-purple-500/10'
+                    : 'border-slate-700 bg-slate-900 hover:border-slate-600'
+                }`}>
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">{t.emoji}</span>
+                  <div className="text-left">
+                    <p className={`font-bold text-base ${activeTab===t.key ? 'text-white' : 'text-slate-400'}`}>{t.label}</p>
+                    <p className="text-slate-500 text-xs">{t.count} เครื่อง · <span className="text-green-400">{t.ready}/{t.count} พร้อม</span></p>
                   </div>
-                ) : (
-                  secProfiles.map(p => {
-                    const i = profiles.indexOf(p)
-                    return (
-                      <ProfileCard key={i} p={p} i={i}
-                        onChange={(k, v) => update(i, k, v)}
-                        onRemove={() => remove(i)} />
-                    )
-                  })
+                </div>
+                {activeTab === t.key && (
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${t.color==='blue'?'bg-blue-500/20 text-blue-300':'bg-purple-500/20 text-purple-300'}`}>เปิดอยู่</span>
                 )}
-                <button onClick={() => openAddModal(sec)}
-                  className="w-full border-2 border-dashed border-slate-700 hover:border-brand-500 text-slate-500 hover:text-brand-400 py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 transition-colors">
-                  <Plus size={14}/> เพิ่มเครื่อง{sec === 'blow' ? 'เป่า' : 'พิม'}
-                </button>
-              </div>
-            )}
+              </button>
+            ))}
           </div>
-        )
-      })}
+
+          {/* Machine list for active tab */}
+          <div className="space-y-3">
+            {secProfiles.length === 0 ? (
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl py-12 text-center">
+                <p className="text-slate-500 text-sm">ยังไม่มีเครื่อง{sec==='blow'?'เป่า':'พิม'}</p>
+                <button onClick={() => openAddModal(sec)} className="mt-3 text-brand-400 text-xs hover:text-brand-300">+ เพิ่มเครื่องแรก</button>
+              </div>
+            ) : (
+              secProfiles.map(p => {
+                const i = profiles.indexOf(p)
+                return <ProfileCard key={i} p={p} i={i} onChange={(k, v) => update(i, k, v)} onRemove={() => remove(i)} />
+              })
+            )}
+            <button onClick={() => openAddModal(sec)}
+              className="w-full border-2 border-dashed border-slate-700 hover:border-brand-500 text-slate-500 hover:text-brand-400 py-3 rounded-2xl text-sm flex items-center justify-center gap-2 transition-colors">
+              <Plus size={15}/> เพิ่มเครื่อง{sec === 'blow' ? 'เป่า' : 'พิม'}
+            </button>
+          </div>
+        </>)
+      })()}
 
       {loading && (
         <div className="text-center py-10 text-slate-500 flex items-center justify-center gap-2">

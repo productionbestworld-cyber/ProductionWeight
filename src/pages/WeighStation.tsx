@@ -404,6 +404,13 @@ function QuickEditModal({ profile, onClose, onSaved }: {
   )
 }
 
+// ── Offline Queue ─────────────────────────────────────────────────────────────
+const QUEUE_KEY = 'bwp_offline_queue'
+function loadQueue(): any[] {
+  try { return JSON.parse(localStorage.getItem(QUEUE_KEY) ?? '[]') } catch { return [] }
+}
+function saveQueue(q: any[]) { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)) }
+
 // ── Weigh Page ────────────────────────────────────────────────────────────────
 function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () => void }) {
   const [gross,        setGross]        = useState(0)
@@ -429,6 +436,32 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
   // เตือนทุก 4 ชั่วโมง
   const hoursSinceSet = inspectorSetAt ? (Date.now() - inspectorSetAt) / 3600000 : 999
   const isStale = inspector && hoursSinceSet >= 4
+  // offline queue
+  const [queue,      setQueue]      = useState<any[]>(loadQueue)
+  const [syncing,    setSyncing]    = useState(false)
+
+  // sync queue เมื่อออนไลน์
+  useEffect(() => {
+    async function flushQueue() {
+      const q = loadQueue()
+      if (!q.length || !navigator.onLine) return
+      setSyncing(true)
+      const remaining: any[] = []
+      for (const item of q) {
+        try {
+          const { error } = await supabase.from('production_rolls').insert(item)
+          if (error) remaining.push(item)
+        } catch { remaining.push(item) }
+      }
+      saveQueue(remaining)
+      setQueue(remaining)
+      setSyncing(false)
+    }
+    flushQueue()
+    window.addEventListener('online', flushQueue)
+    return () => window.removeEventListener('online', flushQueue)
+  }, [])
+
   const [weighType,    setWeighType]    = useState<'good'|'bad'|'scrap'>('good')
   const [scrapSub,     setScrapSub]     = useState<'scrap_clear'|'scrap_color'|'scrap_lump'>('scrap_clear')
   const [badReason,    setBadReason]    = useState('')
@@ -625,7 +658,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       const actualType = isScrap ? scrapSub : weighType
       const useRollNo  = isBad ? badRollNo : isGood ? rollNo : 0
 
-      const { data, error: insertErr } = await supabase.from('production_rolls').insert({
+      const payload = {
         job_id:       null,
         roll_no:      useRollNo,
         roll_type:    actualType,
@@ -641,10 +674,26 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         section:      profile.section ?? 'blow',
         width_cm:     profile.widthCm || null,
         thick_mc:     profile.thickMc || null,
-      }).select().single()
+        created_at:   new Date().toISOString(),
+      }
 
-      if (insertErr) throw new Error(insertErr.message)
-      if (!data) throw new Error('insert returned null')
+      let data: any = null
+      const { data: inserted, error: insertErr } = await supabase
+        .from('production_rolls').insert(payload).select().single()
+
+      if (insertErr || !inserted) {
+        // ── ออฟไลน์ → บันทึกลง queue ────────────────────────────────
+        const offlineId = `offline_${Date.now()}_${Math.random().toString(36).slice(2)}`
+        const offlineRecord = { ...payload, id: offlineId, _offline: true }
+        const q = [...loadQueue(), payload]
+        saveQueue(q)
+        setQueue(q)
+        data = offlineRecord
+        console.warn('offline — queued:', offlineRecord)
+      } else {
+        data = inserted
+      }
+
       setLastRoll({ ...data, weighType: actualType })
       setWeighedRolls(prev => [...prev, data].filter(Boolean))
 
@@ -707,6 +756,17 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {/* Offline queue badge */}
+          {queue.length > 0 && (
+            <div className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border font-semibold ${
+              syncing ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+            }`}>
+              {syncing
+                ? <><span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse inline-block"/> กำลัง sync {queue.length} รายการ...</>
+                : <><span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse inline-block"/> ค้างส่ง {queue.length} ม้วน (ออฟไลน์)</>
+              }
+            </div>
+          )}
           {/* Progress mini */}
           {planned > 0 && (
             <div className="text-right hidden sm:block">

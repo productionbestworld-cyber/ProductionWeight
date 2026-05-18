@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect } from 'react'
-import { Scale, LayoutDashboard, Settings, Package, History, Warehouse as WarehouseIcon, ChevronDown } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { Scale, LayoutDashboard, Settings, Package, History, Warehouse as WarehouseIcon, ChevronDown, Wifi, WifiOff, AlertTriangle } from 'lucide-react'
+import { supabase } from './lib/supabase'
 import WeighStation from './pages/WeighStation'
 import Dashboard from './pages/Dashboard'
 import MachineSettings from './pages/MachineSettings'
@@ -23,6 +24,38 @@ export default function App() {
   const [page, setPage]               = useState<Page>('weigh')
   const [showDeptMenu, setShowDeptMenu] = useState(false)
   const deptRef = useRef<HTMLDivElement>(null)
+
+  // ── Connection status ─────────────────────────────────────────────────
+  type ConnStatus = 'online' | 'offline' | 'checking' | 'slow'
+  const [connStatus, setConnStatus] = useState<ConnStatus>('checking')
+  const [latency, setLatency]       = useState<number | null>(null)
+
+  const checkConn = useCallback(async () => {
+    if (!navigator.onLine) { setConnStatus('offline'); setLatency(null); return }
+    setConnStatus('checking')
+    const t0 = Date.now()
+    try {
+      await supabase.from('machine_profiles').select('machine_no').limit(1)
+      const ms = Date.now() - t0
+      setLatency(ms)
+      setConnStatus(ms > 2000 ? 'slow' : 'online')
+    } catch {
+      setConnStatus('offline')
+      setLatency(null)
+    }
+  }, [])
+
+  useEffect(() => {
+    checkConn()
+    const interval = setInterval(checkConn, 30_000)
+    window.addEventListener('online',  checkConn)
+    window.addEventListener('offline', checkConn)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('online',  checkConn)
+      window.removeEventListener('offline', checkConn)
+    }
+  }, [checkConn])
 
   function switchDept(d: Dept) {
     setDept(d)
@@ -101,6 +134,7 @@ export default function App() {
         <div className="w-px h-5 bg-slate-700 mr-2"/>
 
         {/* Nav items */}
+
         {NAV.map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => setPage(key)}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -109,6 +143,22 @@ export default function App() {
             <Icon size={14}/> <span className="hidden md:block">{label}</span>
           </button>
         ))}
+
+        {/* Connection status — ชิดขวา */}
+        <div className="ml-auto flex-shrink-0">
+          <button onClick={checkConn} title={latency ? `${latency}ms` : undefined}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+              connStatus === 'online'   ? 'bg-green-500/10 border-green-500/30 text-green-400' :
+              connStatus === 'slow'     ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' :
+              connStatus === 'offline'  ? 'bg-red-500/10 border-red-500/30 text-red-400' :
+                                         'bg-slate-800 border-slate-700 text-slate-500'
+            }`}>
+            {connStatus === 'online'  && <><Wifi size={12} className="animate-none"/> <span className="hidden sm:block">ออนไลน์</span> {latency && <span className="opacity-60">{latency}ms</span>}</>}
+            {connStatus === 'slow'    && <><AlertTriangle size={12}/> <span className="hidden sm:block">สัญญาณช้า</span> {latency && <span className="opacity-60">{latency}ms</span>}</>}
+            {connStatus === 'offline' && <><WifiOff size={12}/> <span className="hidden sm:block">ออฟไลน์</span></>}
+            {connStatus === 'checking'&& <><span className="w-2.5 h-2.5 rounded-full bg-slate-500 animate-pulse inline-block"/><span className="hidden sm:block ml-1">กำลังตรวจ...</span></>}
+          </button>
+        </div>
       </nav>
 
       <main className="flex-1 overflow-auto">

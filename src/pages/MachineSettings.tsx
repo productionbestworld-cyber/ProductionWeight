@@ -22,19 +22,20 @@ export interface MachineProfile {
   // เครื่อง
   coreWeight:  string
   inspector:   string
-  // ล็อค
   locked:      boolean
   // ยอดสั่งผลิต
   plannedQty:  string
   // ใบปะหน้า
   labelSize:   'long' | 'short'
+  // แผนก
+  section:     'blow' | 'print'
 }
 
 const EMPTY_PROFILE: MachineProfile = {
   machine_no:'', custCode:'', custName:'', custAddress:'', decimal:2,
   matCode:'', productCode:'', productName:'', widthCm:'', thickMc:'',
   lotNo:'', length:'', pcs:'', coreWeight:'1.25', inspector:'', locked:false,
-  plannedQty:'', labelSize:'long',
+  plannedQty:'', labelSize:'long', section:'blow',
 }
 
 function nextMachineNo(profiles: MachineProfile[]): string {
@@ -67,6 +68,7 @@ function dbToProfile(row: any): MachineProfile {
     locked:      row.locked       ?? true,
     plannedQty:  row.planned_qty  ?? '',
     labelSize:   (row.label_size  ?? 'long') as 'long'|'short',
+    section:     (row.section     ?? 'blow') as 'blow'|'print',
   }
 }
 function profileToDb(p: MachineProfile) {
@@ -89,6 +91,7 @@ function profileToDb(p: MachineProfile) {
     locked:        p.locked,
     planned_qty:   p.plannedQty,
     label_size:    p.labelSize,
+    section:       p.section,
     updated_at:    new Date().toISOString(),
   }
 }
@@ -150,8 +153,24 @@ function ProfileCard({ p, i, onChange, onRemove }: {
       {/* Form */}
       {open && (
         <div className="px-4 pb-4 border-t border-slate-800 pt-3 space-y-3">
-          {/* เครื่อง */}
-          <div>
+          {/* แผนก + เครื่อง */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[10px] text-slate-500 mb-1">แผนก *</label>
+              <div className="flex gap-1">
+                {([
+                  { key:'blow',  label:'🌬 ฝั่งเป่า' },
+                  { key:'print', label:'🖨 ฝั่งพิม' },
+                ] as const).map(s => (
+                  <button key={s.key} onClick={() => onChange('section', s.key)}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                      p.section === s.key ? 'bg-brand-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
+                    }`}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <F label="หมายเลขเครื่อง *" k="machine_no" ph="BL01" half />
           </div>
 

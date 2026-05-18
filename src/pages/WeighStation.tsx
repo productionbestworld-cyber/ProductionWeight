@@ -1207,29 +1207,33 @@ export default function WeighStation() {
   const [selected, setSelected] = useState<MachineProfile | null>(null)
   const [profiles, setProfiles] = useState<MachineProfile[]>(loadProfiles())
 
+  // อ่าน ?dept= จาก URL
+  const dept = new URLSearchParams(window.location.search).get('dept') as 'blow'|'print'|null
+
   function reload() {
     supabase.from('machine_profiles').select('*').order('machine_no')
       .then(({ data }) => {
         if (!data) return
         const list = data.map((r: any) => ({
-          machine_no: r.machine_no,
-          custCode:    r.cust_code ?? '',
-          custName:    r.cust_name ?? '',
+          machine_no:  r.machine_no,
+          custCode:    r.cust_code    ?? '',
+          custName:    r.cust_name    ?? '',
           custAddress: r.cust_address ?? '',
           decimal:    (r.decimal_places ?? 2) as 1|2,
-          matCode:     r.mat_code ?? '',
+          matCode:     r.mat_code     ?? '',
           productCode: r.product_code ?? '',
           productName: r.product_name ?? '',
-          widthCm:     r.width_cm ?? '',
-          thickMc:     r.thick_mc ?? '',
-          lotNo:       r.lot_no ?? '',
-          length:      r.length ?? '',
-          pcs:         r.pcs ?? '',
-          coreWeight:  r.core_weight ?? '1.25',
-          inspector:   r.inspector ?? '',
-          locked:      r.locked ?? true,
-          plannedQty:  r.planned_qty ?? '',
-          labelSize:  (r.label_size ?? 'long') as 'long'|'short',
+          widthCm:     r.width_cm     ?? '',
+          thickMc:     r.thick_mc     ?? '',
+          lotNo:       r.lot_no       ?? '',
+          length:      r.length       ?? '',
+          pcs:         r.pcs          ?? '',
+          coreWeight:  r.core_weight  ?? '1.25',
+          inspector:   r.inspector    ?? '',
+          locked:      r.locked       ?? false,
+          plannedQty:  r.planned_qty  ?? '',
+          labelSize:  (r.label_size   ?? 'long') as 'long'|'short',
+          section:    (r.section      ?? 'blow') as 'blow'|'print',
         }))
         setProfiles(list)
         saveProfiles(list)
@@ -1238,6 +1242,42 @@ export default function WeighStation() {
 
   useEffect(() => { reload() }, [])
 
-  if (!selected) return <MachinePicker profiles={profiles} onSelect={setSelected} onProfileUpdated={reload} />
+  // filter เครื่องตาม dept (ถ้าไม่มี dept แสดงทั้งหมด)
+  const filtered = dept ? profiles.filter(p => (p.section ?? 'blow') === dept) : profiles
+
+  // ถ้าไม่ระบุ dept → แสดงหน้าเลือกฝั่ง
+  if (!dept) {
+    return (
+      <div className="min-h-screen bg-[#0a0f1e] flex items-center justify-center p-6">
+        <div className="text-center space-y-6 w-full max-w-sm">
+          <div>
+            <div className="w-16 h-16 rounded-2xl bg-brand-600 flex items-center justify-center text-white font-black text-2xl mx-auto mb-3">BWP</div>
+            <h1 className="text-white font-black text-2xl">ระบบชั่งน้ำหนัก</h1>
+            <p className="text-slate-400 text-sm mt-1">เลือกฝั่งการผลิต</p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <a href="/?dept=blow"
+              className="flex flex-col items-center gap-3 bg-slate-900 border-2 border-slate-700 hover:border-brand-500 hover:bg-brand-500/10 rounded-2xl p-6 transition-all cursor-pointer">
+              <span className="text-4xl">🌬</span>
+              <div>
+                <p className="text-white font-black text-lg">ฝั่งเป่า</p>
+                <p className="text-slate-400 text-xs">{profiles.filter(p=>(p.section??'blow')==='blow').length} เครื่อง</p>
+              </div>
+            </a>
+            <a href="/?dept=print"
+              className="flex flex-col items-center gap-3 bg-slate-900 border-2 border-slate-700 hover:border-brand-500 hover:bg-brand-500/10 rounded-2xl p-6 transition-all cursor-pointer">
+              <span className="text-4xl">🖨</span>
+              <div>
+                <p className="text-white font-black text-lg">ฝั่งพิม</p>
+                <p className="text-slate-400 text-xs">{profiles.filter(p=>p.section==='print').length} เครื่อง</p>
+              </div>
+            </a>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!selected) return <MachinePicker profiles={filtered} onSelect={setSelected} onProfileUpdated={reload} />
   return <WeighPage profile={selected} onBack={() => { setSelected(null); reload() }} />
 }

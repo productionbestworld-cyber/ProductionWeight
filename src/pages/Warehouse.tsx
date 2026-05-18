@@ -303,29 +303,50 @@ export default function Warehouse() {
     }
   }
 
-  function exportStockExcel() {
-    const rows = filteredStock.map((r, i) => ({
-      'ลำดับ':           i + 1,
-      'ม้วนที่':         r.roll_no,
-      'นน.ม้วน (Kgs.)': Number(((r.weight??0)+(r.core_weight??0)).toFixed(2)),
-      'นน.แกน (Kgs.)':  Number((r.core_weight??0).toFixed(2)),
-      'นน.สุทธิ (Kgs.)':Number((r.weight??0).toFixed(2)),
-      'เครื่อง':        r.machine_no ?? '',
-      'สินค้า':         r.product_name ?? '',
-      'ลูกค้า':         r.customer ?? '',
-      'Lot':            r.lot_no ?? '',
-      'ผู้ตรวจสอบ':     r.inspector ?? '',
-      'วันผลิต':        fmtDT(r.created_at),
-      'วันรับโอน':      r.transferred_at ? fmtDT(r.transferred_at) : '',
-    }))
-    const ws = XLSX.utils.json_to_sheet(rows)
+  function exportGroupExcel(groupRolls: Roll[], lot: string, product: string, customer: string) {
+    if (!groupRolls.length) return
+    const totalKg = groupRolls.reduce((s, r) => s + (r.weight ?? 0), 0)
+    const dateStr = new Date().toISOString().slice(0, 10)
+
+    // header rows
+    const header: any[][] = [
+      ['บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด'],
+      ['รายงานสต็อกคลังสินค้า'],
+      [],
+      ['Lot :', lot,  '',  'สินค้า :', product],
+      ['ลูกค้า :', customer, '',  'จำนวน :', `${groupRolls.length} ม้วน`,  'น้ำหนักรวม (สุทธิ) :', `${totalKg.toFixed(2)} Kgs.`],
+      ['วันที่ Export :', new Date().toLocaleDateString('th-TH')],
+      [],
+      ['ลำดับ','ม้วนที่','นน.ม้วน (Kgs.)','นน.แกน (Kgs.)','นน.สุทธิ (Kgs.)','เครื่อง','ผู้ตรวจสอบ','วันผลิต','วันรับโอน'],
+    ]
+
+    const dataRows = groupRolls.map((r, i) => [
+      i + 1,
+      r.roll_no,
+      Number(((r.weight??0)+(r.core_weight??0)).toFixed(2)),
+      Number((r.core_weight??0).toFixed(2)),
+      Number((r.weight??0).toFixed(2)),
+      r.machine_no ?? '',
+      r.inspector ?? '',
+      fmtDT(r.created_at),
+      r.transferred_at ? fmtDT(r.transferred_at) : '',
+    ])
+    // total row
+    dataRows.push(['', `รวม ${groupRolls.length} ม้วน`, '', '', Number(totalKg.toFixed(2)), '', '', '', ''])
+
+    const ws = XLSX.utils.aoa_to_sheet([...header, ...dataRows])
     ws['!cols'] = [
       {wch:6},{wch:8},{wch:16},{wch:14},{wch:16},
-      {wch:8},{wch:26},{wch:20},{wch:14},{wch:12},{wch:18},{wch:18},
+      {wch:8},{wch:12},{wch:18},{wch:18},
+    ]
+    ws['!merges'] = [
+      { s:{r:0,c:0}, e:{r:0,c:8} },
+      { s:{r:1,c:0}, e:{r:1,c:8} },
     ]
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Stock')
-    XLSX.writeFile(wb, `warehouse_stock_${new Date().toISOString().slice(0,10)}.xlsx`)
+    const sheetName = lot.slice(-10)
+    XLSX.utils.book_append_sheet(wb, ws, sheetName)
+    XLSX.writeFile(wb, `stock_${lot}_${dateStr}.xlsx`)
   }
 
   const statusBadge = (s: string) => {
@@ -397,10 +418,6 @@ export default function Warehouse() {
                   className="bg-slate-800 border border-slate-700 rounded-xl pl-7 pr-3 py-2 text-sm text-white outline-none focus:border-brand-500 w-36"/>
               </div>
             </div>
-            <button onClick={exportStockExcel}
-              className="flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-600 text-white text-xs px-3 py-2 rounded-xl self-end">
-              <Download size={12}/> Export Excel
-            </button>
           </div>
 
           {/* KPI */}
@@ -429,22 +446,26 @@ export default function Warehouse() {
               return (
                 <div key={key} className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
                   {/* group header */}
-                  <button onClick={() => toggleLot(key)}
-                    className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-slate-800/40 transition-colors">
-                    <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-between px-5 py-3.5">
+                    <button onClick={() => toggleLot(key)} className="flex items-center gap-3 flex-1 text-left hover:opacity-80 transition-opacity">
                       {isOpen ? <ChevronDown size={16} className="text-slate-400"/> : <ChevronRight size={16} className="text-slate-400"/>}
-                      <div className="text-left">
+                      <div>
                         <p className="text-white font-semibold text-sm">{group.product}</p>
                         <p className="text-slate-500 text-xs">Lot: <span className="text-slate-300 font-mono">{group.lot}</span> · ลูกค้า: {group.customer}</p>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-4 text-right">
-                      <div>
+                    </button>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <div className="text-right">
                         <p className="text-brand-300 font-black text-lg">{group.rolls.length} <span className="text-xs font-normal text-slate-400">ม้วน</span></p>
                         <p className="text-slate-400 text-xs">{fmt(totalKg,1)} Kgs.</p>
                       </div>
+                      <button
+                        onClick={e => { e.stopPropagation(); exportGroupExcel(group.rolls, group.lot, group.product, group.customer) }}
+                        className="flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-600 text-white text-xs px-3 py-1.5 rounded-lg transition-colors">
+                        <Download size={11}/> Export
+                      </button>
                     </div>
-                  </button>
+                  </div>
                   {/* roll list */}
                   {isOpen && (
                     <div className="border-t border-slate-800">

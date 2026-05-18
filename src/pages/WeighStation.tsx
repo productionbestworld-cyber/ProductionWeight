@@ -639,6 +639,8 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         product_name: profile.productName,
         customer:     profile.custName,
         section:      profile.section ?? 'blow',
+        width_cm:     profile.widthCm || null,
+        thick_mc:     profile.thickMc || null,
       }).select().single()
 
       if (insertErr) throw new Error(insertErr.message)

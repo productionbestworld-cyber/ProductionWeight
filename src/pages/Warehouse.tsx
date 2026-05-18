@@ -24,6 +24,7 @@ type Roll = {
   machine_no: string; lot_no: string; product_name: string; customer: string
   inspector: string; created_at: string; transferred_at: string
   so_id: string | null; shipped: boolean; shipped_at: string | null; shipped_by: string | null
+  width_cm?: string; thick_mc?: string
 }
 
 // ── พิมพ์ใบจัดส่ง ─────────────────────────────────────────────────────────
@@ -190,6 +191,7 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print' }) {
   const [fProduct, setFProduct] = useState('')
   const [fCustomer, setFCustomer] = useState('')
   const [fLot, setFLot] = useState('')
+  const [fSize, setFSize] = useState('')
   const [search, setSearch] = useState('')
   const [expandedLots, setExpandedLots] = useState<Set<string>>(new Set())
 
@@ -217,20 +219,27 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print' }) {
   const shipped = useMemo(() => rolls.filter(r => r.shipped), [rolls])
 
   // filter stock
+  // helper: สร้าง size label จาก width_cm × thick_mc
+  function sizeLabel(r: Roll) {
+    if (r.width_cm && r.thick_mc) return `${r.width_cm}cm×${r.thick_mc}mc`
+    return ''
+  }
+
   const filteredStock = useMemo(() => stock.filter(r =>
     (!fSection  || (r as any).section === fSection) &&
     (!fProduct  || r.product_name === fProduct) &&
     (!fCustomer || r.customer === fCustomer) &&
     (!fLot      || r.lot_no === fLot) &&
+    (!fSize     || sizeLabel(r) === fSize) &&
     (!search    || String(r.roll_no).includes(search) || (r.lot_no ?? '').toLowerCase().includes(search.toLowerCase()))
-  ), [stock, fSection, fProduct, fCustomer, fLot, search])
+  ), [stock, fSection, fProduct, fCustomer, fLot, fSize, search])
 
   // group stock by lot
   const stockByLot = useMemo(() => {
-    const map = new Map<string, { lot: string; product: string; customer: string; rolls: Roll[] }>()
+    const map = new Map<string, { lot: string; product: string; customer: string; size: string; rolls: Roll[] }>()
     filteredStock.forEach(r => {
       const k = `${r.lot_no ?? '?'}__${r.product_name ?? '?'}`
-      if (!map.has(k)) map.set(k, { lot: r.lot_no ?? '?', product: r.product_name ?? '?', customer: r.customer ?? '?', rolls: [] })
+      if (!map.has(k)) map.set(k, { lot: r.lot_no ?? '?', product: r.product_name ?? '?', customer: r.customer ?? '?', size: sizeLabel(r), rolls: [] })
       map.get(k)!.rolls.push(r)
     })
     return Array.from(map.values()).sort((a, b) => a.lot.localeCompare(b.lot))
@@ -240,6 +249,7 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print' }) {
   const products  = useMemo(() => Array.from(new Set(stock.map(r => r.product_name).filter(Boolean))).sort(), [stock])
   const customers = useMemo(() => Array.from(new Set(stock.map(r => r.customer).filter(Boolean))).sort(), [stock])
   const lots      = useMemo(() => Array.from(new Set(stock.map(r => r.lot_no).filter(Boolean))).sort(), [stock])
+  const sizes     = useMemo(() => Array.from(new Set(stock.map(r => sizeLabel(r)).filter(Boolean))).sort(), [stock])
 
   // available stock for shipment (ยังไม่ผูก SO อื่น หรือผูกกับ SO นี้อยู่แล้ว)
   const availableForShip = useMemo(() =>
@@ -423,6 +433,7 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print' }) {
             {[
               { label:'สินค้า',  val:fProduct,  set:setFProduct,  opts:products },
               { label:'ลูกค้า',  val:fCustomer, set:setFCustomer, opts:customers },
+              { label:'ขนาด',    val:fSize,     set:setFSize,     opts:sizes },
               { label:'Lot',     val:fLot,       set:setFLot,      opts:lots },
             ].map(f => (
               <div key={f.label}>
@@ -475,7 +486,11 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print' }) {
                       {isOpen ? <ChevronDown size={16} className="text-slate-400"/> : <ChevronRight size={16} className="text-slate-400"/>}
                       <div>
                         <p className="text-white font-semibold text-sm">{group.product}</p>
-                        <p className="text-slate-500 text-xs">Lot: <span className="text-slate-300 font-mono">{group.lot}</span> · ลูกค้า: {group.customer}</p>
+                        <p className="text-slate-500 text-xs">
+                          Lot: <span className="text-slate-300 font-mono">{group.lot}</span>
+                          {group.size && <span className="ml-1.5 text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono">{group.size}</span>}
+                          <span className="ml-1.5">· {group.customer}</span>
+                        </p>
                       </div>
                     </button>
                     <div className="flex items-center gap-3 flex-shrink-0">

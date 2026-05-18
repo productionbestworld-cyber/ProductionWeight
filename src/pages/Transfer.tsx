@@ -220,7 +220,7 @@ function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
 }
 
-export default function Transfer() {
+export default function Transfer({ dept }: { dept?: 'blow'|'print' }) {
   const [rolls,       setRolls]       = useState<any[]>([])
   const [docs,        setDocs]        = useState<any[]>([])
   const [tab,         setTab]         = useState<'transfer'|'history'>('transfer')
@@ -239,10 +239,12 @@ export default function Transfer() {
   async function loadRolls() {
     setLoading(true)
     const today = new Date(); today.setHours(0,0,0,0)
-    const { data } = await supabase.from('production_rolls')
+    let q = supabase.from('production_rolls')
       .select('*').eq('roll_type','good')
       .gte('created_at', today.toISOString())
       .order('created_at',{ ascending: false })
+    if (dept) q = q.eq('section', dept)
+    const { data } = await q
     setRolls(data ?? [])
     setLoading(false)
   }

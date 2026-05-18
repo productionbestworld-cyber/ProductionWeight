@@ -178,7 +178,7 @@ function SOModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => voi
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────
-export default function Warehouse() {
+export default function Warehouse({ dept }: { dept?: 'blow'|'print' }) {
   const [tab, setTab] = useState<Tab>('stock')
   const [rolls, setRolls] = useState<Roll[]>([])
   const [sos, setSOs] = useState<SO[]>([])
@@ -186,7 +186,7 @@ export default function Warehouse() {
   const [showSOModal, setShowSOModal] = useState(false)
 
   // stock filters
-  const [fSection, setFSection] = useState<''|'blow'|'print'>('')
+  const [fSection, setFSection] = useState<''|'blow'|'print'>(dept ?? '')
   const [fProduct, setFProduct] = useState('')
   const [fCustomer, setFCustomer] = useState('')
   const [fLot, setFLot] = useState('')
@@ -398,26 +398,28 @@ export default function Warehouse() {
 
           {/* Filters */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-end gap-3 flex-wrap">
-            {/* Section toggle */}
-            <div>
-              <label className="block text-[10px] text-slate-500 mb-1">ฝั่งผลิต</label>
-              <div className="flex gap-1">
-                {([
-                  { val:'',      label:'ทั้งหมด' },
-                  { val:'blow',  label:'🌬 เป่า' },
-                  { val:'print', label:'🖨 พิม' },
-                ] as const).map(s => (
-                  <button key={s.val} onClick={() => setFSection(s.val)}
-                    className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-colors ${
-                      fSection === s.val
-                        ? 'bg-brand-600 text-white border-brand-600'
-                        : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
-                    }`}>
-                    {s.label}
-                  </button>
-                ))}
+            {/* Section badge (locked when dept prop provided) */}
+            {dept ? (
+              <div className="self-end pb-0.5">
+                <span className={`text-xs font-bold px-3 py-2 rounded-xl border ${
+                  dept==='blow' ? 'bg-blue-500/15 text-blue-300 border-blue-500/30' : 'bg-purple-500/15 text-purple-300 border-purple-500/30'
+                }`}>
+                  {dept==='blow' ? '🌬 ฝั่งเป่า' : '🖨 ฝั่งพิม'}
+                </span>
               </div>
-            </div>
+            ) : (
+              <div>
+                <label className="block text-[10px] text-slate-500 mb-1">ฝั่งผลิต</label>
+                <div className="flex gap-1">
+                  {([{val:'',label:'ทั้งหมด'},{val:'blow',label:'🌬 เป่า'},{val:'print',label:'🖨 พิม'}] as const).map(s=>(
+                    <button key={s.val} onClick={() => setFSection(s.val)}
+                      className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-colors ${fSection===s.val?'bg-brand-600 text-white border-brand-600':'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'}`}>
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {[
               { label:'สินค้า',  val:fProduct,  set:setFProduct,  opts:products },
               { label:'ลูกค้า',  val:fCustomer, set:setFCustomer, opts:customers },

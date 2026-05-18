@@ -59,7 +59,7 @@ function CustomTooltip({ active, payload, label }: any) {
   )
 }
 
-export default function Dashboard() {
+export default function Dashboard({ dept }: { dept?: 'blow'|'print' }) {
   const [rolls,   setRolls]   = useState<Roll[]>([])
   const [loading, setLoading] = useState(true)
   const [tab,     setTab]     = useState<Tab>('overview')
@@ -67,10 +67,10 @@ export default function Dashboard() {
   // filters
   const today = toDateStr(new Date())
   const [dateFrom,  setDateFrom]  = useState(() => {
-    const d = new Date(); d.setDate(1); return toDateStr(d)   // first of month
+    const d = new Date(); d.setDate(1); return toDateStr(d)
   })
   const [dateTo,    setDateTo]    = useState(today)
-  const [fSection,  setFSection]  = useState<''|'blow'|'print'>('')
+  const [fSection,  setFSection]  = useState<''|'blow'|'print'>(dept ?? '')
   const [fMachine,  setFMachine]  = useState('')
   const [fCustomer, setFCustomer] = useState('')
   const [fSize,     setFSize]     = useState('')
@@ -213,26 +213,28 @@ export default function Dashboard() {
             <div>
               <label className="block text-[10px] text-gray-500 mb-1 font-semibold uppercase tracking-wider">ตัวกรองข้อมูล</label>
               <div className="flex gap-3 flex-wrap items-end">
-                {/* Section toggle */}
-                <div>
-                  <label className="block text-[10px] text-gray-400 mb-0.5">ฝั่งผลิต</label>
-                  <div className="flex gap-1">
-                    {([
-                      { val:'',      label:'ทั้งหมด' },
-                      { val:'blow',  label:'🌬 เป่า' },
-                      { val:'print', label:'🖨 พิม' },
-                    ] as const).map(s => (
-                      <button key={s.val} onClick={() => setFSection(s.val)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                          fSection === s.val
-                            ? 'bg-blue-500 text-white border-blue-500'
-                            : 'bg-white text-gray-500 border-gray-300 hover:border-blue-400'
-                        }`}>
-                        {s.label}
-                      </button>
-                    ))}
+                {/* Section badge or toggle */}
+                {dept ? (
+                  <div className="self-end pb-0.5">
+                    <span className={`text-xs font-bold px-3 py-1.5 rounded-lg border ${
+                      dept==='blow' ? 'bg-blue-50 text-blue-600 border-blue-300' : 'bg-purple-50 text-purple-600 border-purple-300'
+                    }`}>
+                      {dept==='blow' ? '🌬 ฝั่งเป่า' : '🖨 ฝั่งพิม'}
+                    </span>
                   </div>
-                </div>
+                ) : (
+                  <div>
+                    <label className="block text-[10px] text-gray-400 mb-0.5">ฝั่งผลิต</label>
+                    <div className="flex gap-1">
+                      {([{val:'',label:'ทั้งหมด'},{val:'blow',label:'🌬 เป่า'},{val:'print',label:'🖨 พิม'}] as const).map(s=>(
+                        <button key={s.val} onClick={() => setFSection(s.val)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${fSection===s.val?'bg-blue-500 text-white border-blue-500':'bg-white text-gray-500 border-gray-300 hover:border-blue-400'}`}>
+                          {s.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <label className="block text-[10px] text-gray-400 mb-0.5">ตั้งแต่วันที่</label>
                   <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}

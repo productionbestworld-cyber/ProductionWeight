@@ -186,6 +186,7 @@ export default function Warehouse() {
   const [showSOModal, setShowSOModal] = useState(false)
 
   // stock filters
+  const [fSection, setFSection] = useState<''|'blow'|'print'>('')
   const [fProduct, setFProduct] = useState('')
   const [fCustomer, setFCustomer] = useState('')
   const [fLot, setFLot] = useState('')
@@ -217,11 +218,12 @@ export default function Warehouse() {
 
   // filter stock
   const filteredStock = useMemo(() => stock.filter(r =>
+    (!fSection  || (r as any).section === fSection) &&
     (!fProduct  || r.product_name === fProduct) &&
     (!fCustomer || r.customer === fCustomer) &&
     (!fLot      || r.lot_no === fLot) &&
     (!search    || String(r.roll_no).includes(search) || (r.lot_no ?? '').toLowerCase().includes(search.toLowerCase()))
-  ), [stock, fProduct, fCustomer, fLot, search])
+  ), [stock, fSection, fProduct, fCustomer, fLot, search])
 
   // group stock by lot
   const stockByLot = useMemo(() => {
@@ -396,6 +398,26 @@ export default function Warehouse() {
 
           {/* Filters */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-end gap-3 flex-wrap">
+            {/* Section toggle */}
+            <div>
+              <label className="block text-[10px] text-slate-500 mb-1">ฝั่งผลิต</label>
+              <div className="flex gap-1">
+                {([
+                  { val:'',      label:'ทั้งหมด' },
+                  { val:'blow',  label:'🌬 เป่า' },
+                  { val:'print', label:'🖨 พิม' },
+                ] as const).map(s => (
+                  <button key={s.val} onClick={() => setFSection(s.val)}
+                    className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-colors ${
+                      fSection === s.val
+                        ? 'bg-brand-600 text-white border-brand-600'
+                        : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                    }`}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             {[
               { label:'สินค้า',  val:fProduct,  set:setFProduct,  opts:products },
               { label:'ลูกค้า',  val:fCustomer, set:setFCustomer, opts:customers },

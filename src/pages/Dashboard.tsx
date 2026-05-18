@@ -70,6 +70,7 @@ export default function Dashboard() {
     const d = new Date(); d.setDate(1); return toDateStr(d)   // first of month
   })
   const [dateTo,    setDateTo]    = useState(today)
+  const [fSection,  setFSection]  = useState<''|'blow'|'print'>('')
   const [fMachine,  setFMachine]  = useState('')
   const [fCustomer, setFCustomer] = useState('')
   const [fSize,     setFSize]     = useState('')
@@ -81,7 +82,7 @@ export default function Dashboard() {
     const to   = new Date(dateTo);   to.setHours(23,59,59,999)
     const { data } = await supabase
       .from('production_rolls')
-      .select('id,roll_type,weight,machine_no,lot_no,product_name,customer,size,grade,created_at,roll_no')
+      .select('id,roll_type,weight,machine_no,lot_no,product_name,customer,size,grade,created_at,roll_no,section')
       .gte('created_at', from.toISOString())
       .lte('created_at', to.toISOString())
       .order('created_at', { ascending: true })
@@ -99,11 +100,12 @@ export default function Dashboard() {
 
   // filtered
   const filtered = useMemo(() => rolls.filter(r =>
+    (!fSection  || (r as any).section === fSection) &&
     (!fMachine  || r.machine_no === fMachine) &&
     (!fCustomer || r.customer   === fCustomer) &&
     (!fSize     || r.size       === fSize) &&
     (!fGrade    || r.grade      === fGrade)
-  ), [rolls, fMachine, fCustomer, fSize, fGrade])
+  ), [rolls, fSection, fMachine, fCustomer, fSize, fGrade])
 
   const fg     = useMemo(() => filtered.filter(r => r.roll_type === 'good'), [filtered])
   const scrap  = useMemo(() => filtered.filter(r => r.roll_type === 'scrap'), [filtered])
@@ -211,6 +213,26 @@ export default function Dashboard() {
             <div>
               <label className="block text-[10px] text-gray-500 mb-1 font-semibold uppercase tracking-wider">ตัวกรองข้อมูล</label>
               <div className="flex gap-3 flex-wrap items-end">
+                {/* Section toggle */}
+                <div>
+                  <label className="block text-[10px] text-gray-400 mb-0.5">ฝั่งผลิต</label>
+                  <div className="flex gap-1">
+                    {([
+                      { val:'',      label:'ทั้งหมด' },
+                      { val:'blow',  label:'🌬 เป่า' },
+                      { val:'print', label:'🖨 พิม' },
+                    ] as const).map(s => (
+                      <button key={s.val} onClick={() => setFSection(s.val)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                          fSection === s.val
+                            ? 'bg-blue-500 text-white border-blue-500'
+                            : 'bg-white text-gray-500 border-gray-300 hover:border-blue-400'
+                        }`}>
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <div>
                   <label className="block text-[10px] text-gray-400 mb-0.5">ตั้งแต่วันที่</label>
                   <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}

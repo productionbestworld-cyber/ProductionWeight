@@ -183,10 +183,11 @@ html,body{font-family:'Sarabun','Tahoma',sans-serif;font-size:7pt;color:#000;bac
 }
 
 // ── Machine Picker ────────────────────────────────────────────────────────────
-function MachinePicker({ profiles, onSelect, onProfileUpdated }: {
+function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
   profiles: MachineProfile[]
   onSelect: (p: MachineProfile) => void
   onProfileUpdated: () => void
+  dept?: 'blow' | 'print'
 }) {
   const [editing, setEditing] = useState<MachineProfile | null>(null)
   // เรียงตามชื่อเครื่อง
@@ -201,7 +202,13 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated }: {
       <div className="max-w-6xl mx-auto">
         <div className="mb-5">
           <h1 className="text-white font-bold text-xl flex items-center gap-2">
-            <Wind size={20} className="text-brand-400" /> เลือกเครื่อง
+            <Wind size={20} className="text-brand-400" />
+            เลือกเครื่อง
+            {dept && (
+              <span className={`text-sm font-bold px-3 py-1 rounded-full ${dept==='blow' ? 'bg-blue-500/20 text-blue-300' : 'bg-purple-500/20 text-purple-300'}`}>
+                {dept === 'blow' ? '🌬 ฝั่งเป่า' : '🖨 ฝั่งพิม'}
+              </span>
+            )}
           </h1>
           <p className="text-slate-400 text-sm mt-1">เครื่องว่าง → คลิกเพื่อกรอกข้อมูลงาน · เครื่องพร้อม → คลิกเพื่อเริ่มชั่ง</p>
         </div>
@@ -631,6 +638,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         lot_no:       profile.lotNo,
         product_name: profile.productName,
         customer:     profile.custName,
+        section:      profile.section ?? 'blow',
       }).select().single()
 
       if (insertErr) throw new Error(insertErr.message)
@@ -1242,6 +1250,6 @@ export default function WeighStation({ dept }: { dept?: 'blow' | 'print' }) {
   // filter เครื่องตาม dept
   const filtered = dept ? profiles.filter(p => (p.section ?? 'blow') === dept) : profiles
 
-  if (!selected) return <MachinePicker profiles={filtered} onSelect={setSelected} onProfileUpdated={reload} />
+  if (!selected) return <MachinePicker profiles={filtered} onSelect={setSelected} onProfileUpdated={reload} dept={dept} />
   return <WeighPage profile={selected} onBack={() => { setSelected(null); reload() }} />
 }

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Scale, LayoutDashboard, Settings, Package, History, Warehouse as WarehouseIcon, ChevronDown, Wifi, WifiOff, AlertTriangle } from 'lucide-react'
+import { Scale, LayoutDashboard, Settings, Package, History, Warehouse as WarehouseIcon, ChevronDown, Wifi, WifiOff, AlertTriangle, FileEdit } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import WeighStation from './pages/WeighStation'
 import Dashboard from './pages/Dashboard'
@@ -8,8 +8,9 @@ import RollDetail from './pages/RollDetail'
 import Transfer from './pages/Transfer'
 import HistoryPage from './pages/History'
 import Warehouse from './pages/Warehouse'
+import LabelDesigner from './pages/LabelDesigner'
 
-type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings'
+type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings' | 'label-designer'
 type Dept = 'blow' | 'print' | 'rewind'
 
 const DEPT_KEY = 'bwp_dept'
@@ -87,7 +88,8 @@ export default function App() {
     { key: 'warehouse', label: 'คลังสินค้า',    icon: WarehouseIcon },
     { key: 'dashboard', label: 'Dashboard',      icon: LayoutDashboard },
     { key: 'history',   label: 'ประวัติผลิต',    icon: History },
-    { key: 'settings',  label: 'ตั้งค่าเครื่อง', icon: Settings },
+    { key: 'settings',       label: 'ตั้งค่าเครื่อง',  icon: Settings },
+    { key: 'label-designer', label: 'ออกแบบใบปะหน้า', icon: FileEdit },
   ] as const
 
   return (
@@ -169,7 +171,8 @@ export default function App() {
         {page === 'warehouse' && <Warehouse dept={dept} />}
         {page === 'dashboard' && <Dashboard dept={dept} />}
         {page === 'history'   && <HistoryPage dept={dept} />}
-        {page === 'settings'  && <MachineSettings dept={dept} />}
+        {page === 'settings'       && <MachineSettings dept={dept} />}
+        {page === 'label-designer' && <LabelDesigner />}
       </main>
     </div>
   )

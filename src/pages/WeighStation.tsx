@@ -4,6 +4,7 @@ import QRCode from 'react-qr-code'
 import QRCodeLib from 'qrcode'
 import { supabase } from '../lib/supabase'
 import { loadProfiles, saveProfiles, type MachineProfile } from './MachineSettings'
+import { loadLongLayout, type FieldConfig } from './LabelDesigner'
 
 function fmt(n: number | null | undefined, d: 1|2 = 2) {
   if (n === null || n === undefined || isNaN(n as number)) return (0).toFixed(d)
@@ -36,32 +37,113 @@ async function printLabel(p: MachineProfile, rollNo: number, gross: number, net:
   const qrUrl = (s: 72|56) => s === 72 ? qr72 : qr56
 
   // ═══════════════════════════════════════════════════════
-  // ใบยาว 165 × 101.5 mm (landscape) — compact fit
+  // ใบยาว — สร้างจาก LabelDesigner layout (หรือ fallback default)
+  // ═══════════════════════════════════════════════════════
+  const savedLayout = loadLongLayout()
+  const rollTypeLabelLong =
+    rollType === 'bad'         ? 'ม้วนกรอ' :
+    rollType === 'scrap_clear' ? 'เศษเสีย (ใส)' :
+    rollType === 'scrap_color' ? 'เศษเสีย (สี)' :
+    rollType === 'scrap_lump'  ? 'เศษก้อน' : ''
+
+  // ค่าจริงของแต่ละ field id → map จาก MachineProfile + น้ำหนัก
+  const rollLabel = rollType.startsWith('scrap') ? 'ถุงเศษ' : rollType === 'bad' ? 'กรอ No.' : 'Roll No.'
+  const longFieldData: Record<string, string> = {
+    header:      (p.headerText?.trim() || 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด') +
+                 (rollTypeLabelLong ? `&nbsp;&nbsp;[${rollTypeLabelLong}]` : ''),
+    // 3-column header
+    mat:         `Mat Code&nbsp;&nbsp;<b style="font-size:1.15em">${p.matCode}</b>`,
+    mfg:         `MFG Date&nbsp;&nbsp;<b style="font-size:1.15em">${mfgDate}</b>`,
+    rollno:      `${rollLabel}&nbsp;&nbsp;<b style="font-size:1.15em">${rollNo === 0 ? '—' : rollNo}</b>`,
+    // left column
+    prodcode:    `Product Code&nbsp;&nbsp;<b>${p.productCode || p.matCode}</b>`,
+    prodname:    p.productName,
+    machine:     `เครื่อง&nbsp;&nbsp;<b>${p.machine_no}</b>`,
+    core:        `Core Weight&nbsp;&nbsp;<b>${fmt(core, dec)}</b>`,
+    size:        `Size&nbsp;&nbsp;<b style="font-size:1.2em">${p.widthCm}</b>&nbsp;cm&nbsp;×&nbsp;<b style="font-size:1.2em">${p.thickMc}</b>&nbsp;mc`,
+    // right column
+    lotno:       `Lot No&nbsp;&nbsp;<b>${p.lotNo}</b>`,
+    length:      `Length&nbsp;&nbsp;<b>${p.length || '—'}</b>&nbsp;M.${p.pcs ? `&nbsp;&nbsp;<b>${p.pcs}</b>&nbsp;Pcs.` : ''}`,
+    gross:       `Gross Weight&nbsp;&nbsp;<b>${fmt(gross, dec)} Kgs.</b>`,
+    net:         fmt(net, dec),
+    barcode_lbl: 'Barcode No.',
+    inspector:   `ผู้ตรวจสอบ&nbsp;&nbsp;<b>${p.inspector || '—'}</b>`,
+    // old compat keys
+    meta:        `Mat&nbsp;<b>${p.matCode}</b>&nbsp;&nbsp;&nbsp;MFG&nbsp;<b>${mfgDate}</b>&nbsp;&nbsp;&nbsp;Roll&nbsp;<b>#${rollNo === 0 ? '—' : rollNo}</b>`,
+  }
+
+  function renderLongField(f: FieldConfig): string {
+    if (!f.visible) return ''
+
+    // separator: ถ้า h > w → เส้นตั้ง (vsep), ถ้า h ≈ 0 → เส้นนอน
+    if (f.type === 'separator') {
+      if (f.h > f.w) {
+        // เส้นตั้ง
+        return `<div style="position:absolute;left:${f.x}mm;top:${f.y}mm;width:0;height:${f.h}mm;border-left:1px solid #000;box-sizing:border-box"></div>`
+      }
+      return `<div style="position:absolute;left:${f.x}mm;top:${f.y}mm;width:${f.w}mm;height:0;border-top:1px solid #000;box-sizing:border-box"></div>`
+    }
+
+    if (f.type === 'qr') {
+      const px = Math.round(f.h * 3.78)
+      return `<img src="${qrUrl(72)}" width="${px}" height="${px}" style="position:absolute;left:${f.x}mm;top:${f.y}mm;width:${f.w}mm;height:${f.h}mm;image-rendering:pixelated"/>`
+    }
+
+    const value   = longFieldData[f.id] ?? f.sampleValue
+    const border  = f.border ? 'border:1px solid #000;' : ''
+    const justify = f.align === 'center' ? 'justify-content:center;' : f.align === 'right' ? 'justify-content:flex-end;' : ''
+    const italic  = f.italic ? 'font-style:italic;' : ''
+
+    if (f.type === 'weight') {
+      return `<div style="position:absolute;left:${f.x}mm;top:${f.y}mm;width:${f.w}mm;height:${f.h}mm;${border}box-sizing:border-box;overflow:hidden;padding:0 1mm">
+        <div style="font-size:7.5pt;font-weight:700;line-height:1.4">Net Weight</div>
+        <div style="font-size:${f.fontSize}pt;font-weight:900;line-height:1;color:#003087">${value}</div>
+        <div style="font-size:8pt;font-weight:700;line-height:1.3">Kgs.</div>
+      </div>`
+    }
+
+    return `<div style="position:absolute;left:${f.x}mm;top:${f.y}mm;width:${f.w}mm;height:${f.h}mm;font-size:${f.fontSize}pt;font-weight:${f.fontWeight};text-align:${f.align};${italic}${border}box-sizing:border-box;overflow:hidden;display:flex;align-items:center;${justify}padding:0 0.5mm">${value}</div>`
+  }
+
+  const longHtmlFromLayout = `
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800;900&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;width:${savedLayout.labelW}mm;height:${savedLayout.labelH}mm}
+@media print{@page{size:${savedLayout.labelW}mm ${savedLayout.labelH}mm;margin:0}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+<div style="position:relative;width:${savedLayout.labelW}mm;height:${savedLayout.labelH}mm;border:1.5px solid #000;overflow:hidden">
+${savedLayout.fields.map(renderLongField).join('\n')}
+</div>`
+
+  // ═══════════════════════════════════════════════════════
+  // ใบยาว 165 × 70 mm (fallback default — ไม่ถูกใช้แล้ว เก็บไว้เผื่อ)
   // ═══════════════════════════════════════════════════════
   const longHtml = `
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{font-family:'Sarabun','Tahoma',sans-serif;font-size:8.5pt;color:#000;background:#fff;width:165mm;height:70mm}
-.wrap{width:165mm;height:70mm;padding:1.5mm 3mm;display:flex;flex-direction:column;border:1.5px solid #000;overflow:hidden}
-.title{text-align:center;font-size:11pt;font-weight:800;border-bottom:2px solid #000;padding-bottom:.8mm;margin-bottom:.8mm}
-.hdr{display:flex;border-bottom:1px solid #000;padding-bottom:.8mm;margin-bottom:.8mm}
-.hc1{flex:1;border-right:1px solid #888;padding-right:3mm}
-.hc2{flex:1.4;border-right:1px solid #888;padding:0 3mm;text-align:center}
-.hc3{flex:.7;padding-left:3mm;text-align:right}
+html,body{font-family:'Sarabun','Arial',sans-serif;font-size:8pt;color:#000;background:#fff;width:165mm;height:70mm}
+.wrap{width:165mm;height:70mm;padding:1mm 2.5mm;display:flex;flex-direction:column;border:1.5px solid #000;overflow:hidden}
+.title{text-align:center;font-size:10.5pt;font-weight:700;border-bottom:1.5px solid #000;padding-bottom:.5mm;margin-bottom:.5mm;line-height:1.3}
+.hdr{display:flex;border-bottom:1px solid #000;padding-bottom:.5mm;margin-bottom:.5mm}
+.hc1{flex:1;border-right:1px solid #aaa;padding-right:2mm}
+.hc2{flex:1.4;border-right:1px solid #aaa;padding:0 2mm;text-align:center}
+.hc3{flex:.7;padding-left:2mm;text-align:right}
 .body{display:flex;flex:1;min-height:0}
-.L{flex:1.5;padding-right:3mm;border-right:1px solid #000;display:flex;flex-direction:column;gap:0}
-.R{flex:1;padding-left:3mm;display:flex;flex-direction:column;gap:0}
-.row{display:flex;align-items:baseline;line-height:1.5;margin-bottom:.3mm}
-.k{font-size:7.5pt;min-width:22mm;display:inline-block}
+.L{flex:1.5;padding-right:2.5mm;border-right:1px solid #000;display:flex;flex-direction:column}
+.R{flex:1;padding-left:2.5mm;display:flex;flex-direction:column}
+.row{display:flex;align-items:baseline;line-height:1.35;margin-bottom:.2mm}
+.k{font-size:7pt;min-width:20mm;display:inline-block;color:#333}
 .v{font-size:8pt;font-weight:700}
-.v2{font-size:10pt;font-weight:800}
-.sn{font-size:12pt;font-weight:900;vertical-align:middle}
-.su{font-size:7pt;vertical-align:middle}
-.wr{display:flex;justify-content:space-between;align-items:baseline;border-bottom:.5px solid #ccc;padding:.5mm 0}
-.wk{font-size:7.5pt}
-.wv{font-size:9.5pt;font-weight:700}
-.wvn{font-size:13pt;font-weight:900;color:#003087}
-.bcno{border-bottom:1px solid #000;height:3mm;margin-top:.3mm;width:100%}
+.v2{font-size:10pt;font-weight:700}
+.sn{font-size:11pt;font-weight:800;vertical-align:middle}
+.su{font-size:7pt;vertical-align:middle;color:#333}
+.wr{display:flex;justify-content:space-between;align-items:baseline;border-bottom:.5px solid #ccc;padding:.3mm 0}
+.wk{font-size:7pt;color:#333}
+.wv{font-size:9pt;font-weight:700}
+.wvn{font-size:13pt;font-weight:800;color:#003087}
+.bcno{border-bottom:1px solid #000;height:2.5mm;margin-top:.3mm;width:100%}
 @media print{@page{size:165mm 70mm;margin:0}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style>
 <div class="wrap">
@@ -139,27 +221,27 @@ html,body{font-family:'Sarabun','Tahoma',sans-serif;font-size:8.5pt;color:#000;b
   const rollTypeLabel = rollType === 'bad' ? 'กรอ' : rollType === 'scrap_clear' ? 'เศษใส' : rollType === 'scrap_color' ? 'เศษสี' : rollType === 'scrap_lump' ? 'เศษก้อน' : ''
   const shortHtml = `
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800;900&display=swap');
+/* 203 DPI thermal */
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{font-family:'Sarabun','Tahoma',sans-serif;color:#000;background:#fff;width:76.2mm;height:76.2mm}
-.page{width:76.2mm;height:76.2mm;display:flex;flex-direction:column;border:1.5px solid #000;overflow:hidden}
-.hdr{text-align:center;font-size:8pt;font-weight:800;padding:1.3mm 2mm;border-bottom:1.5px solid #000}
-.hdr.bad{text-decoration:underline}
-.meta{display:flex;justify-content:space-between;border-bottom:1px solid #000;padding:.7mm 2mm;font-size:7pt}
-.meta b{font-size:8pt}
-.body{flex:1;padding:.8mm 2mm;display:flex;flex-direction:column;gap:0;overflow:hidden}
-.r{display:flex;justify-content:space-between;align-items:baseline;font-size:7pt;line-height:1.5}
-.r .k{color:#000;flex-shrink:0;min-width:18mm}
-.r .v{font-weight:700;text-align:right;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.r .v.xl{font-size:8pt;font-weight:900}
-.sep{border-top:1px solid #000;margin:.3mm 0}
-.wrow{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #000;border-bottom:1px solid #000;padding:1mm 2mm;margin-top:.5mm;flex-shrink:0}
-.wlbl{font-size:6pt;color:#000}
-.wval{font-size:20pt;font-weight:900;color:#000;line-height:1}
-.wunit{font-size:6.5pt;font-weight:800;color:#000}
-.wgross{font-size:6pt;color:#000;margin-top:.2mm}
-.foot{display:flex;justify-content:space-between;align-items:center;padding:.6mm 2mm;border-top:1px solid #000;flex-shrink:0}
-.inspector{font-size:7pt;font-weight:800}
-.bc{font-size:6pt;color:#000}
+html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;width:76.2mm;height:76.2mm}
+.page{width:76.2mm;height:76.2mm;display:flex;flex-direction:column;border:2px solid #000;overflow:hidden}
+.hdr{text-align:center;font-size:11.5pt;font-weight:900;padding:1mm 2mm;border-bottom:2px solid #000;letter-spacing:.3px;line-height:1.2}
+.meta{display:flex;justify-content:space-between;border-bottom:2px solid #000;padding:.8mm 2mm;font-size:9pt;font-weight:700}
+.meta b{font-size:10.5pt;font-weight:900}
+.body{flex:1;padding:.5mm 2mm;display:flex;flex-direction:column;overflow:hidden}
+.r{display:flex;justify-content:space-between;align-items:baseline;font-size:9.5pt;font-weight:700;line-height:1.45}
+.r .k{flex-shrink:0;min-width:17mm}
+.r .v{font-weight:900;text-align:right;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.r .v.xl{font-size:11pt;font-weight:900}
+.sep{border-top:2px solid #000;margin:.3mm 0}
+.wrow{display:flex;justify-content:space-between;align-items:center;border-top:2px solid #000;border-bottom:2px solid #000;padding:1mm 2mm;flex-shrink:0}
+.wlbl{font-size:8.5pt;font-weight:800}
+.wval{font-size:28pt;font-weight:900;line-height:1}
+.wunit{font-size:9.5pt;font-weight:900}
+.wgross{font-size:8pt;font-weight:700;margin-top:.2mm}
+.foot{padding:.8mm 2mm;border-top:2px solid #000;flex-shrink:0}
+.inspector{font-size:10pt;font-weight:900}
 @media print{@page{size:76.2mm 76.2mm;margin:0}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style>
 <div class="page">
@@ -197,7 +279,6 @@ html,body{font-family:'Sarabun','Tahoma',sans-serif;color:#000;background:#fff;w
   </div>
 
   <div class="foot">
-    <span class="bc">Barcode: _______________</span>
     <span class="inspector">ผู้ตรวจ: ${p.inspector || '—'}</span>
   </div>
 
@@ -212,8 +293,15 @@ html,body{font-family:'Sarabun','Tahoma',sans-serif;color:#000;background:#fff;w
   ${size === 'long' ? longHtml : shortHtml}
   </head><body><script>
     var imgs=document.images,n=0
-    function ok(){n++;if(n>=imgs.length)setTimeout(function(){window.print();window.close()},400)}
-    if(!imgs.length){setTimeout(function(){window.print();window.close()},400)}
+    function doPrint(){
+      if(document.fonts && document.fonts.ready){
+        document.fonts.ready.then(function(){setTimeout(function(){window.print();window.close()},300)})
+      } else {
+        setTimeout(function(){window.print();window.close()},600)
+      }
+    }
+    function ok(){n++;if(n>=imgs.length)doPrint()}
+    if(!imgs.length){doPrint()}
     else{for(var i=0;i<imgs.length;i++){if(imgs[i].complete)ok();else{imgs[i].onload=ok;imgs[i].onerror=ok}}}
   <\/script></body></html>`)
   win.document.close()

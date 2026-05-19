@@ -289,7 +289,7 @@ export default function MachineSettings({ dept }: { dept?: 'blow'|'print'|'rewin
       })
   }, [])
 
-  function openAddModal(section: 'blow'|'print' = activeTab) {
+  function openAddModal(section: 'blow'|'print'|'rewind' = activeTab) {
     setNewSection(section)
     setNewMachineNo(nextMachineNo(profiles.filter(p => (p.section??'blow') === section)))
     setShowAddModal(true)

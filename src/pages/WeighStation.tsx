@@ -224,7 +224,7 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
   profiles: MachineProfile[]
   onSelect: (p: MachineProfile) => void
   onProfileUpdated: () => void
-  dept?: 'blow' | 'print'
+  dept?: 'blow' | 'print' | 'rewind'
 }) {
   const [editing, setEditing] = useState<MachineProfile | null>(null)
   const [progress, setProgress] = useState<Record<string, { done: number; rolls: number }>>({})
@@ -1439,7 +1439,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
   )
 }
 
-export default function WeighStation({ dept }: { dept?: 'blow' | 'print' }) {
+export default function WeighStation({ dept }: { dept?: 'blow' | 'print' | 'rewind' }) {
   const [selected, setSelected] = useState<MachineProfile | null>(null)
   const [profiles, setProfiles] = useState<MachineProfile[]>(loadProfiles())
 

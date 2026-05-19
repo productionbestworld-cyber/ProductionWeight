@@ -179,7 +179,7 @@ function SOModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => voi
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────
-export default function Warehouse({ dept }: { dept?: 'blow'|'print' }) {
+export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   const [tab, setTab] = useState<Tab>('stock')
   const [rolls, setRolls] = useState<Roll[]>([])
   const [sos, setSOs] = useState<SO[]>([])
@@ -187,7 +187,7 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print' }) {
   const [showSOModal, setShowSOModal] = useState(false)
 
   // stock filters
-  const [fSection, setFSection] = useState<''|'blow'|'print'>(dept ?? '')
+  const [fSection, setFSection] = useState<''|'blow'|'print'|'rewind'>(dept ?? '')
   const [fProduct, setFProduct] = useState('')
   const [fCustomer, setFCustomer] = useState('')
   const [fLot, setFLot] = useState('')

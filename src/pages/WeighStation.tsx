@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Save, Printer, RefreshCw, CheckCircle2, ArrowLeft, Wind, X } from 'lucide-react'
+import { Save, Printer, RefreshCw, CheckCircle2, ArrowLeft, Wind, X, Settings } from 'lucide-react'
 import QRCode from 'react-qr-code'
 import QRCodeLib from 'qrcode'
 import { supabase } from '../lib/supabase'
@@ -112,7 +112,7 @@ html,body{font-family:'Sarabun','Tahoma',sans-serif;font-size:8.5pt;color:#000;b
       <div class="row"><span class="k">Lot No</span><span class="v">${p.lotNo}</span></div>
       <div class="row">
         <span class="k">Length</span><span class="v">${p.length||'—'}</span>
-        <span style="font-size:7.5pt">&nbsp;Ms.&nbsp;&nbsp;</span>
+        <span style="font-size:7.5pt">&nbsp;M.&nbsp;&nbsp;</span>
         <span class="v">${p.pcs||''}</span>
         <span style="font-size:7.5pt">&nbsp;Pcs.</span>
       </div>
@@ -132,38 +132,75 @@ html,body{font-family:'Sarabun','Tahoma',sans-serif;font-size:8.5pt;color:#000;b
 </div>`
 
   // ═══════════════════════════════════════════════════════
-  // ใบสั้น 76.2 × 76.2 mm (square)
+  // ใบสั้น 76.2 × 76.2 mm (square) — รายละเอียดครบเหมือนใบยาว
+  // หัวกระดาษ: ใช้ p.headerText (ว่าง = เว้น)
   // ═══════════════════════════════════════════════════════
+  const hdr = p.blankHeader ? '' : ((p.headerText || '').trim() || 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด')
+  const rollTypeLabel = rollType === 'bad' ? 'กรอ' : rollType === 'scrap_clear' ? 'เศษใส' : rollType === 'scrap_color' ? 'เศษสี' : rollType === 'scrap_lump' ? 'เศษก้อน' : ''
   const shortHtml = `
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{font-family:'Sarabun','Tahoma',sans-serif;font-size:7pt;color:#000;background:#fff;width:76.2mm;height:76.2mm}
-.page{width:76.2mm;height:76.2mm;padding:2mm;display:flex;flex-direction:column;border:1px solid #000}
-.lbl{font-size:5pt;color:#555}
-@media print{@page{size:76.2mm 76.2mm;margin:0}body{-webkit-print-color-adjust:exact}}
+html,body{font-family:'Sarabun','Tahoma',sans-serif;color:#000;background:#fff;width:76.2mm;height:76.2mm}
+.page{width:76.2mm;height:76.2mm;display:flex;flex-direction:column;border:1.5px solid #000;overflow:hidden}
+.hdr{text-align:center;font-size:8pt;font-weight:800;padding:1.3mm 2mm;border-bottom:1.5px solid #000}
+.hdr.bad{text-decoration:underline}
+.meta{display:flex;justify-content:space-between;border-bottom:1px solid #000;padding:.7mm 2mm;font-size:7pt}
+.meta b{font-size:8pt}
+.body{flex:1;padding:.8mm 2mm;display:flex;flex-direction:column;gap:0;overflow:hidden}
+.r{display:flex;justify-content:space-between;align-items:baseline;font-size:7pt;line-height:1.5}
+.r .k{color:#000;flex-shrink:0;min-width:18mm}
+.r .v{font-weight:700;text-align:right;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.r .v.xl{font-size:8pt;font-weight:900}
+.sep{border-top:1px solid #000;margin:.3mm 0}
+.wrow{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #000;border-bottom:1px solid #000;padding:1mm 2mm;margin-top:.5mm;flex-shrink:0}
+.wlbl{font-size:6pt;color:#000}
+.wval{font-size:20pt;font-weight:900;color:#000;line-height:1}
+.wunit{font-size:6.5pt;font-weight:800;color:#000}
+.wgross{font-size:6pt;color:#000;margin-top:.2mm}
+.foot{display:flex;justify-content:space-between;align-items:center;padding:.6mm 2mm;border-top:1px solid #000;flex-shrink:0}
+.inspector{font-size:7pt;font-weight:800}
+.bc{font-size:6pt;color:#000}
+@media print{@page{size:76.2mm 76.2mm;margin:0}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style>
 <div class="page">
-  <div style="text-align:center;font-size:7.5pt;font-weight:800;border-bottom:1px solid #000;padding-bottom:1mm;margin-bottom:1mm">
-    บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด
+
+  <div class="hdr">${hdr}${rollTypeLabel ? (hdr ? ' · ' : '') + rollTypeLabel : ''}&nbsp;</div>
+
+  <div class="meta">
+    <span>Mat&nbsp;<b>${p.matCode}</b></span>
+    <span>MFG&nbsp;<b>${mfgDate}</b></span>
+    <span>${rollType.startsWith('scrap') ? 'ถุง' : rollType==='bad' ? 'กรอ' : 'Roll'}&nbsp;<b>#${rollNo === 0 ? '—' : rollNo}</b></span>
   </div>
-  <div style="display:flex;justify-content:space-between;margin-bottom:1mm;font-size:6.5pt">
-    <span><b>Mat Code</b> ${p.matCode} &nbsp;|&nbsp; MFG ${mfgDate} &nbsp;|&nbsp; Roll <b>#${rollNo}</b></span>
-  </div>
-  <img src="${barcodeUrl(p.matCode,7)}" style="height:18px;margin-bottom:1mm;max-width:100%"/>
-  <div style="font-size:6pt;font-weight:600;margin-bottom:1mm;border-bottom:.5px solid #ccc;padding-bottom:1mm">
-    ${p.productName} · ${p.widthCm}cm×${p.thickMc}mc · Lot ${p.lotNo}
-  </div>
-  <div style="display:flex;gap:2mm;flex:1;align-items:center">
-    <div style="flex:1">
-      <div class="lbl">เครื่อง: <b style="font-size:7pt">${p.machine_no}</b></div>
-      <div style="margin-top:1mm"><div class="lbl">Net Weight</div>
-        <div style="font-weight:900;font-size:18pt;line-height:1;color:#003087">${fmt(net,dec)}</div>
-        <div style="font-size:5.5pt;color:#003087;font-weight:700">Kgs. &nbsp;<span style="color:#666">Gross ${fmt(gross,dec)}</span></div>
-      </div>
-      <div style="margin-top:1mm;font-size:6pt">ผู้ตรวจ: <b>${p.inspector}</b></div>
+
+  <div class="body">
+    <div class="r"><span class="k">Product</span><span class="v xl">${p.productName}</span></div>
+    <div class="r"><span class="k">Code</span><span class="v">${p.productCode || p.matCode}</span></div>
+    <div class="r"><span class="k">Size</span><span class="v">${p.widthCm} cm × ${p.thickMc} mc</span></div>
+    <div class="r"><span class="k">Lot No</span><span class="v">${p.lotNo}</span></div>
+    <div class="r"><span class="k">Length</span><span class="v">${p.length || '—'} M.${p.pcs ? ' · '+p.pcs+' Pcs.' : ''}</span></div>
+    <div class="sep"></div>
+    <div class="r">
+      <span class="k">เครื่อง</span><span class="v">${p.machine_no}</span>
+      <span style="margin:0 2mm;color:#ccc">|</span>
+      <span class="k" style="min-width:0">Core</span><span class="v">${fmt(core,dec)} Kg</span>
     </div>
-    <img src="${qrUrl(56)}" width="56" height="56" style="image-rendering:pixelated"/>
+
+    <div class="wrow">
+      <div>
+        <div class="wlbl">Net Weight</div>
+        <div class="wval">${fmt(net,dec)}</div>
+        <div class="wunit">Kgs.</div>
+        <div class="wgross">Gross ${fmt(gross,dec)} Kgs.</div>
+      </div>
+      <img src="${qrUrl(56)}" width="56" height="56" style="image-rendering:pixelated"/>
+    </div>
   </div>
+
+  <div class="foot">
+    <span class="bc">Barcode: _______________</span>
+    <span class="inspector">ผู้ตรวจ: ${p.inspector || '—'}</span>
+  </div>
+
 </div>`
 
   const W   = size === 'long' ? 165  : 76.2
@@ -190,7 +227,28 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
   dept?: 'blow' | 'print'
 }) {
   const [editing, setEditing] = useState<MachineProfile | null>(null)
-  // เรียงตามชื่อเครื่อง
+  const [progress, setProgress] = useState<Record<string, { done: number; rolls: number }>>({})
+
+  // โหลดยอดผลิตวันนี้ต่อเครื่อง
+  useEffect(() => {
+    const today = new Date(); today.setHours(0,0,0,0)
+    supabase.from('production_rolls')
+      .select('machine_no, lot_no, weight, roll_type')
+      .eq('roll_type', 'good')
+      .gte('created_at', today.toISOString())
+      .then(({ data }) => {
+        if (!data) return
+        const map: Record<string, { done: number; rolls: number }> = {}
+        data.forEach(r => {
+          const key = r.machine_no ?? ''
+          if (!map[key]) map[key] = { done: 0, rolls: 0 }
+          map[key].done  += r.weight ?? 0
+          map[key].rolls += 1
+        })
+        setProgress(map)
+      })
+  }, [])
+
   const sorted = [...profiles].sort((a,b) => (a.machine_no||'').localeCompare(b.machine_no||'', undefined, { numeric: true }))
 
   function isReady(p: MachineProfile) {
@@ -198,9 +256,9 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
   }
 
   return (
-    <div className="min-h-[calc(100vh-48px)] bg-[#0a0f1e] p-6">
-      <div className="max-w-6xl mx-auto">
-        <div className="mb-5">
+    <div className="h-[calc(100vh-48px)] bg-[#0a0f1e] p-3 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-0">
+        <div className="mb-2">
           <h1 className="text-white font-bold text-xl flex items-center gap-2">
             <Wind size={20} className="text-brand-400" />
             เลือกเครื่อง
@@ -214,53 +272,88 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
         </div>
 
         {/* Grid — แสดงทุกเครื่อง, size เท่ากันหมด */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-3 2xl:grid-cols-4 gap-2 flex-1 overflow-hidden" style={{gridTemplateRows:'repeat(3, 1fr)'}}>
           {sorted.map((p, i) => {
-            const ready = isReady(p)
+            const ready    = isReady(p)
+            const prog     = progress[p.machine_no] ?? { done: 0, rolls: 0 }
+            const planned  = parseFloat(p.plannedQty) || 0
+            const pct      = planned > 0 ? Math.min((prog.done / planned) * 100, 100) : 0
+            const remaining = Math.max(planned - prog.done, 0)
             return (
-              <button key={i}
-                onClick={() => ready ? onSelect(p) : setEditing(p)}
-                className={`h-48 rounded-2xl p-4 text-left transition-all active:scale-95 group flex flex-col ${
-                  ready
-                    ? 'bg-slate-900 border border-slate-700 hover:border-brand-500 hover:bg-brand-500/8'
-                    : 'bg-slate-900/40 border-2 border-dashed border-slate-700 hover:border-brand-500 hover:bg-slate-900'
-                }`}>
-                {/* Header */}
-                <div className="flex items-center justify-between mb-2.5">
-                  <div className={`w-14 h-14 rounded-xl flex items-center justify-center font-black text-lg ${
-                    ready
-                      ? 'bg-brand-600 text-white group-hover:bg-brand-500'
-                      : 'bg-slate-800 text-slate-500 border border-slate-700'
-                  }`}>
-                    {p.machine_no || '?'}
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    {ready ? (
-                      <span className="text-[10px] bg-green-500/15 text-green-400 px-2 py-0.5 rounded-full font-semibold">● พร้อมใช้</span>
-                    ) : (
-                      <span className="text-[10px] bg-slate-700 text-slate-400 px-2 py-0.5 rounded-full font-semibold">○ ว่าง</span>
-                    )}
-                  </div>
-                </div>
+              <div key={i} className={`rounded-2xl text-left transition-all group flex flex-col relative overflow-hidden ${
+                ready
+                  ? 'bg-slate-900 border border-slate-700 hover:border-brand-500'
+                  : 'bg-slate-900/40 border-2 border-dashed border-slate-700 hover:border-brand-500'
+              }`}>
+                {/* คลิกทั้ง card เพื่อชั่ง/กรอก */}
+                <button className="absolute inset-0 z-0" onClick={() => ready ? onSelect(p) : setEditing(p)}/>
 
-                {/* Content */}
-                {ready ? (
-                  <div className="flex-1 min-h-0">
-                    <p className="text-white font-semibold text-sm leading-tight line-clamp-2 mb-1">{p.productName}</p>
-                    <p className="text-slate-400 text-xs truncate">{p.custName}</p>
-                    <div className="flex gap-1 flex-wrap mt-2">
-                      <span className="text-[9px] bg-slate-800 text-slate-500 px-1.5 py-0.5 rounded">Lot {p.lotNo.slice(-6)}</span>
-                      {p.widthCm && <span className="text-[9px] bg-slate-800 text-slate-500 px-1.5 py-0.5 rounded">{p.widthCm}×{p.thickMc}mc</span>}
+                {/* ปุ่ม ⚙ */}
+                <button onClick={e => { e.stopPropagation(); setEditing(p) }}
+                  className="absolute top-2 right-2 z-10 w-6 h-6 rounded-lg bg-slate-700/80 hover:bg-slate-600 text-slate-400 hover:text-white flex items-center justify-center transition-all opacity-0 group-hover:opacity-100">
+                  <Settings size={11}/>
+                </button>
+
+                <div className="flex flex-col h-full relative z-0 pointer-events-none overflow-hidden">
+
+                  {/* ── Top bar: machine badge + status ── */}
+                  <div className={`flex items-center justify-between px-3 py-2.5 ${ready ? 'bg-brand-600/20 border-b border-brand-500/20' : 'bg-slate-800/40 border-b border-slate-700/40'}`}>
+                    <span className={`font-black text-lg tracking-wide ${ready ? 'text-brand-300' : 'text-slate-500'}`}>{p.machine_no}</span>
+                    {ready
+                      ? <span className="text-xs text-green-400 font-semibold flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-400 inline-block animate-pulse"/>พร้อม</span>
+                      : <span className="text-xs text-slate-500 font-semibold">ว่าง</span>}
+                  </div>
+
+                  {/* ── Content ── */}
+                  {ready ? (
+                    <div className="flex-1 px-3 py-2 flex flex-col gap-1.5 overflow-hidden">
+
+                      {/* สินค้า + ลูกค้า */}
+                      <div>
+                        <p className="text-white font-bold text-sm leading-tight line-clamp-1">{p.productName}</p>
+                        <p className="text-slate-400 text-xs truncate mt-0.5">{p.custName}</p>
+                      </div>
+
+                      {/* Lot + Size */}
+                      <div className="flex gap-1.5 flex-wrap">
+                        <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded font-mono border border-slate-700">Lot {p.lotNo.slice(-8)}</span>
+                        {p.widthCm && <span className="text-[10px] bg-brand-500/15 text-brand-300 border border-brand-500/25 px-2 py-0.5 rounded font-bold">{p.widthCm}×{p.thickMc}mc</span>}
+                      </div>
+
+                      {/* Mat + Inspector */}
+                      <div className="grid grid-cols-2 gap-x-2 text-xs bg-slate-800/40 rounded-lg px-2 py-1.5">
+                        <span className="text-slate-500">Mat</span><span className="text-slate-200 font-mono text-right">{p.matCode}</span>
+                        <span className="text-slate-500">ผู้ตรวจ</span><span className="text-slate-200 font-semibold text-right truncate">{p.inspector || '—'}</span>
+                      </div>
+
+                      {/* Progress */}
+                      {planned > 0 && (
+                        <div className="mt-auto">
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="text-green-400 font-bold">{prog.done.toFixed(1)} Kgs. · {prog.rolls} ม้วน</span>
+                            <span className={remaining <= 0 ? 'text-green-400 font-bold' : 'text-amber-400 font-bold'}>
+                              {remaining <= 0 ? '✓ ครบแล้ว' : `เหลือ ${remaining.toFixed(0)}`}
+                            </span>
+                          </div>
+                          <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-green-500' : pct >= 70 ? 'bg-amber-400' : 'bg-brand-500'}`}
+                              style={{ width: `${pct}%` }}/>
+                          </div>
+                          <p className="text-[10px] text-slate-500 mt-0.5 text-right">เป้า {planned.toLocaleString()} Kgs. ({pct.toFixed(0)}%)</p>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ) : (
-                  <div className="flex-1 flex flex-col items-center justify-center text-center">
-                    <p className="text-slate-500 text-xs">เครื่องว่าง</p>
-                    <p className="text-slate-600 text-[10px] mt-1">คลิกเพื่อกรอกข้อมูลงาน</p>
-                    <span className="mt-2 text-[10px] bg-brand-500/15 text-brand-300 border border-brand-500/30 px-3 py-1 rounded-full">+ กรอกข้อมูล</span>
-                  </div>
-                )}
-              </button>
+                  ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center text-center px-3 py-4">
+                      <div className="w-8 h-8 rounded-full border-2 border-dashed border-slate-700 flex items-center justify-center mb-2">
+                        <span className="text-slate-600 text-lg">+</span>
+                      </div>
+                      <p className="text-slate-500 text-xs font-medium">เครื่องว่าง</p>
+                      <p className="text-slate-600 text-[10px] mt-0.5">คลิกเพื่อกรอกข้อมูลงาน</p>
+                    </div>
+                  )}
+                </div>
+              </div>
             )
           })}
 
@@ -273,7 +366,6 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
           )}
         </div>
       </div>
-
       {/* Quick edit modal */}
       {editing && (
         <QuickEditModal profile={editing} onClose={() => setEditing(null)}
@@ -281,6 +373,32 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
       )}
     </div>
   )
+}
+
+// ── Suggestion store (จำค่าที่เคยกรอก ใน localStorage) ───────────────────────
+const SUG_KEY = 'bwp_field_suggestions'
+function loadSuggestions(field: string): string[] {
+  try {
+    const all = JSON.parse(localStorage.getItem(SUG_KEY) ?? '{}') as Record<string,string[]>
+    return all[field] ?? []
+  } catch { return [] }
+}
+function saveSuggestion(field: string, value: string) {
+  if (!value || !value.trim()) return
+  try {
+    const all = JSON.parse(localStorage.getItem(SUG_KEY) ?? '{}') as Record<string,string[]>
+    const list = all[field] ?? []
+    const filtered = list.filter(v => v !== value.trim())
+    all[field] = [value.trim(), ...filtered].slice(0, 20) // เก็บ 20 อันล่าสุด
+    localStorage.setItem(SUG_KEY, JSON.stringify(all))
+  } catch {}
+}
+function saveAllSuggestions(p: MachineProfile) {
+  const fields: (keyof MachineProfile)[] = [
+    'custCode','custName','custAddress','matCode','productCode','productName',
+    'widthCm','thickMc','length','pcs','coreWeight','inspector','plannedQty','headerText'
+  ]
+  fields.forEach(k => saveSuggestion(k, (p[k] as string) ?? ''))
 }
 
 // ── Quick Edit Modal (กรอกข้อมูลงานใหม่) ─────────────────────────────────────
@@ -294,10 +412,21 @@ function QuickEditModal({ profile, onClose, onSaved }: {
   const ok = p.machine_no && p.custName && p.productName && p.matCode && p.lotNo && p.plannedQty
 
   async function save() {
-    if (!ok) return
+    if (!ok) {
+      const missing = [
+        !p.machine_no  && 'หมายเลขเครื่อง',
+        !p.custName    && 'ชื่อลูกค้า',
+        !p.productName && 'ชื่อสินค้า',
+        !p.matCode     && 'Mat Code',
+        !p.lotNo       && 'Lot No',
+        !p.plannedQty  && 'ยอดสั่งผลิต',
+      ].filter(Boolean).join(', ')
+      alert('กรอกข้อมูลให้ครบก่อน: ' + missing)
+      return
+    }
     setSaving(true)
     try {
-      await supabase.from('machine_profiles').upsert({
+      const { error } = await supabase.from('machine_profiles').upsert({
         machine_no:    p.machine_no,
         cust_code:     p.custCode,
         cust_name:     p.custName,
@@ -316,21 +445,44 @@ function QuickEditModal({ profile, onClose, onSaved }: {
         locked:        p.locked,
         planned_qty:   p.plannedQty,
         label_size:    p.labelSize,
+        header_text:   p.headerText ?? '',
+        blank_header:  p.blankHeader ?? false,
+        section:       p.section ?? 'blow',
         updated_at:    new Date().toISOString(),
       }, { onConflict: 'machine_no' })
+      if (error) throw new Error(error.message)
+      saveAllSuggestions(p)
       onSaved()
     } catch (e: any) {
-      alert('บันทึกไม่สำเร็จ: ' + (e?.message ?? e))
+      alert('บันทึกไม่สำเร็จ: ' + (e?.message ?? JSON.stringify(e)))
     } finally { setSaving(false) }
   }
 
-  const Field = ({ label, k, ph, half }: { label: string; k: keyof MachineProfile; ph?: string; half?: boolean }) => (
-    <div className={half ? '' : 'col-span-2'}>
-      <label className="block text-[10px] text-slate-500 mb-1">{label}</label>
-      <input value={(p[k] as string) ?? ''} onChange={e => set(k, e.target.value)} placeholder={ph}
-        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-brand-500" />
-    </div>
-  )
+  // helper inline เพื่อไม่ให้ re-mount input
+  const inp = (label: string, k: keyof MachineProfile, ph = '', half = false) => {
+    const listId = `bwp-list-${k}`
+    const sugs = loadSuggestions(k)
+    return (
+      <div className={half ? '' : 'col-span-2'}>
+        <label className="block text-[10px] text-slate-500 mb-1" htmlFor={`bwp-${k}`}>{label}</label>
+        <input
+          id={`bwp-${k}`}
+          name={`bwp_${k}`}
+          autoComplete="on"
+          list={sugs.length > 0 ? listId : undefined}
+          value={(p[k] as string) ?? ''}
+          onChange={e => setP(prev => ({ ...prev, [k]: e.target.value }))}
+          placeholder={ph}
+          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-brand-500"
+        />
+        {sugs.length > 0 && (
+          <datalist id={listId}>
+            {sugs.map(s => <option key={s} value={s}/>)}
+          </datalist>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -346,43 +498,43 @@ function QuickEditModal({ profile, onClose, onSaved }: {
         <div className="px-5 py-4 overflow-y-auto space-y-3">
           <p className="text-brand-400 text-[10px] font-bold uppercase tracking-wider">ลูกค้า</p>
           <div className="grid grid-cols-2 gap-2">
-            <Field label="รหัสลูกค้า" k="custCode" ph="C-001" half />
+            {inp('รหัสลูกค้า', 'custCode', 'C-001', true)}
             <div>
               <label className="block text-[10px] text-slate-500 mb-1">ทศนิยม</label>
               <div className="flex gap-1">
                 {([1,2] as const).map(d => (
-                  <button key={d} onClick={() => set('decimal', d)}
+                  <button key={d} onMouseDown={e => { e.preventDefault(); setP(prev => ({...prev, decimal: d})) }}
                     className={`flex-1 py-1.5 rounded-lg text-xs font-bold ${p.decimal===d ? 'bg-brand-600 text-white' : 'bg-slate-800 text-slate-400'}`}>
                     {d} ตำแหน่ง
                   </button>
                 ))}
               </div>
             </div>
-            <Field label="ชื่อลูกค้า *" k="custName" ph="บริษัท ..." />
-            <Field label="ที่อยู่"      k="custAddress" ph="" />
+            {inp('ชื่อลูกค้า *', 'custName', 'บริษัท ...')}
+            {inp('ที่อยู่', 'custAddress', '')}
           </div>
 
           <p className="text-brand-400 text-[10px] font-bold uppercase tracking-wider pt-2">สินค้า</p>
           <div className="grid grid-cols-2 gap-2">
-            <Field label="Mat Code *"      k="matCode"     ph="60004224"      half />
-            <Field label="Product Code"    k="productCode" ph="60004224"      half />
-            <Field label="ชื่อสินค้า *"   k="productName" ph="PE Shrink Film" />
-            <Field label="กว้าง (cm)"     k="widthCm"     ph="45"             half />
-            <Field label="หนา (mc)"       k="thickMc"     ph="25"             half />
-            <Field label="Lot No *"       k="lotNo"       ph="69S0100010001"  half />
-            <Field label="Length (Ms.)"   k="length"      ph="4800"           half />
+            {inp('Mat Code *',     'matCode',     '60004224',      true)}
+            {inp('Product Code',   'productCode', '60004224',      true)}
+            {inp('ชื่อสินค้า *',  'productName', 'PE Shrink Film')}
+            {inp('กว้าง (cm)',    'widthCm',     '45',            true)}
+            {inp('หนา (mc)',      'thickMc',     '25',            true)}
+            {inp('Lot No *',      'lotNo',       '69S0100010001', true)}
+            {inp('Length (M.)',  'length',      '4800',          true)}
           </div>
 
           <p className="text-brand-400 text-[10px] font-bold uppercase tracking-wider pt-2">เครื่อง</p>
           <div className="grid grid-cols-2 gap-2">
-            <Field label="Core Weight (kg)"  k="coreWeight" ph="1.25" half />
-            <Field label="ผู้ตรวจสอบ"        k="inspector"  ph="" half />
-            <Field label="ยอดสั่งผลิต (kg) *" k="plannedQty" ph="5000" half />
+            {inp('Core Weight (kg)',   'coreWeight', '1.25', true)}
+            {inp('ผู้ตรวจสอบ',        'inspector',  '',     true)}
+            {inp('ยอดสั่งผลิต (kg) *','plannedQty', '5000', true)}
             <div>
               <label className="block text-[10px] text-slate-500 mb-1">ใบปะหน้า</label>
               <div className="flex gap-1">
                 {(['long','short'] as const).map(s => (
-                  <button key={s} onClick={() => set('labelSize', s)}
+                  <button key={s} onMouseDown={e => { e.preventDefault(); setP(prev => ({...prev, labelSize: s})) }}
                     className={`flex-1 py-1.5 rounded-lg text-xs font-semibold ${p.labelSize===s ? 'bg-brand-600 text-white' : 'bg-slate-800 text-slate-400'}`}>
                     {s === 'long' ? 'ยาว 165×70' : 'สั้น 76×76'}
                   </button>
@@ -390,6 +542,22 @@ function QuickEditModal({ profile, onClose, onSaved }: {
               </div>
             </div>
           </div>
+
+          {p.labelSize === 'short' && (
+            <div className="col-span-2 space-y-1.5">
+              <label className="flex items-center gap-2 cursor-pointer select-none"
+                onMouseDown={e => { e.preventDefault(); setP(prev => ({...prev, blankHeader: !prev.blankHeader})) }}>
+                <input type="checkbox" readOnly checked={!!p.blankHeader}
+                  className="w-4 h-4 accent-brand-500 pointer-events-none"/>
+                <span className="text-xs text-slate-300">เว้นหัวกระดาษว่าง (ไม่พิมพ์ชื่อบริษัท)</span>
+              </label>
+              {!p.blankHeader && (
+                <input value={p.headerText ?? ''} onChange={e => setP(prev => ({...prev, headerText: e.target.value}))}
+                  placeholder="ปล่อยว่าง = ใช้ชื่อบริษัท BWP"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-brand-500" />
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex gap-2 px-5 py-4 border-t border-slate-800 shrink-0">
@@ -1026,7 +1194,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                       className={`grid grid-cols-4 hover:bg-slate-800/40 cursor-pointer transition-colors ${isNew?'bg-green-500/5':''} ${isDone?'opacity-60':''}`}>
                       <div className={`px-3 py-2.5 text-xs ${isDone?'text-slate-600 line-through':'text-slate-500'}`}>{time}</div>
                       <div className="px-3 py-2.5">
-                        <span className={`font-bold font-mono ${isDone?'text-slate-500 line-through':'text-white'}`}>#{r.roll_no}</span>
+                        <span className={`font-bold font-mono ${isDone?'text-slate-500 line-through':'text-white'}`}>{r.roll_no}</span>
                         {isNew && <span className="ml-1 text-[9px] text-green-400">NEW</span>}
                         {isDone && <span className="ml-1 text-[9px] text-green-400">📦</span>}
                       </div>
@@ -1065,7 +1233,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                       className={`grid grid-cols-4 hover:bg-slate-800/40 cursor-pointer transition-colors ${isNew?'bg-orange-500/5':''}`}>
                       <div className="px-3 py-2.5 text-slate-500 text-xs">{time}</div>
                       <div className="px-3 py-2.5">
-                        <span className="text-orange-200 font-bold font-mono">#{r.roll_no}</span>
+                        <span className="text-orange-200 font-bold font-mono">{r.roll_no}</span>
                         {isNew && <span className="ml-1 text-[9px] text-orange-400">NEW</span>}
                       </div>
                       <div className="px-3 py-2.5 text-orange-300 font-black">{fmt(r.weight??0,dec)}</div>
@@ -1170,7 +1338,12 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       {showInspectorPrompt && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4">
           <div className="bg-slate-900 border-2 border-brand-500/40 rounded-2xl w-full max-w-md shadow-2xl">
-            <div className="px-6 py-5 text-center">
+            <div className="px-6 py-5 text-center relative">
+              {/* ปุ่ม X → กลับหน้าแรก */}
+              <button onClick={onBack}
+                className="absolute top-3 right-3 text-slate-500 hover:text-white w-7 h-7 rounded-lg hover:bg-slate-700 flex items-center justify-center transition-colors">
+                <X size={16}/>
+              </button>
               <div className="w-14 h-14 mx-auto rounded-full bg-brand-500/20 flex items-center justify-center mb-3">
                 <span className="text-3xl">👤</span>
               </div>
@@ -1179,23 +1352,16 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
               {isStale && inspector && (
                 <p className="text-amber-400 text-xs mt-2">⚠️ ผ่านมา {Math.floor(hoursSinceSet)} ชั่วโมง — เปลี่ยนกะหรือยัง?</p>
               )}
-
               <input value={inspectorInput} onChange={e => setInspectorInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') confirmInspector(inspectorInput) }}
                 placeholder="ชื่อผู้ตรวจสอบ..."
                 autoFocus
                 className="w-full mt-4 bg-slate-800 border-2 border-slate-700 rounded-xl px-4 py-3 text-white text-lg text-center outline-none focus:border-brand-500" />
             </div>
-            <div className="flex gap-2 px-6 py-4 border-t border-slate-800">
-              {inspector && (
-                <button onClick={() => setShowInspectorPrompt(false)}
-                  className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-400 py-2.5 rounded-xl text-sm">
-                  ยังเป็นคนเดิม ({inspector})
-                </button>
-              )}
+            <div className="px-6 py-4 border-t border-slate-800">
               <button onClick={() => confirmInspector(inspectorInput)}
                 disabled={!inspectorInput.trim()}
-                className="flex-1 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white py-2.5 rounded-xl font-bold transition-colors">
+                className="w-full bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white py-3 rounded-xl font-bold text-base transition-colors">
                 ✓ ยืนยัน
               </button>
             </div>
@@ -1210,7 +1376,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
             onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
               <div>
-                <p className="text-white font-bold">Roll #{selectedRoll.roll_no}</p>
+                <p className="text-white font-bold">Roll {selectedRoll.roll_no}</p>
                 <p className="text-slate-400 text-xs">{profile.machine_no} · {profile.lotNo}</p>
               </div>
               <button onClick={() => setSelectedRoll(null)}>
@@ -1242,7 +1408,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                   { k:'Mat Code',    v: profile.matCode,    mono:true },
                   { k:'Lot No',      v: profile.lotNo,      mono:true },
                   { k:'ขนาด',        v: profile.widthCm && profile.thickMc ? `${profile.widthCm} cm × ${profile.thickMc} mc` : '—' },
-                  { k:'ความยาว',     v: profile.length ? `${profile.length} Ms.` : '—' },
+                  { k:'ความยาว',     v: profile.length ? `${profile.length} M.` : '—' },
                   { k:'เครื่อง',     v: profile.machine_no },
                   { k:'ผู้ตรวจสอบ', v: selectedRoll.inspector || profile.inspector || '—' },
                   { k:'วันที่ชั่ง',  v: `${new Date(selectedRoll.created_at).toLocaleDateString('th-TH')} ${new Date(selectedRoll.created_at).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})}` },
@@ -1300,7 +1466,9 @@ export default function WeighStation({ dept }: { dept?: 'blow' | 'print' }) {
           locked:      r.locked       ?? false,
           plannedQty:  r.planned_qty  ?? '',
           labelSize:  (r.label_size   ?? 'long') as 'long'|'short',
-          section:    (r.section      ?? 'blow') as 'blow'|'print',
+          headerText:  r.header_text  ?? '',
+          blankHeader: r.blank_header ?? false,
+          section:    (r.section      ?? 'blow') as 'blow'|'print'|'rewind',
         }))
         setProfiles(list)
         saveProfiles(list)

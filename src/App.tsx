@@ -10,7 +10,7 @@ import HistoryPage from './pages/History'
 import Warehouse from './pages/Warehouse'
 
 type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings'
-type Dept = 'blow' | 'print'
+type Dept = 'blow' | 'print' | 'rewind'
 
 const DEPT_KEY = 'bwp_dept'
 
@@ -22,6 +22,7 @@ export default function App() {
     (localStorage.getItem(DEPT_KEY) as Dept) ?? 'blow'
   )
   const [page, setPage]               = useState<Page>('weigh')
+  const [weighKey, setWeighKey]       = useState(0)
   const [showDeptMenu, setShowDeptMenu] = useState(false)
   const deptRef = useRef<HTMLDivElement>(null)
 
@@ -74,8 +75,9 @@ export default function App() {
   }, [])
 
   const deptConfig = {
-    blow:  { emoji: '🌬', label: 'ฝั่งเป่า',  color: 'bg-blue-600',   badge: 'bg-blue-500/20 text-blue-300 border-blue-500/40' },
-    print: { emoji: '🖨', label: 'ฝั่งพิม',  color: 'bg-purple-600', badge: 'bg-purple-500/20 text-purple-300 border-purple-500/40' },
+    blow:   { emoji: '🌬', label: 'ฝั่งเป่า',  color: 'bg-blue-600',   badge: 'bg-blue-500/20 text-blue-300 border-blue-500/40',   sub: 'Blow Section' },
+    print:  { emoji: '🖨', label: 'ฝั่งพิม',  color: 'bg-purple-600', badge: 'bg-purple-500/20 text-purple-300 border-purple-500/40', sub: 'Print Section' },
+    rewind: { emoji: '🔁', label: 'ฝั่งกรอ',  color: 'bg-green-700',  badge: 'bg-green-500/20 text-green-300 border-green-500/40',   sub: 'Rewind Section' },
   }
   const dc = deptConfig[dept]
 
@@ -92,11 +94,11 @@ export default function App() {
     <div className="min-h-screen flex flex-col bg-[#0a0f1e]">
       <nav className="flex items-center gap-1 px-4 py-2 bg-slate-900 border-b border-slate-800 shrink-0">
 
-        {/* Logo */}
-        <div className="flex items-center gap-2 mr-3">
+        {/* Logo — กดกลับหน้าแรก */}
+        <button onClick={() => { setPage('weigh'); setWeighKey(k => k + 1) }} className="flex items-center gap-2 mr-3 hover:opacity-80 transition-opacity">
           <div className="w-7 h-7 rounded-lg bg-brand-600 flex items-center justify-center text-white font-black text-xs">BWP</div>
           <span className="text-white font-bold text-sm hidden sm:block">ระบบชั่งน้ำหนักม้วน</span>
-        </div>
+        </button>
 
         {/* Dept switcher — prominent */}
         <div className="relative mr-3" ref={deptRef}>
@@ -112,7 +114,7 @@ export default function App() {
               <div className="px-3 py-2 border-b border-slate-800">
                 <p className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold">เลือกฝั่งการผลิต</p>
               </div>
-              {(['blow','print'] as const).map(d => {
+              {(['blow','print','rewind'] as const).map(d => {
                 const c = deptConfig[d]
                 return (
                   <button key={d} onClick={() => switchDept(d)}
@@ -120,7 +122,7 @@ export default function App() {
                     <span className="text-xl">{c.emoji}</span>
                     <div className="text-left">
                       <p className={`font-bold text-sm ${dept===d ? 'text-white' : 'text-slate-300'}`}>{c.label}</p>
-                      <p className="text-slate-500 text-[10px]">{d === 'blow' ? 'Blow Section' : 'Print Section'}</p>
+                      <p className="text-slate-500 text-[10px]">{c.sub}</p>
                     </div>
                     {dept === d && <span className="ml-auto text-xs text-brand-400">● ใช้งานอยู่</span>}
                   </button>
@@ -162,7 +164,7 @@ export default function App() {
       </nav>
 
       <main className="flex-1 overflow-auto">
-        {page === 'weigh'     && <WeighStation dept={dept} />}
+        {page === 'weigh'     && <WeighStation key={weighKey} dept={dept} />}
         {page === 'transfer'  && <Transfer dept={dept} />}
         {page === 'warehouse' && <Warehouse dept={dept} />}
         {page === 'dashboard' && <Dashboard dept={dept} />}

@@ -13,7 +13,7 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit', year:'numeric' })
 }
 
-export default function History({ dept }: { dept?: 'blow'|'print' }) {
+export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   const [summaries, setSummaries] = useState<any[]>([])
   const [loading,   setLoading]   = useState(true)
   const [selected,  setSelected]  = useState<any|null>(null)
@@ -28,7 +28,7 @@ export default function History({ dept }: { dept?: 'blow'|'print' }) {
     let q = supabase.from('job_summaries').select('*').order('closed_at',{ ascending: false })
     if (dateFrom) q = q.gte('closed_at', dateFrom)
     if (dateTo)   q = q.lte('closed_at', dateTo + 'T23:59:59')
-    if (dept)     q = q.eq('section', dept)
+    if (dept)     q = q.or(`section.eq.${dept},section.is.null`)
     const { data } = await q
     setSummaries(data ?? [])
     setLoading(false)
@@ -63,9 +63,10 @@ export default function History({ dept }: { dept?: 'blow'|'print' }) {
 
   function exportCSV() {
     if (filtered.length === 0) return
-    const headers = ['วันที่ปิด','เครื่อง','ลูกค้า','สินค้า','Mat Code','Lot','สั่ง (kg)','ผลิตดี (kg)','ม้วนดี','กรอ (kg)','เศษ (kg)','โอน (kg)','Yield%','ผู้ปิด']
+    const headers = ['วันที่ปิด','เครื่อง','ลูกค้า','รหัสสินค้า','สินค้า','Mat Code','Lot','สั่ง (kg)','ผลิตดี (kg)','ม้วนดี','กรอ (kg)','เศษ (kg)','โอน (kg)','Yield%','ผู้ปิด']
     const rows = filtered.map(s => [
-      fmtDateTime(s.closed_at), s.machine_no, s.customer, s.product_name,
+      fmtDateTime(s.closed_at), s.machine_no, s.customer,
+      s.product_code ?? '', s.product_name,
       s.mat_code, s.lot_no,
       s.planned_qty, s.good_kg, s.good_rolls, s.bad_kg, s.scrap_kg, s.transferred_kg,
       s.yield_pct + '%', s.closed_by
@@ -89,8 +90,8 @@ export default function History({ dept }: { dept?: 'blow'|'print' }) {
               <HistoryIcon size={22} className="text-brand-400" /> ประวัติการผลิต
               {dept && (
                 <span className={`text-sm font-bold px-2.5 py-0.5 rounded-full border ${
-                  dept==='blow' ? 'bg-blue-500/15 text-blue-300 border-blue-500/30' : 'bg-purple-500/15 text-purple-300 border-purple-500/30'
-                }`}>{dept==='blow' ? '🌬 ฝั่งเป่า' : '🖨 ฝั่งพิม'}</span>
+                  dept==='blow' ? 'bg-blue-500/15 text-blue-300 border-blue-500/30' : dept==='print' ? 'bg-purple-500/15 text-purple-300 border-purple-500/30' : 'bg-green-500/15 text-green-300 border-green-500/30'
+                }`}>{dept==='blow' ? '🌬 ฝั่งเป่า' : dept==='print' ? '🖨 ฝั่งพิม' : '🔁 ฝั่งกรอ'}</span>
               )}
             </h1>
             <p className="text-slate-400 text-xs mt-0.5">งานที่ปิดแล้ว — ข้อมูลถาวร</p>

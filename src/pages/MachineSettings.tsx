@@ -27,15 +27,17 @@ export interface MachineProfile {
   plannedQty:  string
   // ใบปะหน้า
   labelSize:   'long' | 'short'
+  headerText:  string   // หัวกระดาษใบสั้น (กำหนดเอง)
+  blankHeader: boolean  // ติ๊ก = เว้นหัวว่าง
   // แผนก
-  section:     'blow' | 'print'
+  section:     'blow' | 'print' | 'rewind'
 }
 
 const EMPTY_PROFILE: MachineProfile = {
   machine_no:'', custCode:'', custName:'', custAddress:'', decimal:2,
   matCode:'', productCode:'', productName:'', widthCm:'', thickMc:'',
   lotNo:'', length:'', pcs:'', coreWeight:'1.25', inspector:'', locked:false,
-  plannedQty:'', labelSize:'long', section:'blow',
+  plannedQty:'', labelSize:'long', headerText:'', blankHeader:false, section:'blow',
 }
 
 function nextMachineNo(profiles: MachineProfile[]): string {
@@ -68,7 +70,9 @@ function dbToProfile(row: any): MachineProfile {
     locked:      row.locked       ?? true,
     plannedQty:  row.planned_qty  ?? '',
     labelSize:   (row.label_size  ?? 'long') as 'long'|'short',
-    section:     (row.section     ?? 'blow') as 'blow'|'print',
+    headerText:  row.header_text  ?? '',
+    blankHeader: row.blank_header ?? false,
+    section:     (row.section     ?? 'blow') as 'blow'|'print'|'rewind',
   }
 }
 function profileToDb(p: MachineProfile) {
@@ -91,6 +95,8 @@ function profileToDb(p: MachineProfile) {
     locked:        p.locked,
     planned_qty:   p.plannedQty,
     label_size:    p.labelSize,
+    header_text:   p.headerText,
+    blank_header:  p.blankHeader,
     section:       p.section,
     updated_at:    new Date().toISOString(),
   }
@@ -113,10 +119,11 @@ function ProfileCard({ p, i, onChange, onRemove }: {
 }) {
   const [open, setOpen] = useState(!p.machine_no)
 
-  const F = ({ label, k, ph, half }: { label: string; k: keyof MachineProfile; ph?: string; half?: boolean }) => (
+  // ใช้เป็น function call (ไม่ใช่ component) เพื่อป้องกัน focus หาย
+  const f = (label: string, k: keyof MachineProfile, ph = '', half = false) => (
     <div className={half ? '' : 'col-span-2'}>
       <label className="block text-[10px] text-slate-500 mb-1">{label}</label>
-      <input value={p[k] as string} onChange={e => onChange(k, e.target.value)} placeholder={ph}
+      <input value={(p[k] as string) ?? ''} onChange={e => onChange(k, e.target.value)} placeholder={ph}
         className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs outline-none focus:border-brand-500" />
     </div>
   )
@@ -159,10 +166,12 @@ function ProfileCard({ p, i, onChange, onRemove }: {
               <label className="block text-[10px] text-slate-500 mb-1">แผนก *</label>
               <div className="flex gap-1">
                 {([
-                  { key:'blow',  label:'🌬 ฝั่งเป่า' },
-                  { key:'print', label:'🖨 ฝั่งพิม' },
+                  { key:'blow',   label:'🌬 ฝั่งเป่า' },
+                  { key:'print',  label:'🖨 ฝั่งพิม' },
+                  { key:'rewind', label:'🔁 ฝั่งกรอ' },
                 ] as const).map(s => (
-                  <button key={s.key} onClick={() => onChange('section', s.key)}
+                  <button key={s.key}
+                    onMouseDown={e => { e.preventDefault(); onChange('section', s.key) }}
                     className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors ${
                       p.section === s.key ? 'bg-brand-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
                     }`}>
@@ -171,49 +180,49 @@ function ProfileCard({ p, i, onChange, onRemove }: {
                 ))}
               </div>
             </div>
-            <F label="หมายเลขเครื่อง *" k="machine_no" ph="BL01" half />
+            {f('หมายเลขเครื่อง *', 'machine_no', 'BL01', true)}
           </div>
 
           <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">ลูกค้า</p>
           <div className="grid grid-cols-2 gap-2">
-            <F label="รหัสลูกค้า" k="custCode" ph="C-001" half />
+            {f('รหัสลูกค้า', 'custCode', 'C-001', true)}
             <div>
               <label className="block text-[10px] text-slate-500 mb-1">ทศนิยม</label>
               <div className="flex gap-1">
                 {([1,2] as const).map(d => (
-                  <button key={d} onClick={() => onChange('decimal', d)}
+                  <button key={d} onMouseDown={e => { e.preventDefault(); onChange('decimal', d) }}
                     className={`flex-1 py-1.5 rounded-lg text-xs font-bold ${p.decimal===d ? 'bg-brand-600 text-white' : 'bg-slate-800 text-slate-400'}`}>
                     {d} ตำแหน่ง
                   </button>
                 ))}
               </div>
             </div>
-            <F label="ชื่อลูกค้า *" k="custName" ph="บริษัท ..." />
-            <F label="ที่อยู่"       k="custAddress" ph="ที่อยู่..." />
+            {f('ชื่อลูกค้า *', 'custName', 'บริษัท ...')}
+            {f('ที่อยู่', 'custAddress', 'ที่อยู่...')}
           </div>
 
           <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">สินค้า</p>
           <div className="grid grid-cols-2 gap-2">
-            <F label="Mat Code *"    k="matCode"     ph="60004224"      half />
-            <F label="Product Code"  k="productCode" ph="60004224"      half />
-            <F label="ชื่อสินค้า *" k="productName" ph="PET 1.45L RED SHRINK" />
-            <F label="กว้าง (cm)"   k="widthCm"     ph="57"            half />
-            <F label="หนา (mc)"     k="thickMc"     ph="80"            half />
-            <F label="Lot No *"     k="lotNo"       ph="69S0200010005" half />
-            <F label="Length (Ms.)" k="length"      ph="1360"          half />
-            <F label="Pcs."         k="pcs"         ph=""              half />
+            {f('Mat Code *',    'matCode',     '60004224',             true)}
+            {f('Product Code',  'productCode', '60004224',             true)}
+            {f('ชื่อสินค้า *', 'productName', 'PET 1.45L RED SHRINK'     )}
+            {f('กว้าง (cm)',   'widthCm',     '57',                   true)}
+            {f('หนา (mc)',     'thickMc',     '80',                   true)}
+            {f('Lot No *',     'lotNo',       '69S0200010005',        true)}
+            {f('Length (Ms.)', 'length',      '1360',                 true)}
+            {f('Pcs.',         'pcs',         '',                     true)}
           </div>
 
           <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">เครื่อง</p>
           <div className="grid grid-cols-2 gap-2">
-            <F label="Core Weight (kg)"    k="coreWeight"  ph="1.25"  half />
-            <F label="ผู้ตรวจสอบ"         k="inspector"   ph="เมทนี" half />
-            <F label="ยอดสั่งผลิต (kg) *" k="plannedQty"  ph="5000"  half />
+            {f('Core Weight (kg)',    'coreWeight', '1.25',  true)}
+            {f('ผู้ตรวจสอบ',         'inspector',  'เมทนี', true)}
+            {f('ยอดสั่งผลิต (kg) *', 'plannedQty', '5000',  true)}
             <div>
               <label className="block text-[10px] text-slate-500 mb-1">ใบปะหน้า (พิมพ์อัตโนมัติ)</label>
               <div className="flex gap-1">
                 {(['long','short'] as const).map(s => (
-                  <button key={s} onClick={() => onChange('labelSize', s)}
+                  <button key={s} onMouseDown={e => { e.preventDefault(); onChange('labelSize', s) }}
                     className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                       p.labelSize === s ? 'bg-brand-600 text-white' : 'bg-slate-800 text-slate-400'
                     }`}>
@@ -223,6 +232,23 @@ function ProfileCard({ p, i, onChange, onRemove }: {
               </div>
             </div>
           </div>
+
+          {/* หัวกระดาษใบสั้น */}
+          {p.labelSize === 'short' && (
+            <div className="space-y-1.5">
+              <label className="flex items-center gap-2 cursor-pointer select-none"
+                onMouseDown={e => { e.preventDefault(); onChange('blankHeader', !p.blankHeader) }}>
+                <input type="checkbox" readOnly checked={!!p.blankHeader}
+                  className="w-4 h-4 accent-brand-500 pointer-events-none"/>
+                <span className="text-xs text-slate-300">เว้นหัวกระดาษว่าง (ไม่พิมพ์ชื่อบริษัท)</span>
+              </label>
+              {!p.blankHeader && (
+                <input value={p.headerText ?? ''} onChange={e => onChange('headerText', e.target.value)}
+                  placeholder="ปล่อยว่าง = ใช้ชื่อบริษัท BWP"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs outline-none focus:border-brand-500" />
+              )}
+            </div>
+          )}
 
           <button onClick={onRemove}
             className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-red-400 transition-colors mt-1">
@@ -235,14 +261,14 @@ function ProfileCard({ p, i, onChange, onRemove }: {
 }
 
 // ─── Main Settings Page ───────────────────────────────────────────────────────
-export default function MachineSettings({ dept }: { dept?: 'blow'|'print' }) {
+export default function MachineSettings({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   const [profiles,     setProfiles]     = useState<MachineProfile[]>([])
   const [saved,        setSaved]        = useState(false)
   const [loading,      setLoading]      = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
   const [newMachineNo, setNewMachineNo] = useState('')
-  const [newSection,   setNewSection]   = useState<'blow'|'print'>(dept ?? 'blow')
-  const [activeTab,    setActiveTab]    = useState<'blow'|'print'>(dept ?? 'blow')
+  const [newSection,   setNewSection]   = useState<'blow'|'print'|'rewind'>(dept ?? 'blow')
+  const [activeTab,    setActiveTab]    = useState<'blow'|'print'|'rewind'>(dept ?? 'blow')
   const inputRef = useRef<HTMLInputElement>(null)
 
   // ถ้า dept เปลี่ยน (เช่นสลับฝั่งแล้วกดตั้งค่า) → sync tab
@@ -314,7 +340,7 @@ export default function MachineSettings({ dept }: { dept?: 'blow'|'print' }) {
             <div>
               <label className="block text-xs text-slate-400 mb-1.5">แผนก</label>
               <div className="flex gap-2 mb-3">
-                {([{key:'blow',label:'🌬 ฝั่งเป่า'},{key:'print',label:'🖨 ฝั่งพิม'}] as const).map(s=>(
+                {([{key:'blow',label:'🌬 ฝั่งเป่า'},{key:'print',label:'🖨 ฝั่งพิม'},{key:'rewind',label:'🔁 ฝั่งกรอ'}] as const).map(s=>(
                   <button key={s.key} onClick={() => setNewSection(s.key)}
                     className={`flex-1 py-2 rounded-xl text-sm font-bold transition-colors ${newSection===s.key?'bg-brand-600 text-white':'bg-slate-800 text-slate-400 hover:text-white'}`}>
                     {s.label}
@@ -367,24 +393,28 @@ export default function MachineSettings({ dept }: { dept?: 'blow'|'print' }) {
 
       {/* Tab switcher */}
       {(() => {
-        const blowProfiles  = profiles.filter(p => (p.section ?? 'blow') === 'blow')
-        const printProfiles = profiles.filter(p => p.section === 'print')
-        const blowReady     = blowProfiles.filter(p => p.machine_no && p.custName && p.productName && p.matCode && p.lotNo).length
-        const printReady    = printProfiles.filter(p => p.machine_no && p.custName && p.productName && p.matCode && p.lotNo).length
-        const sec           = activeTab
-        const secProfiles   = sec === 'blow' ? blowProfiles : printProfiles
+        const blowProfiles   = profiles.filter(p => (p.section ?? 'blow') === 'blow')
+        const printProfiles  = profiles.filter(p => p.section === 'print')
+        const rewindProfiles = profiles.filter(p => p.section === 'rewind')
+        const rdy = (arr: typeof profiles) => arr.filter(p => p.machine_no && p.custName && p.productName && p.matCode && p.lotNo).length
+        const blowReady   = rdy(blowProfiles)
+        const printReady  = rdy(printProfiles)
+        const rewindReady = rdy(rewindProfiles)
+        const sec         = activeTab
+        const secProfiles = sec === 'blow' ? blowProfiles : sec === 'print' ? printProfiles : rewindProfiles
 
         return (<>
           {/* Tab buttons — ถ้า dept ถูก lock แสดงแค่ฝั่งเดียว */}
           <div className="flex gap-2">
             {([
-              { key:'blow',  emoji:'🌬', label:'ฝั่งเป่า',  count: blowProfiles.length,  ready: blowReady,  color:'blue' },
-              { key:'print', emoji:'🖨', label:'ฝั่งพิม',   count: printProfiles.length, ready: printReady, color:'purple' },
+              { key:'blow',   emoji:'🌬', label:'ฝั่งเป่า', count: blowProfiles.length,   ready: blowReady,   border:'border-blue-500',   bg:'bg-blue-500/10',   badge:'bg-blue-500/20 text-blue-300' },
+              { key:'print',  emoji:'🖨', label:'ฝั่งพิม',  count: printProfiles.length,  ready: printReady,  border:'border-purple-500', bg:'bg-purple-500/10', badge:'bg-purple-500/20 text-purple-300' },
+              { key:'rewind', emoji:'🔁', label:'ฝั่งกรอ',  count: rewindProfiles.length, ready: rewindReady, border:'border-green-500',  bg:'bg-green-500/10',  badge:'bg-green-500/20 text-green-300' },
             ] as const).filter(t => !dept || t.key === dept).map(t => (
-              <button key={t.key} onClick={() => !dept && setActiveTab(t.key)}
+              <button key={t.key} onClick={() => setActiveTab(t.key)}
                 className={`flex-1 flex items-center justify-between px-5 py-3.5 rounded-2xl border-2 transition-all ${
-                  t.color === 'blue' ? 'border-blue-500 bg-blue-500/10' : 'border-purple-500 bg-purple-500/10'
-                } ${dept ? 'cursor-default' : 'cursor-pointer'}`}>
+                  activeTab === t.key ? `${t.border} ${t.bg}` : 'border-slate-700 bg-slate-800/30 hover:border-slate-600'
+                } cursor-pointer`}>
                 <div className="flex items-center gap-3">
                   <span className="text-2xl">{t.emoji}</span>
                   <div className="text-left">
@@ -392,7 +422,7 @@ export default function MachineSettings({ dept }: { dept?: 'blow'|'print' }) {
                     <p className="text-slate-400 text-xs">{t.count} เครื่อง · <span className="text-green-400">{t.ready}/{t.count} พร้อม</span></p>
                   </div>
                 </div>
-                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${t.color==='blue'?'bg-blue-500/20 text-blue-300':'bg-purple-500/20 text-purple-300'}`}>
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${t.badge}`}>
                   {dept ? 'ฝั่งนี้' : 'เปิดอยู่'}
                 </span>
               </button>
@@ -403,7 +433,7 @@ export default function MachineSettings({ dept }: { dept?: 'blow'|'print' }) {
           <div className="space-y-3">
             {secProfiles.length === 0 ? (
               <div className="bg-slate-900 border border-slate-800 rounded-2xl py-12 text-center">
-                <p className="text-slate-500 text-sm">ยังไม่มีเครื่อง{sec==='blow'?'เป่า':'พิม'}</p>
+                <p className="text-slate-500 text-sm">ยังไม่มีเครื่อง{sec==='blow'?'เป่า':sec==='print'?'พิม':'กรอ'}</p>
                 <button onClick={() => openAddModal(sec)} className="mt-3 text-brand-400 text-xs hover:text-brand-300">+ เพิ่มเครื่องแรก</button>
               </div>
             ) : (
@@ -414,7 +444,7 @@ export default function MachineSettings({ dept }: { dept?: 'blow'|'print' }) {
             )}
             <button onClick={() => openAddModal(sec)}
               className="w-full border-2 border-dashed border-slate-700 hover:border-brand-500 text-slate-500 hover:text-brand-400 py-3 rounded-2xl text-sm flex items-center justify-center gap-2 transition-colors">
-              <Plus size={15}/> เพิ่มเครื่อง{sec === 'blow' ? 'เป่า' : 'พิม'}
+              <Plus size={15}/> เพิ่มเครื่อง{sec === 'blow' ? 'เป่า' : sec === 'print' ? 'พิม' : 'กรอ'}
             </button>
           </div>
         </>)

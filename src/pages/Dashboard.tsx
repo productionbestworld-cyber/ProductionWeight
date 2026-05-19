@@ -27,8 +27,8 @@ type Roll = {
   lot_no: string
   product_name: string
   customer: string
-  size: string
-  grade: string
+  width_cm?: string
+  thick_mc?: string
   created_at: string
   roll_no: number
 }
@@ -59,7 +59,7 @@ function CustomTooltip({ active, payload, label }: any) {
   )
 }
 
-export default function Dashboard({ dept }: { dept?: 'blow'|'print' }) {
+export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   const [rolls,   setRolls]   = useState<Roll[]>([])
   const [loading, setLoading] = useState(true)
   const [tab,     setTab]     = useState<Tab>('overview')
@@ -70,7 +70,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print' }) {
     const d = new Date(); d.setDate(1); return toDateStr(d)
   })
   const [dateTo,    setDateTo]    = useState(today)
-  const [fSection,  setFSection]  = useState<''|'blow'|'print'>(dept ?? '')
+  const [fSection,  setFSection]  = useState<''|'blow'|'print'|'rewind'>(dept ?? '')
   const [fMachine,  setFMachine]  = useState('')
   const [fCustomer, setFCustomer] = useState('')
   const [fSize,     setFSize]     = useState('')
@@ -82,7 +82,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print' }) {
     const to   = new Date(dateTo);   to.setHours(23,59,59,999)
     const { data } = await supabase
       .from('production_rolls')
-      .select('id,roll_type,weight,machine_no,lot_no,product_name,customer,size,grade,created_at,roll_no,section')
+      .select('id,roll_type,weight,machine_no,lot_no,product_name,customer,width_cm,thick_mc,created_at,roll_no,section')
       .gte('created_at', from.toISOString())
       .lte('created_at', to.toISOString())
       .order('created_at', { ascending: true })
@@ -90,42 +90,75 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print' }) {
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [dateFrom, dateTo])
+  const [countdown, setCountdown] = useState(30)
+
+  // polling ทุก 30 วินาที
+  useEffect(() => {
+    load()
+    setCountdown(30)
+    const interval = setInterval(() => {
+      // silent reload — ไม่แสดง loading spinner
+      const from = new Date(dateFrom); from.setHours(0,0,0,0)
+      const to   = new Date(dateTo);   to.setHours(23,59,59,999)
+      supabase
+        .from('production_rolls')
+        .select('id,roll_type,weight,machine_no,lot_no,product_name,customer,width_cm,thick_mc,created_at,roll_no,section')
+        .gte('created_at', from.toISOString())
+        .lte('created_at', to.toISOString())
+        .order('created_at', { ascending: true })
+        .then(({ data }) => { if (data) setRolls(data as Roll[]) })
+      setCountdown(30)
+    }, 30_000)
+    // countdown timer
+    const ticker = setInterval(() => setCountdown(c => c <= 1 ? 30 : c - 1), 1_000)
+    return () => { clearInterval(interval); clearInterval(ticker) }
+  }, [dateFrom, dateTo])
 
   // dropdown options
   const machines  = useMemo(() => Array.from(new Set(rolls.map(r => r.machine_no).filter(Boolean))).sort(), [rolls])
   const customers = useMemo(() => Array.from(new Set(rolls.map(r => r.customer).filter(Boolean))).sort(), [rolls])
-  const sizes     = useMemo(() => Array.from(new Set(rolls.map(r => r.size).filter(Boolean))).sort(), [rolls])
-  const grades    = useMemo(() => Array.from(new Set(rolls.map(r => r.grade).filter(Boolean))).sort(), [rolls])
+  const sizes  = useMemo(() => Array.from(new Set(rolls.map(r => r.width_cm && r.thick_mc ? `${r.width_cm}cm×${r.thick_mc}mc` : '').filter(Boolean))).sort(), [rolls])
+  const grades = useMemo(() => [] as string[], [])
 
   // filtered
   const filtered = useMemo(() => rolls.filter(r =>
-    (!fSection  || (r as any).section === fSection) &&
+    (!fSection  || ((r as any).section ?? 'blow') === fSection) &&
     (!fMachine  || r.machine_no === fMachine) &&
     (!fCustomer || r.customer   === fCustomer) &&
-    (!fSize     || r.size       === fSize) &&
-    (!fGrade    || r.grade      === fGrade)
-  ), [rolls, fSection, fMachine, fCustomer, fSize, fGrade])
+    (!fSize  || (r.width_cm && r.thick_mc ? `${r.width_cm}cm×${r.thick_mc}mc` : '') === fSize)
+  ), [rolls, fSection, fMachine, fCustomer, fSize])
 
-  const fg     = useMemo(() => filtered.filter(r => r.roll_type === 'good'), [filtered])
-  const scrap  = useMemo(() => filtered.filter(r => r.roll_type === 'scrap'), [filtered])
-  const rework = useMemo(() => filtered.filter(r => r.roll_type === 'rework'), [filtered])
+  // roll_type จริง: good | bad | scrap_clear | scrap_color | scrap_lump
+  const fg          = useMemo(() => filtered.filter(r => r.roll_type === 'good'), [filtered])
+  const bad         = useMemo(() => filtered.filter(r => r.roll_type === 'bad'), [filtered])
+  const scrapClear  = useMemo(() => filtered.filter(r => r.roll_type === 'scrap_clear'), [filtered])
+  const scrapColor  = useMemo(() => filtered.filter(r => r.roll_type === 'scrap_color'), [filtered])
+  const scrapLump   = useMemo(() => filtered.filter(r => r.roll_type === 'scrap_lump'), [filtered])
+  const allScrap    = useMemo(() => [...scrapClear, ...scrapColor, ...scrapLump], [scrapClear, scrapColor, scrapLump])
 
-  const fgKg     = useMemo(() => fg.reduce((s, r) => s + (r.weight ?? 0), 0), [fg])
-  const scrapKg  = useMemo(() => scrap.reduce((s, r) => s + (r.weight ?? 0), 0), [scrap])
-  const reworkKg = useMemo(() => rework.reduce((s, r) => s + (r.weight ?? 0), 0), [rework])
-  const totalKg  = fgKg + scrapKg + reworkKg
+  const kg = (arr: typeof filtered) => arr.reduce((s, r) => s + (r.weight ?? 0), 0)
+
+  const fgKg         = useMemo(() => kg(fg),         [fg])
+  const badKg        = useMemo(() => kg(bad),        [bad])
+  const scrapClearKg = useMemo(() => kg(scrapClear), [scrapClear])
+  const scrapColorKg = useMemo(() => kg(scrapColor), [scrapColor])
+  const scrapLumpKg  = useMemo(() => kg(scrapLump),  [scrapLump])
+  const allScrapKg   = useMemo(() => kg(allScrap),   [allScrap])
+  const totalKg      = fgKg + badKg + allScrapKg
 
   // per-machine chart data
   const machineData = useMemo(() => {
     const keys = Array.from(new Set(filtered.map(r => r.machine_no).filter(Boolean))).sort()
     return keys.map(m => {
       const rows = filtered.filter(r => r.machine_no === m)
+      const w = (t: string) => rows.filter(r => r.roll_type === t).reduce((s, r) => s + r.weight, 0)
       return {
-        machine: m,
-        FG:       rows.filter(r => r.roll_type === 'good').reduce((s, r) => s + r.weight, 0),
-        ของเสีย:  rows.filter(r => r.roll_type === 'scrap').reduce((s, r) => s + r.weight, 0),
-        ซ่อม:    rows.filter(r => r.roll_type === 'rework').reduce((s, r) => s + r.weight, 0),
+        machine:  m,
+        FG:       w('good'),
+        ม้วนกรอ: w('bad'),
+        เศษใส:   w('scrap_clear'),
+        เศษสี:   w('scrap_color'),
+        เศษก้อน: w('scrap_lump'),
       }
     })
   }, [filtered])
@@ -158,28 +191,30 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print' }) {
   const machineSummary = useMemo(() => {
     const keys = Array.from(new Set(filtered.map(r => r.machine_no).filter(Boolean))).sort()
     return keys.map(m => {
-      const rows   = filtered.filter(r => r.machine_no === m)
-      const fgRows = rows.filter(r => r.roll_type === 'good')
-      const scRows = rows.filter(r => r.roll_type === 'scrap')
-      const rwRows = rows.filter(r => r.roll_type === 'rework')
-      const fgKg   = fgRows.reduce((s, r) => s + r.weight, 0)
-      const scKg   = scRows.reduce((s, r) => s + r.weight, 0)
-      const rwKg   = rwRows.reduce((s, r) => s + r.weight, 0)
-      const tot    = fgKg + scKg + rwKg
-      return { machine: m, fgKg, scKg, rwKg, tot, fgRolls: fgRows.length,
-        scPct: tot ? (scKg / tot * 100) : 0,
-        rwPct: tot ? (rwKg / tot * 100) : 0,
+      const rows  = filtered.filter(r => r.machine_no === m)
+      const w     = (t: string) => rows.filter(r => r.roll_type === t).reduce((s, r) => s + r.weight, 0)
+      const fgKg  = w('good')
+      const badKg = w('bad')
+      const scClear = w('scrap_clear'), scColor = w('scrap_color'), scLump = w('scrap_lump')
+      const scKg  = scClear + scColor + scLump
+      const tot   = fgKg + badKg + scKg
+      return {
+        machine: m,
+        fgKg, fgRolls: rows.filter(r => r.roll_type === 'good').length,
+        badKg, scKg, scClear, scColor, scLump, tot,
+        badPct: tot ? (badKg / tot * 100) : 0,
+        scPct:  tot ? (scKg  / tot * 100) : 0,
       }
     })
   }, [filtered])
 
   function resetFilters() {
-    setFMachine(''); setFCustomer(''); setFSize(''); setFGrade('')
+    setFMachine(''); setFCustomer(''); setFSize('')
     const d = new Date(); d.setDate(1)
     setDateFrom(toDateStr(d)); setDateTo(today)
   }
 
-  const hasFilter = fMachine || fCustomer || fSize || fGrade
+  const hasFilter = fMachine || fCustomer || fSize
 
   // ── render ────────────────────────────────────────────────────────────────
   return (
@@ -213,28 +248,25 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print' }) {
             <div>
               <label className="block text-[10px] text-gray-500 mb-1 font-semibold uppercase tracking-wider">ตัวกรองข้อมูล</label>
               <div className="flex gap-3 flex-wrap items-end">
-                {/* Section badge or toggle */}
-                {dept ? (
-                  <div className="self-end pb-0.5">
-                    <span className={`text-xs font-bold px-3 py-1.5 rounded-lg border ${
-                      dept==='blow' ? 'bg-blue-50 text-blue-600 border-blue-300' : 'bg-purple-50 text-purple-600 border-purple-300'
-                    }`}>
-                      {dept==='blow' ? '🌬 ฝั่งเป่า' : '🖨 ฝั่งพิม'}
-                    </span>
+                {/* Section toggle — เลือกได้เสมอ */}
+                <div>
+                  <label className="block text-[10px] text-gray-400 mb-0.5">ฝั่งผลิต</label>
+                  <div className="flex gap-1">
+                    {([
+                      { val:'',       label:'ทั้งหมด', active:'bg-gray-600 text-white border-gray-600' },
+                      { val:'blow',   label:'🌬 เป่า',  active:'bg-blue-500 text-white border-blue-500' },
+                      { val:'print',  label:'🖨 พิม',   active:'bg-purple-500 text-white border-purple-500' },
+                      { val:'rewind', label:'🔁 กรอ',   active:'bg-green-600 text-white border-green-600' },
+                    ] as const).map(s=>(
+                      <button key={s.val} onClick={() => setFSection(s.val)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                          fSection===s.val ? s.active : 'bg-white text-gray-500 border-gray-300 hover:border-gray-400'
+                        }`}>
+                        {s.label}
+                      </button>
+                    ))}
                   </div>
-                ) : (
-                  <div>
-                    <label className="block text-[10px] text-gray-400 mb-0.5">ฝั่งผลิต</label>
-                    <div className="flex gap-1">
-                      {([{val:'',label:'ทั้งหมด'},{val:'blow',label:'🌬 เป่า'},{val:'print',label:'🖨 พิม'}] as const).map(s=>(
-                        <button key={s.val} onClick={() => setFSection(s.val)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${fSection===s.val?'bg-blue-500 text-white border-blue-500':'bg-white text-gray-500 border-gray-300 hover:border-blue-400'}`}>
-                          {s.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                </div>
                 <div>
                   <label className="block text-[10px] text-gray-400 mb-0.5">ตั้งแต่วันที่</label>
                   <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
@@ -248,8 +280,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print' }) {
                 {[
                   { label:'เครื่องจักร', val: fMachine,  set: setFMachine,  opts: machines,  all:'ทั้งหมด' },
                   { label:'ลูกค้า',      val: fCustomer, set: setFCustomer, opts: customers, all:'ทั้งหมด' },
-                  { label:'ขนาด',        val: fSize,     set: setFSize,     opts: sizes,     all:'ทั้งหมด' },
-                  { label:'เกรด',        val: fGrade,    set: setFGrade,    opts: grades,    all:'ทั้งหมด' },
+                  { label:'ขนาด',   val: fSize,  set: setFSize,  opts: sizes,  all:'ทั้งหมด' },
                 ].map(f => (
                   <div key={f.label}>
                     <label className="block text-[10px] text-gray-400 mb-0.5">{f.label}</label>
@@ -269,56 +300,95 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print' }) {
               <RotateCcw size={12}/> ล้างค่า (Reset)
             </button>
           </div>
-          {loading && <p className="text-xs text-blue-500 mt-2">กำลังโหลด...</p>}
+          <div className="flex items-center gap-3 mt-2">
+            {loading && <p className="text-xs text-blue-500">กำลังโหลด...</p>}
+            <div className="flex items-center gap-1.5 text-xs text-gray-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block"/>
+              อัพเดตอัตโนมัติทุก 30 วิ
+              <button onClick={() => load()}
+                className="ml-1 text-blue-500 hover:text-blue-700 font-semibold underline underline-offset-2">
+                รีเฟรชเดี๋ยวนี้
+              </button>
+              <span className="text-gray-300">·</span>
+              <span>อีก <b className="text-gray-600">{countdown}</b> วิ</span>
+            </div>
+          </div>
         </div>
 
         {/* ════════════════════════════════ TAB: OVERVIEW ══════════════════════════════ */}
         {tab === 'overview' && (<>
 
-          {/* KPI cards */}
+          {/* KPI cards row 1 */}
           <div className="grid grid-cols-4 gap-4">
             {/* FG */}
-            <div className="bg-white rounded-xl border-l-4 border-blue-500 border border-gray-200 shadow-sm p-5">
-              <p className="text-xs text-gray-500 font-medium">FG</p>
+            <div className="bg-white rounded-xl border-l-4 border-blue-500 border border-gray-200 shadow-sm p-4">
+              <p className="text-xs text-gray-500 font-medium">✅ FG (ม้วนดี)</p>
               <p className="text-3xl font-black text-gray-800 mt-1">
-                {fmtKg(fgKg)} <span className="text-base font-semibold text-gray-500">kg</span>
+                {fmtKg(fgKg)} <span className="text-sm font-semibold text-gray-400">kg</span>
               </p>
-              <p className="text-blue-500 text-xs mt-1">{fg.length.toLocaleString()} ม้วน</p>
+              <p className="text-blue-500 text-xs mt-1">{fg.length} ม้วน</p>
             </div>
-            {/* Total Output */}
-            <div className="bg-white rounded-xl border-l-4 border-purple-500 border border-gray-200 shadow-sm p-5">
-              <p className="text-xs text-gray-500 font-medium">Total Output</p>
+            {/* Total + Yield */}
+            <div className="bg-white rounded-xl border-l-4 border-purple-500 border border-gray-200 shadow-sm p-4">
+              <p className="text-xs text-gray-500 font-medium">📦 Total Output</p>
               <p className="text-3xl font-black text-gray-800 mt-1">
-                {fmtKg(totalKg)} <span className="text-base font-semibold text-gray-500">kg</span>
+                {fmtKg(totalKg)} <span className="text-sm font-semibold text-gray-400">kg</span>
               </p>
-              <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-purple-500 to-red-400 rounded-full"
-                  style={{ width: totalKg ? `${Math.min((fgKg/totalKg)*100, 100)}%` : '0%' }}/>
+              <div className="mt-1.5 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full bg-blue-500 rounded-full"
+                  style={{ width: totalKg ? `${Math.min((fgKg/totalKg)*100,100)}%` : '0%' }}/>
               </div>
-              <div className="flex justify-between text-[10px] mt-1 text-gray-400">
-                <span>FG: {totalKg ? (fgKg/totalKg*100).toFixed(2) : 0}%</span>
-                <span>สูญเสีย: {totalKg ? ((scrapKg+reworkKg)/totalKg*100).toFixed(2) : 0}%</span>
-              </div>
-            </div>
-            {/* Scrap */}
-            <div className="bg-white rounded-xl border-l-4 border-red-500 border border-gray-200 shadow-sm p-5">
-              <p className="text-xs text-gray-500 font-medium">Scrap</p>
-              <p className="text-3xl font-black text-gray-800 mt-1">
-                {fmtKg(scrapKg)} <span className="text-base font-semibold text-gray-500">kg</span>
-              </p>
-              <p className="text-red-500 text-xs mt-1">
-                {fgKg ? (scrapKg/fgKg*100).toFixed(2) : '0.00'}% ของ FG
+              <p className="text-[10px] text-gray-400 mt-0.5">
+                FG {totalKg ? (fgKg/totalKg*100).toFixed(1) : 0}% · สูญเสีย {totalKg ? ((badKg+allScrapKg)/totalKg*100).toFixed(1) : 0}%
               </p>
             </div>
-            {/* Rework */}
-            <div className="bg-white rounded-xl border-l-4 border-orange-400 border border-gray-200 shadow-sm p-5">
-              <p className="text-xs text-gray-500 font-medium">Rework</p>
+            {/* ม้วนกรอ */}
+            <div className="bg-white rounded-xl border-l-4 border-orange-500 border border-gray-200 shadow-sm p-4">
+              <p className="text-xs text-gray-500 font-medium">🔄 ม้วนกรอ</p>
               <p className="text-3xl font-black text-gray-800 mt-1">
-                {fmtKg(reworkKg)} <span className="text-base font-semibold text-gray-500">kg</span>
+                {fmtKg(badKg)} <span className="text-sm font-semibold text-gray-400">kg</span>
               </p>
               <p className="text-orange-500 text-xs mt-1">
-                {fgKg ? (reworkKg/fgKg*100).toFixed(2) : '0.00'}% ของ FG
+                {bad.length} ม้วน · {fgKg ? (badKg/fgKg*100).toFixed(2) : '0.00'}% ของ FG
               </p>
+            </div>
+            {/* เศษรวม */}
+            <div className="bg-white rounded-xl border-l-4 border-red-500 border border-gray-200 shadow-sm p-4">
+              <p className="text-xs text-gray-500 font-medium">🗑 เศษรวม</p>
+              <p className="text-3xl font-black text-gray-800 mt-1">
+                {fmtKg(allScrapKg)} <span className="text-sm font-semibold text-gray-400">kg</span>
+              </p>
+              <p className="text-red-500 text-xs mt-1">
+                {fgKg ? (allScrapKg/fgKg*100).toFixed(2) : '0.00'}% ของ FG
+              </p>
+            </div>
+          </div>
+
+          {/* KPI cards row 2 — เศษแยกประเภท */}
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex items-center gap-4">
+              <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-lg flex-shrink-0">🫙</div>
+              <div>
+                <p className="text-xs text-gray-500">เศษใส</p>
+                <p className="text-xl font-black text-gray-800">{fmtKg(scrapClearKg)} <span className="text-xs font-normal text-gray-400">kg</span></p>
+                <p className="text-gray-400 text-[10px]">{scrapClear.length} ครั้ง · {fgKg ? (scrapClearKg/fgKg*100).toFixed(2) : 0}% ของ FG</p>
+              </div>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex items-center gap-4">
+              <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center text-lg flex-shrink-0">🎨</div>
+              <div>
+                <p className="text-xs text-gray-500">เศษสี</p>
+                <p className="text-xl font-black text-gray-800">{fmtKg(scrapColorKg)} <span className="text-xs font-normal text-gray-400">kg</span></p>
+                <p className="text-gray-400 text-[10px]">{scrapColor.length} ครั้ง · {fgKg ? (scrapColorKg/fgKg*100).toFixed(2) : 0}% ของ FG</p>
+              </div>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex items-center gap-4">
+              <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-lg flex-shrink-0">🧱</div>
+              <div>
+                <p className="text-xs text-gray-500">เศษก้อน</p>
+                <p className="text-xl font-black text-gray-800">{fmtKg(scrapLumpKg)} <span className="text-xs font-normal text-gray-400">kg</span></p>
+                <p className="text-gray-400 text-[10px]">{scrapLump.length} ครั้ง · {fgKg ? (scrapLumpKg/fgKg*100).toFixed(2) : 0}% ของ FG</p>
+              </div>
             </div>
           </div>
 
@@ -341,8 +411,10 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print' }) {
                     <Tooltip content={<CustomTooltip/>}/>
                     <Legend wrapperStyle={{ fontSize: 11 }}/>
                     <Bar dataKey="FG"      fill="#3b82f6" radius={[3,3,0,0]} label={{ position:'top', formatter:(v:any)=>fmtKg(Number(v)), fontSize: 9, fill:'#555' }}/>
-                    <Bar dataKey="ของเสีย" fill="#ef4444" radius={[3,3,0,0]} label={{ position:'top', formatter:(v:any)=>fmtKg(Number(v)), fontSize: 9, fill:'#555' }}/>
-                    <Bar dataKey="ซ่อม"   fill="#f97316" radius={[3,3,0,0]} label={{ position:'top', formatter:(v:any)=>fmtKg(Number(v)), fontSize: 9, fill:'#555' }}/>
+                    <Bar dataKey="ม้วนกรอ" fill="#f97316" radius={[3,3,0,0]} label={{ position:'top', formatter:(v:any)=>fmtKg(Number(v)), fontSize: 9, fill:'#555' }}/>
+                    <Bar dataKey="เศษใส"  fill="#ef4444" radius={[3,3,0,0]} label={{ position:'top', formatter:(v:any)=>fmtKg(Number(v)), fontSize: 9, fill:'#555' }}/>
+                    <Bar dataKey="เศษสี"  fill="#a855f7" radius={[3,3,0,0]} label={{ position:'top', formatter:(v:any)=>fmtKg(Number(v)), fontSize: 9, fill:'#555' }}/>
+                    <Bar dataKey="เศษก้อน" fill="#d97706" radius={[3,3,0,0]} label={{ position:'top', formatter:(v:any)=>fmtKg(Number(v)), fontSize: 9, fill:'#555' }}/>
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -379,34 +451,36 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print' }) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200 text-[11px] text-gray-500 uppercase tracking-wider">
-                    {['เครื่องจักร','FG (kg)','FG (ม้วน)','Scrap (kg)','Scrap %','Rework (kg)','Rework %','Total (kg)'].map(h => (
-                      <th key={h} className="px-4 py-2.5 text-left font-semibold">{h}</th>
+                    {['เครื่อง','FG (kg)','ม้วน','กรอ (kg)','กรอ%','เศษใส','เศษสี','เศษก้อน','เศษรวม%','Total (kg)'].map(h => (
+                      <th key={h} className="px-3 py-2.5 text-left font-semibold">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {machineSummary.length === 0
-                    ? <tr><td colSpan={8} className="px-4 py-10 text-center text-gray-400">ไม่มีข้อมูล</td></tr>
+                    ? <tr><td colSpan={10} className="px-4 py-10 text-center text-gray-400">ไม่มีข้อมูล</td></tr>
                     : machineSummary.map(row => (
                       <tr key={row.machine} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-4 py-2.5">
+                        <td className="px-3 py-2.5">
                           <span className="bg-blue-100 text-blue-700 font-bold text-xs px-2 py-0.5 rounded">{row.machine}</span>
                         </td>
-                        <td className="px-4 py-2.5 font-bold text-blue-600">{num(row.fgKg, 1)}</td>
-                        <td className="px-4 py-2.5 text-gray-600">{row.fgRolls.toLocaleString()}</td>
-                        <td className="px-4 py-2.5 text-red-500">{num(row.scKg, 1)}</td>
-                        <td className="px-4 py-2.5">
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${row.scPct > 5 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                            {row.scPct.toFixed(2)}%
+                        <td className="px-3 py-2.5 font-bold text-blue-600">{num(row.fgKg, 1)}</td>
+                        <td className="px-3 py-2.5 text-gray-500">{row.fgRolls}</td>
+                        <td className="px-3 py-2.5 text-orange-500">{num(row.badKg, 1)}</td>
+                        <td className="px-3 py-2.5">
+                          <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${row.badPct > 5 ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'}`}>
+                            {row.badPct.toFixed(1)}%
                           </span>
                         </td>
-                        <td className="px-4 py-2.5 text-orange-500">{num(row.rwKg, 1)}</td>
-                        <td className="px-4 py-2.5">
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${row.rwPct > 10 ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'}`}>
-                            {row.rwPct.toFixed(2)}%
+                        <td className="px-3 py-2.5 text-slate-500">{num(row.scClear, 1)}</td>
+                        <td className="px-3 py-2.5 text-purple-500">{num(row.scColor, 1)}</td>
+                        <td className="px-3 py-2.5 text-amber-600">{num(row.scLump, 1)}</td>
+                        <td className="px-3 py-2.5">
+                          <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${row.scPct > 5 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                            {row.scPct.toFixed(1)}%
                           </span>
                         </td>
-                        <td className="px-4 py-2.5 font-bold text-gray-700">{num(row.tot, 1)}</td>
+                        <td className="px-3 py-2.5 font-bold text-gray-700">{num(row.tot, 1)}</td>
                       </tr>
                     ))
                   }
@@ -414,14 +488,16 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print' }) {
                 {machineSummary.length > 0 && (
                   <tfoot>
                     <tr className="bg-gray-100 border-t-2 border-gray-300 font-bold text-sm">
-                      <td className="px-4 py-2.5 text-gray-700">รวมทั้งหมด</td>
-                      <td className="px-4 py-2.5 text-blue-600">{num(fgKg, 1)}</td>
-                      <td className="px-4 py-2.5 text-gray-600">{fg.length.toLocaleString()}</td>
-                      <td className="px-4 py-2.5 text-red-500">{num(scrapKg, 1)}</td>
-                      <td className="px-4 py-2.5 text-gray-600">{totalKg ? (scrapKg/totalKg*100).toFixed(2) : 0}%</td>
-                      <td className="px-4 py-2.5 text-orange-500">{num(reworkKg, 1)}</td>
-                      <td className="px-4 py-2.5 text-gray-600">{totalKg ? (reworkKg/totalKg*100).toFixed(2) : 0}%</td>
-                      <td className="px-4 py-2.5 text-gray-800">{num(totalKg, 1)}</td>
+                      <td className="px-3 py-2.5 text-gray-700">รวม</td>
+                      <td className="px-3 py-2.5 text-blue-600">{num(fgKg, 1)}</td>
+                      <td className="px-3 py-2.5 text-gray-600">{fg.length}</td>
+                      <td className="px-3 py-2.5 text-orange-500">{num(badKg, 1)}</td>
+                      <td className="px-3 py-2.5 text-gray-500">{totalKg ? (badKg/totalKg*100).toFixed(1) : 0}%</td>
+                      <td className="px-3 py-2.5 text-slate-500">{num(scrapClearKg, 1)}</td>
+                      <td className="px-3 py-2.5 text-purple-500">{num(scrapColorKg, 1)}</td>
+                      <td className="px-3 py-2.5 text-amber-600">{num(scrapLumpKg, 1)}</td>
+                      <td className="px-3 py-2.5 text-gray-500">{totalKg ? (allScrapKg/totalKg*100).toFixed(1) : 0}%</td>
+                      <td className="px-3 py-2.5 text-gray-800">{num(totalKg, 1)}</td>
                     </tr>
                   </tfoot>
                 )}
@@ -447,8 +523,10 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print' }) {
                   <Tooltip content={<CustomTooltip/>}/>
                   <Legend wrapperStyle={{ fontSize: 11 }}/>
                   <Bar dataKey="FG"      fill="#3b82f6" radius={[3,3,0,0]} label={{ position:'top', formatter:(v:any)=>fmtKg(Number(v)), fontSize: 8, fill:'#666' }}/>
-                  <Bar dataKey="ของเสีย" fill="#ef4444" radius={[3,3,0,0]}/>
-                  <Bar dataKey="ซ่อม"   fill="#f97316" radius={[3,3,0,0]}/>
+                  <Bar dataKey="ม้วนกรอ"  fill="#f97316" radius={[3,3,0,0]}/>
+                  <Bar dataKey="เศษใส"   fill="#ef4444" radius={[3,3,0,0]}/>
+                  <Bar dataKey="เศษสี"   fill="#a855f7" radius={[3,3,0,0]}/>
+                  <Bar dataKey="เศษก้อน" fill="#d97706" radius={[3,3,0,0]}/>
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -470,8 +548,10 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print' }) {
                   <Tooltip content={<CustomTooltip/>}/>
                   <Legend wrapperStyle={{ fontSize: 11 }}/>
                   <Bar dataKey="FG"      fill="#3b82f6" radius={[3,3,0,0]}/>
-                  <Bar dataKey="ของเสีย" fill="#ef4444" radius={[3,3,0,0]}/>
-                  <Bar dataKey="ซ่อม"   fill="#f97316" radius={[3,3,0,0]}/>
+                  <Bar dataKey="ม้วนกรอ"  fill="#f97316" radius={[3,3,0,0]}/>
+                  <Bar dataKey="เศษใส"   fill="#ef4444" radius={[3,3,0,0]}/>
+                  <Bar dataKey="เศษสี"   fill="#a855f7" radius={[3,3,0,0]}/>
+                  <Bar dataKey="เศษก้อน" fill="#d97706" radius={[3,3,0,0]}/>
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -489,7 +569,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print' }) {
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-gray-50 border-b border-gray-200 z-10">
                   <tr className="text-[10px] text-gray-500 uppercase tracking-wider">
-                    {['เวลาชั่ง','เครื่อง','ม้วนที่','ประเภท','สินค้า','ลูกค้า','Lot','ขนาด','เกรด','นน.สุทธิ (Kgs.)'].map(h => (
+                    {['เวลาชั่ง','เครื่อง','ม้วนที่','ประเภท','สินค้า','ลูกค้า','Lot','ขนาด','นน.สุทธิ (Kgs.)'].map(h => (
                       <th key={h} className="px-4 py-2.5 text-left font-semibold whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -518,8 +598,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print' }) {
                         <td className="px-4 py-2 text-gray-600 text-xs max-w-[150px] truncate">{r.product_name||'—'}</td>
                         <td className="px-4 py-2 text-gray-600 text-xs">{r.customer||'—'}</td>
                         <td className="px-4 py-2 text-gray-500 text-xs">{r.lot_no||'—'}</td>
-                        <td className="px-4 py-2 text-gray-500 text-xs">{r.size||'—'}</td>
-                        <td className="px-4 py-2 text-gray-500 text-xs">{r.grade||'—'}</td>
+                        <td className="px-4 py-2 text-gray-500 text-xs">{r.width_cm && r.thick_mc ? `${r.width_cm}×${r.thick_mc}mc` : '—'}</td>
                         <td className="px-4 py-2 font-black text-blue-600">{num(r.weight)}</td>
                       </tr>
                     ))

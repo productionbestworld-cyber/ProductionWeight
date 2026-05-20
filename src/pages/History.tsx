@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { History as HistoryIcon, Search, RefreshCw, X, FileText, Download, Trash2 } from 'lucide-react'
+import { History as HistoryIcon, Search, RefreshCw, X, FileText, Download, Trash2, Activity } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 function fmt(n: number | null | undefined, d = 2) {
@@ -22,14 +22,31 @@ export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   const [machineFilter, setMachineFilter] = useState<string>('')
   const [dateFrom, setDateFrom]   = useState('')
   const [dateTo,   setDateTo]     = useState('')
-  const [tab, setTab]             = useState<'history'|'deleted'>('history')
+  const [tab, setTab]             = useState<'history'|'deleted'|'machinelog'>('history')
   const [deletedLogs, setDeletedLogs] = useState<any[]>([])
   const [loadingDel,  setLoadingDel]  = useState(false)
+  const [machineLog,  setMachineLog]  = useState<any[]>([])
+  const [loadingLog,  setLoadingLog]  = useState(false)
+  const [machineProfiles, setMachineProfiles] = useState<Record<string,string>>({})
+
+  async function loadMachineLog() {
+    setLoadingLog(true)
+    let q = supabase.from('machine_job_log').select('*')
+    if (dept) q = q.eq('section', dept)
+    const { data } = await q
+    setMachineLog(data ?? [])
+    // โหลด lot ปัจจุบันของแต่ละเครื่อง
+    const { data: profiles } = await supabase.from('machine_profiles').select('machine_no,lot_no')
+    const map: Record<string,string> = {}
+    profiles?.forEach(p => { if (p.machine_no) map[p.machine_no] = p.lot_no ?? '' })
+    setMachineProfiles(map)
+    setLoadingLog(false)
+  }
 
   async function loadDeletedLogs() {
     setLoadingDel(true)
     let q = supabase.from('roll_deletion_logs').select('*').order('deleted_at', { ascending: false })
-    if (dept) q = q.eq('machine_no', dept) // optional filter
+    if (dept) q = q.eq('machine_no', dept)
     const { data } = await q
     setDeletedLogs(data ?? [])
     setLoadingDel(false)
@@ -125,11 +142,80 @@ export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
             className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-t-lg transition-colors ${tab==='history' ? 'bg-slate-800 text-white border-b-2 border-brand-500' : 'text-slate-500 hover:text-white'}`}>
             <HistoryIcon size={13}/> ประวัติผลิต
           </button>
+          <button onClick={() => { setTab('machinelog'); loadMachineLog() }}
+            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-t-lg transition-colors ${tab==='machinelog' ? 'bg-slate-800 text-green-400 border-b-2 border-green-500' : 'text-slate-500 hover:text-green-400'}`}>
+            <Activity size={13}/> Log เครื่อง
+          </button>
           <button onClick={() => { setTab('deleted'); loadDeletedLogs() }}
             className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-t-lg transition-colors ${tab==='deleted' ? 'bg-slate-800 text-red-400 border-b-2 border-red-500' : 'text-slate-500 hover:text-red-400'}`}>
             <Trash2 size={13}/> Log การลบม้วน
           </button>
         </div>
+
+        {/* ── Tab: Log เครื่อง ── */}
+        {tab === 'machinelog' && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+              <p className="text-sm font-semibold text-green-400 flex items-center gap-2"><Activity size={14}/>Log การทำงานของเครื่อง</p>
+              <button onClick={loadMachineLog} className="text-slate-500 hover:text-white text-xs flex items-center gap-1">
+                <RefreshCw size={11}/> รีเฟรช
+              </button>
+            </div>
+            {loadingLog ? (
+              <div className="py-8 text-center text-slate-500 text-sm">กำลังโหลด...</div>
+            ) : machineLog.length === 0 ? (
+              <div className="py-8 text-center text-slate-600 text-sm">ยังไม่มีข้อมูล</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-slate-500 bg-slate-800/30">
+                      {['สถานะ','เครื่อง','สินค้า','Lot','เริ่มชั่ง (ม้วนแรก)','ชั่งล่าสุด','ม้วนดี','ม้วนกรอ','น้ำหนักดี (Kgs.)'].map(h=>(
+                        <th key={h} className="px-3 py-2 text-left font-semibold whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/50">
+                    {machineLog.map((r,i) => {
+                      const isRunning = machineProfiles[r.machine_no] === r.lot_no
+                      const duration  = r.started_at && r.last_roll_at
+                        ? Math.round((new Date(r.last_roll_at).getTime() - new Date(r.started_at).getTime()) / 60000)
+                        : null
+                      return (
+                        <tr key={i} className={`hover:bg-slate-800/30 ${isRunning ? 'bg-green-500/3' : ''}`}>
+                          <td className="px-3 py-2.5">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              isRunning ? 'bg-green-500/20 text-green-400' : 'bg-slate-700 text-slate-400'
+                            }`}>
+                              {isRunning ? '● กำลังเดิน' : '■ จบแล้ว'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <span className="font-black text-white bg-brand-600/30 px-2 py-0.5 rounded text-xs">{r.machine_no}</span>
+                          </td>
+                          <td className="px-3 py-2.5 text-slate-200 max-w-[160px] truncate">{r.product_name || '—'}</td>
+                          <td className="px-3 py-2.5 text-slate-400 font-mono text-[10px]">{r.lot_no}</td>
+                          <td className="px-3 py-2.5 text-slate-300 whitespace-nowrap">
+                            {r.started_at ? fmtDateTime(r.started_at) : '—'}
+                          </td>
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            <div className="text-slate-300">{r.last_roll_at ? fmtDateTime(r.last_roll_at) : '—'}</div>
+                            {duration !== null && (
+                              <div className="text-[10px] text-slate-500">{duration < 60 ? `${duration} นาที` : `${Math.floor(duration/60)} ชม. ${duration%60} นาที`}</div>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5 text-green-300 font-bold">{r.good_rolls ?? 0}</td>
+                          <td className="px-3 py-2.5 text-orange-300">{r.bad_rolls ?? 0}</td>
+                          <td className="px-3 py-2.5 text-brand-300 font-black">{fmt(r.good_kg ?? 0)}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Tab: Log การลบ ── */}
         {tab === 'deleted' && (

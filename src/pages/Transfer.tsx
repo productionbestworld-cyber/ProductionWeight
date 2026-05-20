@@ -260,7 +260,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
     .filter(r => !machine || r.machine_no === machine)
     .map(r => r.lot_no).filter(Boolean))).sort()
 
-  // จำนวน job ที่กำลังผลิตอยู่ (machine + lot ที่ยังไม่โอนหมด)
+  // เฉพาะ job ที่ยังมีม้วนรอโอน (pending > 0) เท่านั้น
   const jobs = Array.from(new Set(
     rolls.map(r => `${r.machine_no}__${r.lot_no}`).filter(j => !j.includes('null'))
   )).map(key => {
@@ -269,7 +269,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
     const pending  = jobRolls.filter(r => !r.transferred).length
     const sample   = jobRolls[0]
     return { machine_no: mNo, lot_no: lot, product: sample?.product_name, customer: sample?.customer, total: jobRolls.length, pending }
-  })
+  }).filter(j => j.pending > 0)  // ← ซ่อน job ที่โอนครบแล้ว
 
   const filtered = rolls.filter(r => {
     if (!showDone && r.transferred) return false

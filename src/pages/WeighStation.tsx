@@ -326,27 +326,36 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
   const [editing, setEditing] = useState<MachineProfile | null>(null)
   const [progress, setProgress] = useState<Record<string, { done: number; rolls: number }>>({})
 
-  // โหลดยอดผลิตต่อเครื่อง — filter ตาม lot_no ของแต่ละ profile
+  // โหลดยอดผลิตต่อเครื่อง — ดึงตาม machine_no + lot_no ปัจจุบัน
   useEffect(() => {
     if (profiles.length === 0) return
-    const lotNos = profiles.map(p => p.lotNo).filter(Boolean)
-    if (lotNos.length === 0) return
+    const machineNos = profiles.map(p => p.machine_no).filter(Boolean)
+    if (machineNos.length === 0) return
+
     supabase.from('production_rolls')
       .select('machine_no, lot_no, weight, roll_type')
       .eq('roll_type', 'good')
-      .in('lot_no', lotNos)
+      .in('machine_no', machineNos)
       .then(({ data }) => {
         if (!data) return
+        // สร้าง map lot_no ปัจจุบันต่อเครื่อง
+        const lotMap: Record<string, string> = {}
+        profiles.forEach(p => { if (p.machine_no && p.lotNo) lotMap[p.machine_no] = p.lotNo })
+
         const map: Record<string, { done: number; rolls: number }> = {}
         data.forEach(r => {
           const key = r.machine_no ?? ''
+          const curLot = lotMap[key]
+          // ถ้ามี lot ปัจจุบัน ให้นับเฉพาะ lot นั้น
+          if (curLot && r.lot_no !== curLot) return
           if (!map[key]) map[key] = { done: 0, rolls: 0 }
           map[key].done  += r.weight ?? 0
           map[key].rolls += 1
         })
         setProgress(map)
       })
-  }, [profiles])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profiles.length, profiles.map(p=>p.machine_no+p.lotNo).join(',')])
 
   const sorted = [...profiles].sort((a,b) => (a.machine_no||'').localeCompare(b.machine_no||'', undefined, { numeric: true }))
 
@@ -750,13 +759,12 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
   const pct       = planned > 0 ? Math.min(100, Math.round((weighedKg / planned) * 100)) : 0
   const done      = planned > 0 && weighedKg >= planned
 
-  useEffect(() => {
-    const today = new Date(); today.setHours(0,0,0,0)
+  // โหลดม้วนทั้งหมดของ machine+lot นี้
+  function loadRollsForMachine() {
     supabase.from('production_rolls')
       .select('*')
       .eq('machine_no', profile.machine_no)
       .eq('lot_no', profile.lotNo)
-      .gte('created_at', today.toISOString())
       .order('created_at', { ascending: true })
       .then(({ data, error }) => {
         if (error) { console.warn('load rolls error:', error.message); return }
@@ -771,9 +779,27 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
         setRollNo(lastRollNo + 1)
         setBadRollNo(lastBadRollNo + 1)
       })
+  }
+
+  useEffect(() => {
+    loadRollsForMachine()
     setStable(true)
-    return () => { if (timerRef.current) clearInterval(timerRef.current) }
-  }, [])
+
+    // Realtime: อัปเดตสถานะ transferred ทันทีเมื่อโอนจากหน้าอื่น
+    const channel = supabase.channel(`rolls-${profile.machine_no}-${profile.lotNo}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'production_rolls',
+        filter: `machine_no=eq.${profile.machine_no}`,
+      }, () => { loadRollsForMachine() })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+      if (timerRef.current) clearInterval(timerRef.current)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function startIdle() {
     if (timerRef.current) clearInterval(timerRef.current)
@@ -1293,11 +1319,16 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                 {[...weighedRolls].filter((r:any)=>r.roll_type==='good').reverse().map((r:any) => {
                   const isNew  = lastRoll?.id === r.id
                   const isDone = r.transferred
-                  const time   = new Date(r.created_at).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})
+                  const d      = new Date(r.created_at)
+                  const dateShort = `${d.getDate()}/${d.getMonth()+1}`
+                  const time   = d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})
                   return (
                     <div key={r.id} onClick={()=>setSelectedRoll(r)}
                       className={`grid grid-cols-4 hover:bg-slate-800/40 cursor-pointer transition-colors ${isNew?'bg-green-500/5':''} ${isDone?'opacity-60':''}`}>
-                      <div className={`px-3 py-2.5 text-xs ${isDone?'text-slate-600 line-through':'text-slate-500'}`}>{time}</div>
+                      <div className={`px-3 py-2.5 text-xs leading-tight ${isDone?'text-slate-600 line-through':'text-slate-500'}`}>
+                        <div className="text-[9px] text-slate-600">{dateShort}</div>
+                        <div>{time}</div>
+                      </div>
                       <div className="px-3 py-2.5">
                         <span className={`font-bold font-mono ${isDone?'text-slate-500 line-through':'text-white'}`}>{r.roll_no}</span>
                         {isNew && <span className="ml-1 text-[9px] text-green-400">NEW</span>}
@@ -1332,11 +1363,16 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
               <div className="flex-1 overflow-y-auto divide-y divide-slate-800/40">
                 {[...weighedRolls].filter((r:any)=>r.roll_type==='bad').reverse().map((r:any) => {
                   const isNew = lastRoll?.id === r.id
-                  const time  = new Date(r.created_at).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})
+                  const d2    = new Date(r.created_at)
+                  const dateShort2 = `${d2.getDate()}/${d2.getMonth()+1}`
+                  const time  = d2.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})
                   return (
                     <div key={r.id} onClick={()=>setSelectedRoll(r)}
                       className={`grid grid-cols-4 hover:bg-slate-800/40 cursor-pointer transition-colors ${isNew?'bg-orange-500/5':''}`}>
-                      <div className="px-3 py-2.5 text-slate-500 text-xs">{time}</div>
+                      <div className="px-3 py-2.5 text-slate-500 text-xs leading-tight">
+                        <div className="text-[9px] text-slate-600">{dateShort2}</div>
+                        <div>{time}</div>
+                      </div>
                       <div className="px-3 py-2.5">
                         <span className="text-orange-200 font-bold font-mono">{r.roll_no}</span>
                         {isNew && <span className="ml-1 text-[9px] text-orange-400">NEW</span>}

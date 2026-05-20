@@ -239,10 +239,8 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
 
   async function loadRolls() {
     setLoading(true)
-    const today = new Date(); today.setHours(0,0,0,0)
     let q = supabase.from('production_rolls')
       .select('*').eq('roll_type','good')
-      .gte('created_at', today.toISOString())
       .order('created_at',{ ascending: false })
     if (dept) q = q.or(`section.eq.${dept},section.is.null`)
     const { data } = await q

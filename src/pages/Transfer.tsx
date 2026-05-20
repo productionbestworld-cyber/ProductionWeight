@@ -310,6 +310,11 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
       const transferTime = new Date().toISOString()
       const docNo        = `TR-${Date.now().toString().slice(-8)}`
 
+      // รวบรวม machine_no / product_name / lot_no จากม้วนที่เลือก
+      const machines    = [...new Set(selectedRolls.map(r => r.machine_no).filter(Boolean))]
+      const products    = [...new Set(selectedRolls.map(r => r.product_name).filter(Boolean))]
+      const lots        = [...new Set(selectedRolls.map(r => r.lot_no).filter(Boolean))]
+
       // 1. สร้าง transfer_document
       const { data: doc, error: docErr } = await supabase.from('transfer_documents').insert({
         doc_no:         docNo,
@@ -317,6 +322,9 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
         transferred_at: transferTime,
         total_kg:       parseFloat(totalKg.toFixed(2)),
         total_rolls:    selected.size,
+        machine_no:     machines.join(', '),
+        product_name:   products.join(', '),
+        lot_no:         lots.join(', '),
       }).select().single()
       if (docErr) throw docErr
 
@@ -443,15 +451,31 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                     const isSel = selectedDoc?.id === d.id
                     return (
                       <button key={d.id} onClick={() => openDoc(d)} className={`w-full text-left px-4 py-3 transition-colors ${isSel ? 'bg-brand-600/20 border-l-2 border-brand-500' : 'hover:bg-slate-800/50'}`}>
+                        {/* row 1: doc_no + total kg */}
                         <div className="flex items-center justify-between mb-0.5">
                           <span className="text-brand-300 font-mono font-bold text-xs">{d.doc_no}</span>
                           <span className="text-green-300 font-black text-sm">{fmt(d.total_kg)} Kgs.</span>
                         </div>
+                        {/* row 2: machine + product */}
+                        {(d.machine_no || d.product_name) && (
+                          <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                            {d.machine_no && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-brand-500/20 text-brand-300">{d.machine_no}</span>
+                            )}
+                            {d.product_name && (
+                              <span className="text-[10px] text-slate-300 truncate max-w-[140px]">{d.product_name}</span>
+                            )}
+                          </div>
+                        )}
+                        {/* row 3: lot */}
+                        {d.lot_no && (
+                          <p className="text-[10px] text-slate-500 font-mono mb-0.5">Lot: {d.lot_no}</p>
+                        )}
+                        {/* row 4: date + rolls + staff */}
                         <div className="flex items-center justify-between">
-                          <span className="text-slate-400 text-[10px]">{dt.toLocaleDateString('th-TH')} · {fmtTime(d.transferred_at)}</span>
+                          <span className="text-slate-500 text-[10px]">{dt.toLocaleDateString('th-TH')} · {fmtTime(d.transferred_at)} · <b className="text-slate-400">{d.transferred_by}</b></span>
                           <span className="text-slate-500 text-[10px]">{d.total_rolls} ม้วน</span>
                         </div>
-                        <p className="text-slate-300 text-[10px] mt-0.5">โดย: <b>{d.transferred_by}</b></p>
                       </button>
                     )
                   })}

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Eye, EyeOff, Save, RotateCcw, Move, ChevronUp, ChevronDown, Trash2, Plus, Type, Minus, QrCode } from 'lucide-react'
+import { Eye, EyeOff, Save, RotateCcw, Move, ChevronUp, ChevronDown, Trash2, Plus, Type, Minus, QrCode, Loader2 } from 'lucide-react'
+import { supabase } from '../lib/supabase'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface FieldConfig {
@@ -151,14 +152,20 @@ export const DEFAULT_LAYOUT: LabelLayout = {
   ],
 }
 
-// ── Persistence ───────────────────────────────────────────────────────────────
-export function loadLongLayout(): LabelLayout {
+// ── Persistence — Supabase ────────────────────────────────────────────────────
+const LAYOUT_ID = 'long'
+
+export async function loadLongLayout(): Promise<LabelLayout> {
   try {
-    const s = localStorage.getItem(LS_KEY)
-    if (s) {
-      const parsed = JSON.parse(s) as LabelLayout
+    const { data } = await supabase
+      .from('label_layouts')
+      .select('layout')
+      .eq('id', LAYOUT_ID)
+      .single()
+    if (data?.layout) {
+      const parsed = data.layout as LabelLayout
       // merge — เพิ่ม field ใหม่ที่อาจยังไม่มีใน saved version
-      const savedIds = new Set(parsed.fields.map(f => f.id))
+      const savedIds = new Set(parsed.fields.map((f: FieldConfig) => f.id))
       const missing  = DEFAULT_LAYOUT.fields.filter(f => !savedIds.has(f.id))
       return { ...parsed, fields: [...parsed.fields, ...missing] }
     }
@@ -166,13 +173,16 @@ export function loadLongLayout(): LabelLayout {
   return DEFAULT_LAYOUT
 }
 
-function saveLayout(layout: LabelLayout) {
-  localStorage.setItem(LS_KEY, JSON.stringify(layout))
+async function saveLayoutToDB(layout: LabelLayout) {
+  await supabase
+    .from('label_layouts')
+    .upsert({ id: LAYOUT_ID, layout, updated_at: new Date().toISOString() })
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function LabelDesigner() {
-  const [layout, setLayout]     = useState<LabelLayout>(loadLongLayout)
+  const [layout, setLayout]     = useState<LabelLayout>(DEFAULT_LAYOUT)
+  const [loading, setLoading]   = useState(true)
   const [selected, setSelected] = useState<string | null>(null)
   const [savedFlash, setSavedFlash] = useState(false)
   const dragging = useRef<{ id: string; sx: number; sy: number; ox: number; oy: number } | null>(null)
@@ -181,17 +191,23 @@ export default function LabelDesigner() {
   const fields        = layout.fields
   const selectedField = fields.find(f => f.id === selected) ?? null
 
+  // โหลด layout จาก Supabase ตอน mount
+  useEffect(() => {
+    loadLongLayout().then(l => { setLayout(l); setLoading(false) })
+  }, [])
+
   // ── save ──────────────────────────────────────────────────────────────────
-  function doSave() {
-    saveLayout(layout)
+  async function doSave() {
     setSavedFlash(true)
+    await saveLayoutToDB(layout)
     setTimeout(() => setSavedFlash(false), 2000)
   }
 
-  function doReset() {
+  async function doReset() {
     if (!confirm('รีเซ็ตกลับค่าเริ่มต้น? (layout ที่บันทึกไว้จะหายไป)')) return
     setLayout(DEFAULT_LAYOUT)
     setSelected(null)
+    await saveLayoutToDB(DEFAULT_LAYOUT)
   }
 
   // ── add / delete ─────────────────────────────────────────────────────────
@@ -358,6 +374,13 @@ export default function LabelDesigner() {
   ) : null
 
   // ── UI ────────────────────────────────────────────────────────────────────
+  if (loading) return (
+    <div className="flex items-center justify-center h-full bg-[#0a0f1e] text-slate-400 gap-3">
+      <Loader2 size={20} className="animate-spin" />
+      <span className="text-sm">กำลังโหลด layout...</span>
+    </div>
+  )
+
   return (
     <div className="flex bg-[#0a0f1e] text-white overflow-hidden" style={{ height: 'calc(100vh - 49px)' }}>
 

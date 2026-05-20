@@ -39,7 +39,7 @@ async function printLabel(p: MachineProfile, rollNo: number, gross: number, net:
   // ═══════════════════════════════════════════════════════
   // ใบยาว — สร้างจาก LabelDesigner layout (หรือ fallback default)
   // ═══════════════════════════════════════════════════════
-  const savedLayout = loadLongLayout()
+  const savedLayout = await loadLongLayout()
   const rollTypeLabelLong =
     rollType === 'bad'         ? 'ม้วนกรอ' :
     rollType === 'scrap_clear' ? 'เศษเสีย (ใส)' :

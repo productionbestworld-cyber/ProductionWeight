@@ -361,7 +361,7 @@ export default function MachineSettings({ dept }: { dept?: 'blow'|'print'|'rewin
             <div>
               <label className="block text-xs text-slate-400 mb-1.5">แผนก</label>
               <div className="flex gap-2 mb-3">
-                {([{key:'blow',label:'🌬 ฝั่งเป่า'},{key:'print',label:'🖨 ฝั่งพิม'},{key:'rewind',label:'🔁 ฝั่งกรอ'}] as const).map(s=>(
+                {([{key:'blow',label:'🌬 ผลิต(เป่า)'},{key:'print',label:'🖨 ผลิต(พิมพ์)'},{key:'rewind',label:'🔁 กรอ(Rework)'}] as const).map(s=>(
                   <button key={s.key} onClick={() => setNewSection(s.key)}
                     className={`flex-1 py-2 rounded-xl text-sm font-bold transition-colors ${newSection===s.key?'bg-brand-600 text-white':'bg-slate-800 text-slate-400 hover:text-white'}`}>
                     {s.label}
@@ -438,9 +438,9 @@ export default function MachineSettings({ dept }: { dept?: 'blow'|'print'|'rewin
           {/* Tab buttons — ถ้า dept ถูก lock แสดงแค่ฝั่งเดียว */}
           <div className="flex gap-2">
             {([
-              { key:'blow',   emoji:'🌬', label:'ฝั่งเป่า', count: blowProfiles.length,   ready: blowReady,   border:'border-blue-500',   bg:'bg-blue-500/10',   badge:'bg-blue-500/20 text-blue-300' },
-              { key:'print',  emoji:'🖨', label:'ฝั่งพิม',  count: printProfiles.length,  ready: printReady,  border:'border-purple-500', bg:'bg-purple-500/10', badge:'bg-purple-500/20 text-purple-300' },
-              { key:'rewind', emoji:'🔁', label:'ฝั่งกรอ',  count: rewindProfiles.length, ready: rewindReady, border:'border-green-500',  bg:'bg-green-500/10',  badge:'bg-green-500/20 text-green-300' },
+              { key:'blow',   emoji:'🌬', label:'ผลิต(เป่า)',   count: blowProfiles.length,   ready: blowReady,   border:'border-blue-500',   bg:'bg-blue-500/10',   badge:'bg-blue-500/20 text-blue-300' },
+              { key:'print',  emoji:'🖨', label:'ผลิต(พิมพ์)', count: printProfiles.length,  ready: printReady,  border:'border-purple-500', bg:'bg-purple-500/10', badge:'bg-purple-500/20 text-purple-300' },
+              { key:'rewind', emoji:'🔁', label:'กรอ(Rework)', count: rewindProfiles.length, ready: rewindReady, border:'border-green-500',  bg:'bg-green-500/10',  badge:'bg-green-500/20 text-green-300' },
             ] as const).filter(t => !dept || t.key === dept).map(t => (
               <button key={t.key} onClick={() => setActiveTab(t.key)}
                 className={`flex-1 flex items-center justify-between px-5 py-3.5 rounded-2xl border-2 transition-all ${

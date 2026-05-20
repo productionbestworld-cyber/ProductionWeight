@@ -76,9 +76,9 @@ export default function App() {
   }, [])
 
   const deptConfig = {
-    blow:   { emoji: '🌬', label: 'ฝั่งเป่า',  color: 'bg-blue-600',   badge: 'bg-blue-500/20 text-blue-300 border-blue-500/40',   sub: 'Blow Section' },
-    print:  { emoji: '🖨', label: 'ฝั่งพิม',  color: 'bg-purple-600', badge: 'bg-purple-500/20 text-purple-300 border-purple-500/40', sub: 'Print Section' },
-    rewind: { emoji: '🔁', label: 'ฝั่งกรอ',  color: 'bg-green-700',  badge: 'bg-green-500/20 text-green-300 border-green-500/40',   sub: 'Rewind Section' },
+    blow:   { emoji: '🌬', label: 'ผลิต(เป่า)',    color: 'bg-blue-600',   badge: 'bg-blue-500/20 text-blue-300 border-blue-500/40',   sub: 'Blow Section' },
+    print:  { emoji: '🖨', label: 'ผลิต(พิมพ์)',  color: 'bg-purple-600', badge: 'bg-purple-500/20 text-purple-300 border-purple-500/40', sub: 'Print Section' },
+    rewind: { emoji: '🔁', label: 'กรอ(Rework)',  color: 'bg-green-700',  badge: 'bg-green-500/20 text-green-300 border-green-500/40',   sub: 'Rework Section' },
   }
   const dc = deptConfig[dept]
 

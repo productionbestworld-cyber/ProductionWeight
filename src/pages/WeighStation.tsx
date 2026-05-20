@@ -410,7 +410,7 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
                 dept==='print'  ? 'bg-purple-500/20 text-purple-300' :
                                   'bg-green-500/20 text-green-300'
               }`}>
-                {dept==='blow' ? '🌬 ฝั่งเป่า' : dept==='print' ? '🖨 ฝั่งพิม' : '🔁 ฝั่งกรอ'}
+                {dept==='blow' ? '🌬 ผลิต(เป่า)' : dept==='print' ? '🖨 ผลิต(พิมพ์)' : '🔁 กรอ(Rework)'}
               </span>
             )}
           </h1>

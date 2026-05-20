@@ -414,7 +414,7 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                 <span className={`text-xs font-bold px-3 py-2 rounded-xl border ${
                   dept==='blow' ? 'bg-blue-500/15 text-blue-300 border-blue-500/30' : 'bg-purple-500/15 text-purple-300 border-purple-500/30'
                 }`}>
-                  {dept==='blow' ? '🌬 ฝั่งเป่า' : '🖨 ฝั่งพิม'}
+                  {dept==='blow' ? '🌬 ผลิต(เป่า)' : dept==='print' ? '🖨 ผลิต(พิมพ์)' : '🔁 กรอ(Rework)'}
                 </span>
               </div>
             ) : (

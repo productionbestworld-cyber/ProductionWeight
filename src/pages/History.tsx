@@ -121,7 +121,7 @@ export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
               {dept && (
                 <span className={`text-sm font-bold px-2.5 py-0.5 rounded-full border ${
                   dept==='blow' ? 'bg-blue-500/15 text-blue-300 border-blue-500/30' : dept==='print' ? 'bg-purple-500/15 text-purple-300 border-purple-500/30' : 'bg-green-500/15 text-green-300 border-green-500/30'
-                }`}>{dept==='blow' ? '🌬 ฝั่งเป่า' : dept==='print' ? '🖨 ฝั่งพิม' : '🔁 ฝั่งกรอ'}</span>
+                }`}>{dept==='blow' ? '🌬 ผลิต(เป่า)' : dept==='print' ? '🖨 ผลิต(พิมพ์)' : '🔁 กรอ(Rework)'}</span>
               )}
             </h1>
             <p className="text-slate-400 text-xs mt-0.5">งานที่ปิดแล้ว — ข้อมูลถาวร</p>

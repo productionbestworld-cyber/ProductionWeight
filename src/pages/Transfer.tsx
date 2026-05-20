@@ -511,7 +511,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                     <table className="w-full text-sm">
                       <thead className="sticky top-0">
                         <tr className="border-b border-slate-800 bg-slate-900 text-[10px]">
-                          {['#','เครื่อง','ม้วนที่','สินค้า','Lot','นน.เต็ม','นน.สุทธิ','ผู้ตรวจ','เวลาชั่ง'].map(h=>(
+                          {['ลำดับ','เครื่อง','ม้วนที่','สินค้า','Lot','นน.เต็ม','นน.สุทธิ','ผู้ตรวจ','เวลาชั่ง'].map(h=>(
                             <th key={h} className="px-3 py-2 text-left text-slate-500 font-semibold uppercase tracking-wider">{h}</th>
                           ))}
                         </tr>

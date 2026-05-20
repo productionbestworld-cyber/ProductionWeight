@@ -82,7 +82,7 @@ export default function RollDetail() {
         <div className={`${typeBg} px-5 py-4 text-center`}>
           <p className="text-white/70 text-xs">บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด</p>
           <p className="text-white font-black text-xl mt-0.5">
-            {roll.roll_no ? `ม้วนที่ #${roll.roll_no}` : typeLabel}
+            {roll.roll_no ? `ม้วนที่ ${roll.roll_no}` : typeLabel}
           </p>
           <p className="text-white/70 text-sm">{roll.machine_no} · {dateStr} {timeStr}</p>
           <span className="inline-block mt-1.5 text-[10px] bg-white/20 text-white px-2 py-0.5 rounded-full">{typeLabel}</span>

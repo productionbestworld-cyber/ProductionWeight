@@ -69,7 +69,7 @@ async function printLabel(p: MachineProfile, rollNo: number, gross: number, net:
     barcode_lbl: 'Barcode No.',
     inspector:   `ผู้ตรวจสอบ&nbsp;&nbsp;<b>${p.inspector || '—'}</b>`,
     // old compat keys
-    meta:        `Mat&nbsp;<b>${p.matCode}</b>&nbsp;&nbsp;&nbsp;MFG&nbsp;<b>${mfgDate}</b>&nbsp;&nbsp;&nbsp;Roll&nbsp;<b>#${rollNo === 0 ? '—' : rollNo}</b>`,
+    meta:        `Mat&nbsp;<b>${p.matCode}</b>&nbsp;&nbsp;&nbsp;MFG&nbsp;<b>${mfgDate}</b>&nbsp;&nbsp;&nbsp;Roll&nbsp;<b>${rollNo === 0 ? '—' : rollNo}</b>`,
   }
 
   function renderLongField(f: FieldConfig): string {
@@ -179,7 +179,7 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
   <div class="hdr">
     <div class="hc"><span>Mat</span><b>${p.matCode}</b></div>
     <div class="hc mid"><span>MFG</span><b>${mfgDate}</b></div>
-    <div class="hc right"><span>${rollType.startsWith('scrap') ? 'ถุง' : rollType==='bad' ? 'กรอ' : 'Roll'}</span><b>#${rollNo===0?'—':rollNo}</b></div>
+    <div class="hc right"><span>${rollType.startsWith('scrap') ? 'ถุง' : rollType==='bad' ? 'กรอ' : 'Roll'}</span><b>${rollNo===0?'—':rollNo}</b></div>
   </div>
 
   <!-- Row 3: Product + Size + Lot -->
@@ -260,7 +260,7 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
   <div class="meta">
     <span>Mat&nbsp;<b>${p.matCode}</b></span>
     <span>MFG&nbsp;<b>${mfgDate}</b></span>
-    <span>${rollType.startsWith('scrap') ? 'ถุง' : rollType==='bad' ? 'กรอ' : 'Roll'}&nbsp;<b>#${rollNo === 0 ? '—' : rollNo}</b></span>
+    <span>${rollType.startsWith('scrap') ? 'ถุง' : rollType==='bad' ? 'กรอ' : 'Roll'}&nbsp;<b>${rollNo === 0 ? '—' : rollNo}</b></span>
   </div>
 
   <div class="body">
@@ -1179,8 +1179,8 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
               <Save size={17}/>
               {saving ? 'บันทึก...' : !stable ? 'รอค่านิ่ง...' :
                 isScrap ? `บันทึกเศษ ${fmt(gross,dec)} Kgs.` :
-                isBad   ? `กรอ #${badRollNo} · ${fmt(saveWeight,dec)} Kgs.` :
-                          `Roll #${rollNo} · ${fmt(saveWeight,dec)} Kgs.`}
+                isBad   ? `กรอ ${badRollNo} · ${fmt(saveWeight,dec)} Kgs.` :
+                          `Roll ${rollNo} · ${fmt(saveWeight,dec)} Kgs.`}
             </button>
           </div>
 

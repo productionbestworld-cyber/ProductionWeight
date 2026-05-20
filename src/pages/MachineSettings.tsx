@@ -118,151 +118,164 @@ export function saveProfiles(p: MachineProfile[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(p))
 }
 
-// ─── Single Profile Card ──────────────────────────────────────────────────────
-function ProfileCard({ p, i, onChange, onRemove }: {
-  p: MachineProfile; i: number
+// ─── Compact Machine Card (grid view) ────────────────────────────────────────
+function MachineCard({ p, onEdit }: { p: MachineProfile; onEdit: () => void }) {
+  const ready = !!(p.machine_no && p.custName && p.productName && p.matCode && p.lotNo)
+  return (
+    <button onClick={onEdit} className={`w-full text-left rounded-2xl border-2 transition-all hover:border-brand-500 overflow-hidden group ${
+      ready ? 'bg-slate-900 border-slate-700' : 'bg-slate-900/60 border-amber-500/40 border-dashed'
+    }`}>
+      {/* top bar */}
+      <div className={`flex items-center justify-between px-3 py-2 border-b ${
+        ready ? 'bg-brand-600/15 border-brand-500/20' : 'bg-amber-500/10 border-amber-500/20'
+      }`}>
+        <span className={`font-black text-base tracking-wide ${ready ? 'text-brand-300' : 'text-amber-400'}`}>
+          {p.machine_no}
+        </span>
+        <div className="flex items-center gap-1.5">
+          {ready
+            ? <span className="text-[10px] text-green-400 font-bold flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block"/>พร้อม</span>
+            : <span className="text-[10px] text-amber-400 font-bold">⚠ ไม่ครบ</span>
+          }
+          <span className="text-slate-600 text-[10px] group-hover:text-slate-400 transition-colors">✎</span>
+        </div>
+      </div>
+      {/* content */}
+      <div className="px-3 py-2.5 space-y-1.5">
+        {ready ? (<>
+          <p className="text-white font-bold text-sm leading-tight line-clamp-1">{p.productName}</p>
+          <p className="text-slate-400 text-xs truncate">{p.custName}</p>
+          <div className="flex gap-1 flex-wrap">
+            {p.soNo && <span className="text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/25 px-1.5 py-0.5 rounded font-bold">SO {p.soNo}</span>}
+            <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono border border-slate-700">Lot {p.lotNo.slice(-8)}</span>
+            {p.widthCm && <span className="text-[10px] bg-brand-500/15 text-brand-300 border border-brand-500/25 px-1.5 py-0.5 rounded font-bold">{p.widthCm}×{p.thickMc}mc</span>}
+          </div>
+          <div className="grid grid-cols-2 gap-x-2 text-[10px] text-slate-500 mt-0.5">
+            <span>Mat: <b className="text-slate-300">{p.matCode}</b></span>
+            <span>ผู้ตรวจ: <b className="text-slate-300">{p.inspector || '—'}</b></span>
+            <span>เป้า: <b className="text-slate-300">{p.plannedQty ? Number(p.plannedQty).toLocaleString() + ' Kgs.' : '—'}</b></span>
+            <span>Core: <b className="text-slate-300">{p.coreWeight} Kg</b></span>
+          </div>
+        </>) : (
+          <p className="text-slate-500 text-xs py-2 text-center">คลิกเพื่อกรอกข้อมูลงาน</p>
+        )}
+      </div>
+    </button>
+  )
+}
+
+// ─── Edit Modal ───────────────────────────────────────────────────────────────
+function EditModal({ p, onChange, onRemove, onClose }: {
+  p: MachineProfile
   onChange: (k: keyof MachineProfile, v: any) => void
   onRemove: () => void
+  onClose: () => void
 }) {
-  const [open, setOpen] = useState(!p.machine_no)
-
-  // ใช้เป็น function call (ไม่ใช่ component) เพื่อป้องกัน focus หาย
   const f = (label: string, k: keyof MachineProfile, ph = '', half = false) => (
     <div className={half ? '' : 'col-span-2'}>
       <label className="block text-[10px] text-slate-500 mb-1">{label}</label>
       <input value={(p[k] as string) ?? ''} onChange={e => onChange(k, e.target.value)} placeholder={ph}
-        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs outline-none focus:border-brand-500" />
+        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-brand-500" />
     </div>
   )
-
-  const ready = !!(p.machine_no && p.custName && p.productName && p.matCode && p.lotNo)
-
   return (
-    <div className={`bg-slate-900 border rounded-2xl overflow-hidden transition-colors ${
-      ready ? 'border-slate-700' : 'border-amber-500/30'
-    }`}>
-      {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-slate-800/40"
-        onClick={() => setOpen(o => !o)}>
-        <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-sm shrink-0 ${
-          ready ? 'bg-brand-600 text-white' : 'bg-amber-600/30 text-amber-300 border border-amber-500/30'
-        }`}>
-          {p.machine_no || '?'}
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl"
+        onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between shrink-0">
+          <p className="text-white font-bold">⚙ เครื่อง {p.machine_no}</p>
+          <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={18}/></button>
         </div>
-        <div className="flex-1 min-w-0">
-          {ready ? (
-            <>
-              <p className="text-white font-bold text-sm leading-tight truncate">{p.productName}</p>
-              <p className="text-slate-400 text-xs truncate">{p.custName} · Lot {p.lotNo}</p>
-            </>
-          ) : (
-            <p className="text-amber-400 text-sm">⚠️ ยังกรอกข้อมูลไม่ครบ</p>
-          )}
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-slate-500">{open ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}</span>
-        </div>
-      </div>
+        <div className="overflow-y-auto px-5 py-4 space-y-4">
 
-      {/* Form */}
-      {open && (
-        <div className="px-4 pb-4 border-t border-slate-800 pt-3 space-y-3">
-          {/* แผนก + เครื่อง */}
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="block text-[10px] text-slate-500 mb-1">แผนก *</label>
               <div className="flex gap-1">
-                {([
-                  { key:'blow',   label:'🌬 ฝั่งเป่า' },
-                  { key:'print',  label:'🖨 ฝั่งพิม' },
-                  { key:'rewind', label:'🔁 ฝั่งกรอ' },
-                ] as const).map(s => (
-                  <button key={s.key}
-                    onMouseDown={e => { e.preventDefault(); onChange('section', s.key) }}
-                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                      p.section === s.key ? 'bg-brand-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
-                    }`}>
+                {([{key:'blow',label:'🌬 เป่า'},{key:'print',label:'🖨 พิม'},{key:'rewind',label:'🔁 กรอ'}] as const).map(s => (
+                  <button key={s.key} onMouseDown={e => { e.preventDefault(); onChange('section', s.key) }}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors ${p.section===s.key?'bg-brand-600 text-white':'bg-slate-800 text-slate-400 hover:text-white'}`}>
                     {s.label}
                   </button>
                 ))}
               </div>
             </div>
-            {f('หมายเลขเครื่อง *', 'machine_no', 'BL01', true)}
+            {f('หมายเลขเครื่อง *','machine_no','BL01',true)}
           </div>
 
-          <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">ลูกค้า</p>
+          <p className="text-[10px] text-brand-400 font-bold uppercase tracking-wider">ลูกค้า</p>
           <div className="grid grid-cols-2 gap-2">
-            {f('รหัสลูกค้า', 'custCode', 'C-001', true)}
+            {f('Sale Order (SO)','soNo','SO-2026-0001')}
+            {f('รหัสลูกค้า','custCode','C-001',true)}
             <div>
               <label className="block text-[10px] text-slate-500 mb-1">ทศนิยม</label>
               <div className="flex gap-1">
                 {([1,2] as const).map(d => (
                   <button key={d} onMouseDown={e => { e.preventDefault(); onChange('decimal', d) }}
-                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold ${p.decimal===d ? 'bg-brand-600 text-white' : 'bg-slate-800 text-slate-400'}`}>
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold ${p.decimal===d?'bg-brand-600 text-white':'bg-slate-800 text-slate-400'}`}>
                     {d} ตำแหน่ง
                   </button>
                 ))}
               </div>
             </div>
-            {f('ชื่อลูกค้า *', 'custName', 'บริษัท ...')}
-            {f('ที่อยู่', 'custAddress', 'ที่อยู่...')}
+            {f('ชื่อลูกค้า *','custName','บริษัท ...')}
+            {f('ที่อยู่','custAddress','ที่อยู่...')}
           </div>
 
-          <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">สินค้า</p>
+          <p className="text-[10px] text-brand-400 font-bold uppercase tracking-wider">สินค้า</p>
           <div className="grid grid-cols-2 gap-2">
-            {f('Mat Code *',    'matCode',     '60004224',             true)}
-            {f('Product Code',  'productCode', '60004224',             true)}
-            {f('ชื่อสินค้า *', 'productName', 'PET 1.45L RED SHRINK'     )}
-            {f('กว้าง (cm)',   'widthCm',     '57',                   true)}
-            {f('หนา (mc)',     'thickMc',     '80',                   true)}
-            {f('Lot No *',     'lotNo',       '69S0200010005',        true)}
-            {f('Length (Ms.)', 'length',      '1360',                 true)}
-            {f('Pcs.',         'pcs',         '',                     true)}
+            {f('Mat Code *','matCode','60004224',true)}
+            {f('Product Code','productCode','60004224',true)}
+            {f('ชื่อสินค้า *','productName','PET 1.45L RED SHRINK')}
+            {f('กว้าง (cm)','widthCm','57',true)}
+            {f('หนา (mc)','thickMc','80',true)}
+            {f('Lot No *','lotNo','69S0200010005',true)}
+            {f('Length (Ms.)','length','1360',true)}
+            {f('Pcs.','pcs','',true)}
           </div>
 
-          <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">เครื่อง</p>
+          <p className="text-[10px] text-brand-400 font-bold uppercase tracking-wider">เครื่อง</p>
           <div className="grid grid-cols-2 gap-2">
-            {f('Core Weight (kg)',    'coreWeight', '1.25',  true)}
-            {f('ผู้ตรวจสอบ',         'inspector',  'เมทนี', true)}
-            {f('ยอดสั่งผลิต (kg) *', 'plannedQty', '5000',  true)}
+            {f('Core Weight (kg)','coreWeight','1.25',true)}
+            {f('ผู้ตรวจสอบ','inspector','เมทนี',true)}
+            {f('ยอดสั่งผลิต (kg) *','plannedQty','5000',true)}
             <div>
-              <label className="block text-[10px] text-slate-500 mb-1">ใบปะหน้า (พิมพ์อัตโนมัติ)</label>
+              <label className="block text-[10px] text-slate-500 mb-1">ใบปะหน้า</label>
               <div className="flex gap-1">
                 {(['long','short'] as const).map(s => (
                   <button key={s} onMouseDown={e => { e.preventDefault(); onChange('labelSize', s) }}
-                    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                      p.labelSize === s ? 'bg-brand-600 text-white' : 'bg-slate-800 text-slate-400'
-                    }`}>
-                    {s === 'long' ? '📄 ยาว 165×70' : '🏷 สั้น 76×76'}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold ${p.labelSize===s?'bg-brand-600 text-white':'bg-slate-800 text-slate-400'}`}>
+                    {s==='long'?'📄 ยาว 165×70':'🏷 สั้น 76×76'}
                   </button>
                 ))}
               </div>
             </div>
           </div>
-
-          {/* หัวกระดาษใบสั้น */}
-          {p.labelSize === 'short' && (
+          {p.labelSize==='short' && (
             <div className="space-y-1.5">
               <label className="flex items-center gap-2 cursor-pointer select-none"
                 onMouseDown={e => { e.preventDefault(); onChange('blankHeader', !p.blankHeader) }}>
-                <input type="checkbox" readOnly checked={!!p.blankHeader}
-                  className="w-4 h-4 accent-brand-500 pointer-events-none"/>
-                <span className="text-xs text-slate-300">เว้นหัวกระดาษว่าง (ไม่พิมพ์ชื่อบริษัท)</span>
+                <input type="checkbox" readOnly checked={!!p.blankHeader} className="w-4 h-4 accent-brand-500 pointer-events-none"/>
+                <span className="text-xs text-slate-300">เว้นหัวกระดาษว่าง</span>
               </label>
               {!p.blankHeader && (
-                <input value={p.headerText ?? ''} onChange={e => onChange('headerText', e.target.value)}
+                <input value={p.headerText??''} onChange={e => onChange('headerText', e.target.value)}
                   placeholder="ปล่อยว่าง = ใช้ชื่อบริษัท BWP"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs outline-none focus:border-brand-500" />
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-brand-500"/>
               )}
             </div>
           )}
-
           <button onClick={onRemove}
-            className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-red-400 transition-colors mt-1">
-            <Trash2 size={12} /> ลบเครื่องนี้
+            className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-red-400 transition-colors">
+            <Trash2 size={12}/> ลบเครื่องนี้
           </button>
         </div>
-      )}
+        <div className="px-5 py-3 border-t border-slate-800 shrink-0">
+          <button onClick={onClose} className="w-full bg-brand-600 hover:bg-brand-500 text-white py-2.5 rounded-xl font-bold text-sm">
+            ✓ เสร็จสิ้น (บันทึกอัตโนมัติ)
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -276,6 +289,7 @@ export default function MachineSettings({ dept }: { dept?: 'blow'|'print'|'rewin
   const [newMachineNo, setNewMachineNo] = useState('')
   const [newSection,   setNewSection]   = useState<'blow'|'print'|'rewind'>(dept ?? 'blow')
   const [activeTab,    setActiveTab]    = useState<'blow'|'print'|'rewind'>(dept ?? 'blow')
+  const [editIdx,      setEditIdx]      = useState<number|null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   // ถ้า dept เปลี่ยน (เช่นสลับฝั่งแล้วกดตั้งค่า) → sync tab
@@ -380,7 +394,17 @@ export default function MachineSettings({ dept }: { dept?: 'blow'|'print'|'rewin
         </div>
       </div>
     )}
-    <div className="p-6 max-w-2xl mx-auto space-y-4">
+    {/* Edit Modal */}
+    {editIdx !== null && profiles[editIdx] && (
+      <EditModal
+        p={profiles[editIdx]}
+        onChange={(k, v) => update(editIdx, k, v)}
+        onRemove={() => { remove(editIdx); setEditIdx(null) }}
+        onClose={() => { handleSave(); setEditIdx(null) }}
+      />
+    )}
+
+    <div className="p-6 max-w-7xl mx-auto space-y-4">
 
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -444,10 +468,12 @@ export default function MachineSettings({ dept }: { dept?: 'blow'|'print'|'rewin
                 <button onClick={() => openAddModal(sec)} className="mt-3 text-brand-400 text-xs hover:text-brand-300">+ เพิ่มเครื่องแรก</button>
               </div>
             ) : (
-              secProfiles.map(p => {
-                const i = profiles.indexOf(p)
-                return <ProfileCard key={i} p={p} i={i} onChange={(k, v) => update(i, k, v)} onRemove={() => remove(i)} />
-              })
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+                {secProfiles.map(p => {
+                  const i = profiles.indexOf(p)
+                  return <MachineCard key={p.machine_no} p={p} onEdit={() => setEditIdx(i)} />
+                })}
+              </div>
             )}
             <button onClick={() => openAddModal(sec)}
               className="w-full border-2 border-dashed border-slate-700 hover:border-brand-500 text-slate-500 hover:text-brand-400 py-3 rounded-2xl text-sm flex items-center justify-center gap-2 transition-colors">

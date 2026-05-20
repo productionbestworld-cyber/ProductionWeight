@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { History as HistoryIcon, Search, RefreshCw, X, FileText, Download } from 'lucide-react'
+import { History as HistoryIcon, Search, RefreshCw, X, FileText, Download, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 function fmt(n: number | null | undefined, d = 2) {
@@ -22,6 +22,18 @@ export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   const [machineFilter, setMachineFilter] = useState<string>('')
   const [dateFrom, setDateFrom]   = useState('')
   const [dateTo,   setDateTo]     = useState('')
+  const [tab, setTab]             = useState<'history'|'deleted'>('history')
+  const [deletedLogs, setDeletedLogs] = useState<any[]>([])
+  const [loadingDel,  setLoadingDel]  = useState(false)
+
+  async function loadDeletedLogs() {
+    setLoadingDel(true)
+    let q = supabase.from('roll_deletion_logs').select('*').order('deleted_at', { ascending: false })
+    if (dept) q = q.eq('machine_no', dept) // optional filter
+    const { data } = await q
+    setDeletedLogs(data ?? [])
+    setLoadingDel(false)
+  }
 
   async function load() {
     setLoading(true)
@@ -107,7 +119,62 @@ export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
           </div>
         </div>
 
-        {/* KPI */}
+        {/* Tabs */}
+        <div className="flex gap-2 border-b border-slate-800 pb-0">
+          <button onClick={() => setTab('history')}
+            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-t-lg transition-colors ${tab==='history' ? 'bg-slate-800 text-white border-b-2 border-brand-500' : 'text-slate-500 hover:text-white'}`}>
+            <HistoryIcon size={13}/> ประวัติผลิต
+          </button>
+          <button onClick={() => { setTab('deleted'); loadDeletedLogs() }}
+            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-t-lg transition-colors ${tab==='deleted' ? 'bg-slate-800 text-red-400 border-b-2 border-red-500' : 'text-slate-500 hover:text-red-400'}`}>
+            <Trash2 size={13}/> Log การลบม้วน
+          </button>
+        </div>
+
+        {/* ── Tab: Log การลบ ── */}
+        {tab === 'deleted' && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+              <p className="text-sm font-semibold text-red-400 flex items-center gap-2"><Trash2 size={14}/>ประวัติการลบม้วน</p>
+              <button onClick={loadDeletedLogs} className="text-slate-500 hover:text-white text-xs flex items-center gap-1">
+                <RefreshCw size={11}/> รีเฟรช
+              </button>
+            </div>
+            {loadingDel ? (
+              <div className="py-8 text-center text-slate-500 text-sm">กำลังโหลด...</div>
+            ) : deletedLogs.length === 0 ? (
+              <div className="py-8 text-center text-slate-600 text-sm">ยังไม่มีประวัติการลบ</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-slate-500">
+                      {['วันที่ลบ','เครื่อง','ม้วน','ประเภท','นน.สุทธิ','Lot','ผู้ลบ','เหตุผล'].map(h=>(
+                        <th key={h} className="px-3 py-2 text-left font-semibold">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/50">
+                    {deletedLogs.map(r => (
+                      <tr key={r.id} className="hover:bg-slate-800/30">
+                        <td className="px-3 py-2.5 text-slate-400 whitespace-nowrap">{fmtDateTime(r.deleted_at)}</td>
+                        <td className="px-3 py-2.5 font-bold text-white">{r.machine_no}</td>
+                        <td className="px-3 py-2.5 font-mono text-white">{r.roll_no}</td>
+                        <td className="px-3 py-2.5 text-slate-400">{r.roll_type}</td>
+                        <td className="px-3 py-2.5 text-red-400 font-bold">{(r.weight??0).toFixed(2)}</td>
+                        <td className="px-3 py-2.5 text-slate-400 font-mono text-[10px]">{r.lot_no}</td>
+                        <td className="px-3 py-2.5 text-amber-300 font-semibold">{r.deleted_by}</td>
+                        <td className="px-3 py-2.5 text-slate-300">{r.reason}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === 'history' && <>{/* KPI */}
         <div className="grid grid-cols-4 gap-3">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl px-4 py-3">
             <p className="text-slate-500 text-xs">งานที่ปิดแล้ว</p>
@@ -205,8 +272,8 @@ export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
             </div>
           )}
         </div>
-      </div>
-
+      </>}
+      </div>{/* /max-w-6xl */}
       {/* Detail Modal */}
       {selected && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">

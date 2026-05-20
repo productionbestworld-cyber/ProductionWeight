@@ -1034,6 +1034,39 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
   const progressColor = done ? 'bg-green-500' : pct >= 80 ? 'bg-amber-400' : 'bg-brand-500'
 
   const [selectedRoll, setSelectedRoll] = useState<any>(null)
+  const [deleteModal, setDeleteModal] = useState<{ roll: any } | null>(null)
+  const [deleteReason, setDeleteReason] = useState('')
+  const [deleteBy, setDeleteBy]   = useState('')
+  const [deleting, setDeleting]   = useState(false)
+
+  async function confirmDelete() {
+    if (!deleteModal) return
+    if (!deleteBy.trim()) { alert('กรุณากรอกชื่อผู้ลบ'); return }
+    if (!deleteReason.trim()) { alert('กรุณากรอกเหตุผล'); return }
+    setDeleting(true)
+    const r = deleteModal.roll
+    // บันทึก log ก่อนลบ
+    await supabase.from('roll_deletion_logs').insert({
+      deleted_by:   deleteBy.trim(),
+      reason:       deleteReason.trim(),
+      machine_no:   r.machine_no,
+      lot_no:       r.lot_no,
+      roll_no:      r.roll_no,
+      roll_type:    r.roll_type,
+      weight:       r.weight,
+      gross_weight: r.gross_weight,
+      original_id:  r.id,
+    })
+    // ลบม้วน
+    const { error } = await supabase.from('production_rolls').delete().eq('id', r.id)
+    setDeleting(false)
+    if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return }
+    setDeleteModal(null)
+    setDeleteReason('')
+    setDeleteBy('')
+    setSelectedRoll(null)
+    loadRollsForMachine()
+  }
 
   // สร้าง URL สำหรับม้วนที่เลือก — ใช้ ID สั้นๆ เท่านั้น
   function makeRollUrl(r: any) {
@@ -1563,7 +1596,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
             </div>
 
             {/* Reprint */}
-            <div className="flex gap-2 px-5 py-4 border-t border-slate-800">
+            <div className="flex gap-2 px-5 pt-4 border-t border-slate-800">
               <button onClick={() => printLabel({...profile, inspector: selectedRoll.inspector || profile.inspector}, selectedRoll.roll_no, selectedRoll.gross_weight??0, selectedRoll.weight??0, 'short', selectedRoll.roll_type, selectedRoll.remark??'', selectedRoll.id)}
                 className="flex-1 flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white text-sm py-2.5 rounded-xl transition-colors">
                 <Printer size={14}/> ใบสั้น
@@ -1571,6 +1604,59 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
               <button onClick={() => printLabel({...profile, inspector: selectedRoll.inspector || profile.inspector}, selectedRoll.roll_no, selectedRoll.gross_weight??0, selectedRoll.weight??0, 'long', selectedRoll.roll_type, selectedRoll.remark??'', selectedRoll.id)}
                 className="flex-1 flex items-center justify-center gap-1.5 bg-brand-600 hover:bg-brand-700 text-white text-sm py-2.5 rounded-xl transition-colors font-semibold">
                 <Printer size={14}/> ใบยาว
+              </button>
+            </div>
+
+            {/* ลบม้วน */}
+            <div className="px-5 pb-4 pt-2">
+              <button onClick={() => { setDeleteModal({ roll: selectedRoll }); setDeleteReason(''); setDeleteBy('') }}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold bg-red-900/20 hover:bg-red-900/50 text-red-400 hover:text-red-300 border border-red-900/30 transition-colors">
+                <X size={14}/> ลบม้วนนี้ (ชั่งผิด / งานผิด)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Modal ────────────────────────────────────────────────── */}
+      {deleteModal && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
+          onClick={() => !deleting && setDeleteModal(null)}>
+          <div className="bg-slate-900 border border-red-900/50 rounded-2xl w-full max-w-sm p-5 shadow-2xl"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-8 h-8 rounded-full bg-red-900/40 flex items-center justify-center">
+                <X size={16} className="text-red-400"/>
+              </div>
+              <div>
+                <p className="text-white font-bold text-sm">ลบม้วน {deleteModal.roll.roll_no}</p>
+                <p className="text-slate-500 text-xs">{fmt(deleteModal.roll.weight??0,dec)} Kgs. · {deleteModal.roll.machine_no}</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 mb-4">
+              <label className="flex flex-col gap-1">
+                <span className="text-slate-400 text-xs font-semibold">ชื่อผู้ลบ *</span>
+                <input value={deleteBy} onChange={e => setDeleteBy(e.target.value)}
+                  placeholder="กรอกชื่อ..."
+                  className="bg-slate-800 text-white text-sm rounded-lg px-3 py-2 border border-slate-700 focus:border-red-500 focus:outline-none"/>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-slate-400 text-xs font-semibold">เหตุผลที่ลบ *</span>
+                <input value={deleteReason} onChange={e => setDeleteReason(e.target.value)}
+                  placeholder="เช่น ชั่งผิดงาน, กรอกข้อมูลผิด..."
+                  className="bg-slate-800 text-white text-sm rounded-lg px-3 py-2 border border-slate-700 focus:border-red-500 focus:outline-none"/>
+              </label>
+            </div>
+
+            <div className="flex gap-2">
+              <button onClick={() => setDeleteModal(null)} disabled={deleting}
+                className="flex-1 py-2.5 rounded-xl text-sm text-slate-400 bg-slate-800 hover:bg-slate-700 transition-colors">
+                ยกเลิก
+              </button>
+              <button onClick={confirmDelete} disabled={deleting}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-red-600 hover:bg-red-500 text-white transition-colors disabled:opacity-50">
+                {deleting ? 'กำลังลบ...' : 'ยืนยันลบ'}
               </button>
             </div>
           </div>

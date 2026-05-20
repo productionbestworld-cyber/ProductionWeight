@@ -323,8 +323,42 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
   onProfileUpdated: () => void
   dept?: 'blow' | 'print' | 'rewind'
 }) {
-  const [editing, setEditing] = useState<MachineProfile | null>(null)
+  const [editing, setEditing]   = useState<MachineProfile | null>(null)
   const [progress, setProgress] = useState<Record<string, { done: number; rolls: number }>>({})
+  const [parked,   setParked]   = useState<Record<string, any>>({}) // machine_no → parked_job row
+
+  // โหลด parked jobs
+  async function loadParked() {
+    const { data } = await supabase.from('parked_jobs').select('*')
+    if (!data) return
+    const map: Record<string, any> = {}
+    data.forEach(r => { map[r.machine_no] = r })
+    setParked(map)
+  }
+
+  // คืนงานที่จอด
+  async function restoreParked(machineNo: string) {
+    const job = parked[machineNo]
+    if (!job) return
+    if (!confirm(`คืนงาน "${job.profile_snapshot?.productName}" ให้เครื่อง ${machineNo}?\nงานที่รันอยู่จะถูกแทนที่`)) return
+    const snap = job.profile_snapshot as MachineProfile
+    await supabase.from('machine_profiles').upsert({
+      machine_no: machineNo,
+      cust_code: snap.custCode, cust_name: snap.custName, cust_address: snap.custAddress,
+      decimal_places: snap.decimal, mat_code: snap.matCode, product_code: snap.productCode,
+      product_name: snap.productName, width_cm: snap.widthCm, thick_mc: snap.thickMc,
+      lot_no: snap.lotNo, length: snap.length, pcs: snap.pcs, core_weight: snap.coreWeight,
+      inspector: snap.inspector, locked: snap.locked, planned_qty: snap.plannedQty,
+      label_size: snap.labelSize, header_text: snap.headerText ?? '',
+      blank_header: snap.blankHeader ?? false, section: snap.section ?? 'blow',
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'machine_no' })
+    await supabase.from('parked_jobs').delete().eq('id', job.id)
+    setParked(prev => { const n = { ...prev }; delete n[machineNo]; return n })
+    onProfileUpdated()
+  }
+
+  useEffect(() => { loadParked() }, [])
 
   // โหลดยอดผลิตต่อเครื่อง — ดึงตาม machine_no + lot_no ปัจจุบัน
   useEffect(() => {
@@ -407,9 +441,17 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
                   {/* ── Top bar: machine badge + status ── */}
                   <div className={`flex items-center justify-between px-3 py-2.5 ${ready ? 'bg-brand-600/20 border-b border-brand-500/20' : 'bg-slate-800/40 border-b border-slate-700/40'}`}>
                     <span className={`font-black text-lg tracking-wide ${ready ? 'text-brand-300' : 'text-slate-500'}`}>{p.machine_no}</span>
-                    {ready
-                      ? <span className="text-xs text-green-400 font-semibold flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-400 inline-block animate-pulse"/>พร้อม</span>
-                      : <span className="text-xs text-slate-500 font-semibold">ว่าง</span>}
+                    <div className="flex items-center gap-1.5">
+                      {parked[p.machine_no] && (
+                        <button className="pointer-events-auto z-10 text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/40 transition-colors"
+                          onClick={e => { e.stopPropagation(); restoreParked(p.machine_no) }}>
+                          🅿 มีงานจอด ↩
+                        </button>
+                      )}
+                      {ready
+                        ? <span className="text-xs text-green-400 font-semibold flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-400 inline-block animate-pulse"/>พร้อม</span>
+                        : <span className="text-xs text-slate-500 font-semibold">ว่าง</span>}
+                    </div>
                   </div>
 
                   {/* ── Content ── */}
@@ -483,7 +525,8 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
       {/* Quick edit modal */}
       {editing && (
         <QuickEditModal profile={editing} onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); onProfileUpdated() }} />
+          onSaved={() => { setEditing(null); onProfileUpdated(); loadParked() }}
+          onParked={() => { setEditing(null); onProfileUpdated(); loadParked() }} />
       )}
     </div>
   )
@@ -516,14 +559,46 @@ function saveAllSuggestions(p: MachineProfile) {
 }
 
 // ── Quick Edit Modal (กรอกข้อมูลงานใหม่) ─────────────────────────────────────
-function QuickEditModal({ profile, onClose, onSaved }: {
-  profile: MachineProfile; onClose: () => void; onSaved: () => void
+function QuickEditModal({ profile, onClose, onSaved, onParked }: {
+  profile: MachineProfile; onClose: () => void; onSaved: () => void; onParked?: () => void
 }) {
-  const [p, setP] = useState({ ...profile })
-  const [saving, setSaving] = useState(false)
+  const [p, setP]         = useState({ ...profile })
+  const [saving, setSaving]   = useState(false)
+  const [parking, setParking] = useState(false)
+  const [parkBy,  setParkBy]  = useState('')
+  const [showPark, setShowPark] = useState(false)
   const set = (k: keyof MachineProfile, v: any) => setP(prev => ({ ...prev, [k]: v }))
 
+  const hasJob = !!(profile.lotNo && profile.productName) // มีงานอยู่แล้ว
+
+  async function parkJob() {
+    if (!parkBy.trim()) { alert('กรุณากรอกชื่อผู้จอดงาน'); return }
+    setParking(true)
+    try {
+      // บันทึก snapshot ลง parked_jobs
+      await supabase.from('parked_jobs').upsert(
+        { machine_no: profile.machine_no, profile_snapshot: profile, parked_by: parkBy.trim(), parked_at: new Date().toISOString() },
+        { onConflict: 'machine_no' }
+      )
+      // เคลียร์งานออกจากเครื่อง (เหลือแค่ machine_no + section)
+      await supabase.from('machine_profiles').upsert({
+        machine_no: profile.machine_no, section: profile.section ?? 'blow',
+        decimal_places: profile.decimal, core_weight: profile.coreWeight,
+        cust_code:'', cust_name:'', cust_address:'', mat_code:'', product_code:'',
+        product_name:'', width_cm:'', thick_mc:'', lot_no:'', length:'', pcs:'',
+        inspector:'', planned_qty:'', label_size: profile.labelSize ?? 'long',
+        header_text:'', blank_header: false, locked: false,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'machine_no' })
+      onParked?.()
+    } catch (e: any) {
+      alert('จอดงานไม่สำเร็จ: ' + e?.message)
+    } finally { setParking(false) }
+  }
+
   const ok = p.machine_no && p.custName && p.productName && p.matCode && p.lotNo && p.plannedQty
+  // เตือนถ้า Lot ซ้ำกับงานเก่าที่จอดไว้
+  const lotSameAsParked = hasJob && p.lotNo && profile.lotNo && p.lotNo === profile.lotNo
 
   async function save() {
     if (!ok) {
@@ -636,6 +711,11 @@ function QuickEditModal({ profile, onClose, onSaved }: {
             {inp('กว้าง (cm)',    'widthCm',     '45',            true)}
             {inp('หนา (mc)',      'thickMc',     '25',            true)}
             {inp('Lot No *',      'lotNo',       '69S0100010001', true)}
+            {lotSameAsParked && (
+              <div className="col-span-2 bg-red-900/20 border border-red-500/40 rounded-lg px-3 py-2 text-xs text-red-400">
+                ⚠️ Lot นี้เหมือนงานปัจจุบัน — ม้วนเก่าจะนับรวมด้วย กรุณาใช้ Lot ใหม่สำหรับงานด่วน
+              </div>
+            )}
             {inp('Length (M.)',  'length',      '4800',          true)}
           </div>
 
@@ -674,7 +754,35 @@ function QuickEditModal({ profile, onClose, onSaved }: {
           )}
         </div>
 
-        <div className="flex gap-2 px-5 py-4 border-t border-slate-800 shrink-0">
+        <div className="px-5 pt-3 pb-0 border-t border-slate-800 shrink-0">
+          {/* ปุ่มจอดงาน — แสดงเฉพาะเมื่อมีงานอยู่ */}
+          {hasJob && (
+            <div className="mb-3">
+              {!showPark ? (
+                <button onClick={() => setShowPark(true)}
+                  className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold border border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-colors">
+                  🅿 จอดงานนี้ไว้ก่อน (แทรกงานด่วน)
+                </button>
+              ) : (
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 space-y-2">
+                  <p className="text-amber-300 text-xs font-bold">🅿 จอดงาน "{profile.productName}" ไว้ก่อน</p>
+                  <input value={parkBy} onChange={e => setParkBy(e.target.value)}
+                    placeholder="ชื่อผู้จอดงาน *"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-amber-500"/>
+                  <div className="flex gap-2">
+                    <button onClick={() => setShowPark(false)}
+                      className="flex-1 py-1.5 rounded-lg text-xs text-slate-400 bg-slate-800 hover:bg-slate-700">ยกเลิก</button>
+                    <button onClick={parkJob} disabled={parking}
+                      className="flex-[2] py-1.5 rounded-lg text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-50">
+                      {parking ? 'กำลังจอด...' : '✓ จอดงาน + เปิดรับงานใหม่'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="flex gap-2 px-5 py-3 shrink-0">
           <button onClick={onClose} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-400 py-2.5 rounded-xl text-sm">ยกเลิก</button>
           <button onClick={save} disabled={!ok || saving}
             className="flex-[2] bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white py-2.5 rounded-xl font-bold">

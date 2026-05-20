@@ -161,7 +161,7 @@ export async function loadLongLayout(): Promise<LabelLayout> {
       .from('label_layouts')
       .select('layout')
       .eq('id', LAYOUT_ID)
-      .single()
+      .maybeSingle()
     if (data?.layout) {
       const parsed = data.layout as LabelLayout
       // merge — เพิ่ม field ใหม่ที่อาจยังไม่มีใน saved version

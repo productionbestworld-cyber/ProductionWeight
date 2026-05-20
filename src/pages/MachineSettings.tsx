@@ -43,13 +43,15 @@ const EMPTY_PROFILE: MachineProfile = {
   soNo:'',
 }
 
-function nextMachineNo(profiles: MachineProfile[]): string {
+function nextMachineNo(profiles: MachineProfile[], section: string = 'blow'): string {
+  const prefix = section === 'print' ? 'PM' : section === 'rewind' ? 'RW' : 'BL'
+  const re = new RegExp(`^${prefix}[-\\s]?(\\d+)$`, 'i')
   const nums = profiles
-    .map(p => p.machine_no.match(/^BL[-\s]?(\d+)$/i))
+    .map(p => p.machine_no.match(re))
     .filter(Boolean)
     .map(m => parseInt(m![1]))
   const next = nums.length > 0 ? Math.max(...nums) + 1 : 1
-  return `BL${String(next).padStart(2, '0')}`
+  return `${prefix}${String(next).padStart(2, '0')}`
 }
 
 // ── DB ↔ App type conversion ──────────────────────────────────────────────────
@@ -296,7 +298,7 @@ export default function MachineSettings({ dept }: { dept?: 'blow'|'print'|'rewin
 
   function openAddModal(section: 'blow'|'print'|'rewind' = activeTab) {
     setNewSection(section)
-    setNewMachineNo(nextMachineNo(profiles.filter(p => (p.section??'blow') === section)))
+    setNewMachineNo(nextMachineNo(profiles.filter(p => (p.section??'blow') === section), section))
     setShowAddModal(true)
     setTimeout(() => inputRef.current?.select(), 50)
   }

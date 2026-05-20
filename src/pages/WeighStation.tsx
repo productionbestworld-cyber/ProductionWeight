@@ -405,8 +405,12 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
             <Wind size={20} className="text-brand-400" />
             เลือกเครื่อง
             {dept && (
-              <span className={`text-sm font-bold px-3 py-1 rounded-full ${dept==='blow' ? 'bg-blue-500/20 text-blue-300' : 'bg-purple-500/20 text-purple-300'}`}>
-                {dept === 'blow' ? '🌬 ฝั่งเป่า' : '🖨 ฝั่งพิม'}
+              <span className={`text-sm font-bold px-3 py-1 rounded-full ${
+                dept==='blow'   ? 'bg-blue-500/20 text-blue-300' :
+                dept==='print'  ? 'bg-purple-500/20 text-purple-300' :
+                                  'bg-green-500/20 text-green-300'
+              }`}>
+                {dept==='blow' ? '🌬 ฝั่งเป่า' : dept==='print' ? '🖨 ฝั่งพิม' : '🔁 ฝั่งกรอ'}
               </span>
             )}
           </h1>

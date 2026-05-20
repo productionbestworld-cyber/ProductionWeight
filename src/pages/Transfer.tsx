@@ -467,17 +467,27 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                           <span className="text-brand-300 font-mono font-bold text-xs">{d.doc_no}</span>
                           <span className="text-green-300 font-black text-sm">{fmt(d.total_kg)} Kgs.</span>
                         </div>
-                        {/* row 2: machine + product */}
-                        {(d.machine_no || d.product_name) && (
-                          <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                            {d.machine_no && (
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-brand-500/20 text-brand-300">{d.machine_no}</span>
-                            )}
-                            {d.product_name && (
-                              <span className="text-[10px] text-slate-300 truncate max-w-[140px]">{d.product_name}</span>
-                            )}
-                          </div>
-                        )}
+                        {/* row 2: machine + product + สถานะ */}
+                        {(d.machine_no || d.product_name) && (() => {
+                          const firstMachine = d.machine_no?.split(',')[0]?.trim()
+                          const firstLot     = d.lot_no?.split(',')[0]?.trim()
+                          const isRunning    = firstMachine && firstLot && machineProfiles[firstMachine] === firstLot
+                          return (
+                            <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                              {d.machine_no && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-brand-500/20 text-brand-300">{d.machine_no}</span>
+                              )}
+                              {d.product_name && (
+                                <span className="text-[10px] text-slate-300 truncate max-w-[100px]">{d.product_name}</span>
+                              )}
+                              <span className={`ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                                isRunning ? 'bg-green-500/20 text-green-400' : 'bg-slate-700 text-slate-500'
+                              }`}>
+                                {isRunning ? '● กำลังเดิน' : '■ จบแล้ว'}
+                              </span>
+                            </div>
+                          )
+                        })()}
                         {/* row 3: lot */}
                         {d.lot_no && (
                           <p className="text-[10px] text-slate-500 font-mono mb-0.5">Lot: {d.lot_no}</p>

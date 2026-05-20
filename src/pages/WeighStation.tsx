@@ -326,13 +326,15 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
   const [editing, setEditing] = useState<MachineProfile | null>(null)
   const [progress, setProgress] = useState<Record<string, { done: number; rolls: number }>>({})
 
-  // โหลดยอดผลิตวันนี้ต่อเครื่อง
+  // โหลดยอดผลิตต่อเครื่อง — filter ตาม lot_no ของแต่ละ profile
   useEffect(() => {
-    const today = new Date(); today.setHours(0,0,0,0)
+    if (profiles.length === 0) return
+    const lotNos = profiles.map(p => p.lotNo).filter(Boolean)
+    if (lotNos.length === 0) return
     supabase.from('production_rolls')
       .select('machine_no, lot_no, weight, roll_type')
       .eq('roll_type', 'good')
-      .gte('created_at', today.toISOString())
+      .in('lot_no', lotNos)
       .then(({ data }) => {
         if (!data) return
         const map: Record<string, { done: number; rolls: number }> = {}
@@ -344,7 +346,7 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
         })
         setProgress(map)
       })
-  }, [])
+  }, [profiles])
 
   const sorted = [...profiles].sort((a,b) => (a.machine_no||'').localeCompare(b.machine_no||'', undefined, { numeric: true }))
 
@@ -423,22 +425,28 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
                         <span className="text-slate-500">ผู้ตรวจ</span><span className="text-slate-200 font-semibold text-right truncate">{p.inspector || '—'}</span>
                       </div>
 
-                      {/* Progress */}
-                      {planned > 0 && (
-                        <div className="mt-auto">
-                          <div className="flex justify-between text-xs mb-1">
-                            <span className="text-green-400 font-bold">{prog.done.toFixed(1)} Kgs. · {prog.rolls} ม้วน</span>
+                      {/* Progress — แสดงเสมอ */}
+                      <div className="mt-auto">
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="text-green-400 font-bold">
+                            {prog.rolls} ม้วน · {prog.done.toFixed(1)} Kgs.
+                          </span>
+                          {planned > 0 && (
                             <span className={remaining <= 0 ? 'text-green-400 font-bold' : 'text-amber-400 font-bold'}>
-                              {remaining <= 0 ? '✓ ครบแล้ว' : `เหลือ ${remaining.toFixed(0)}`}
+                              {remaining <= 0 ? '✓ ครบแล้ว' : `เหลือ ${remaining.toFixed(0)} Kgs.`}
                             </span>
-                          </div>
-                          <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden">
-                            <div className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-green-500' : pct >= 70 ? 'bg-amber-400' : 'bg-brand-500'}`}
-                              style={{ width: `${pct}%` }}/>
-                          </div>
-                          <p className="text-[10px] text-slate-500 mt-0.5 text-right">เป้า {planned.toLocaleString()} Kgs. ({pct.toFixed(0)}%)</p>
+                          )}
                         </div>
-                      )}
+                        {planned > 0 && (
+                          <>
+                            <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden">
+                              <div className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-green-500' : pct >= 70 ? 'bg-amber-400' : 'bg-brand-500'}`}
+                                style={{ width: `${pct}%` }}/>
+                            </div>
+                            <p className="text-[10px] text-slate-500 mt-0.5 text-right">เป้า {planned.toLocaleString()} Kgs. ({pct.toFixed(0)}%)</p>
+                          </>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <div className="flex-1 flex flex-col items-center justify-center text-center px-3 py-4">

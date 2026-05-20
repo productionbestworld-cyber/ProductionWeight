@@ -236,6 +236,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   const [selectedDoc, setSelectedDoc] = useState<any | null>(null)
   const [docRolls,    setDocRolls]    = useState<any[]>([])
   const [docLoading,  setDocLoading]  = useState(false)
+  const [machineProfiles, setMachineProfiles] = useState<Record<string,string>>({}) // machine_no → lot_no ปัจจุบัน
 
   async function loadRolls() {
     setLoading(true)
@@ -252,7 +253,17 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
       .select('*').order('transferred_at',{ ascending: false }).limit(50)
     setDocs(data ?? [])
   }
-  useEffect(() => { loadRolls(); loadDocs() }, [])
+  useEffect(() => {
+    loadRolls()
+    loadDocs()
+    // โหลด lot_no ปัจจุบันของแต่ละเครื่อง
+    supabase.from('machine_profiles').select('machine_no, lot_no').then(({ data }) => {
+      if (!data) return
+      const map: Record<string,string> = {}
+      data.forEach(p => { if (p.machine_no) map[p.machine_no] = p.lot_no ?? '' })
+      setMachineProfiles(map)
+    })
+  }, [])
 
   // หา machine + lot ทั้งหมดที่มีในวันนี้
   const machines = Array.from(new Set(rolls.map(r => r.machine_no).filter(Boolean))).sort()
@@ -605,21 +616,29 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                   </button>
                   {/* แต่ละงาน */}
                   {jobs.map(j => {
-                    const isSel = machine === j.machine_no && lotNo === j.lot_no
+                    const isSel      = machine === j.machine_no && lotNo === j.lot_no
+                    const curLot     = machineProfiles[j.machine_no] ?? ''
+                    const isRunning  = curLot === j.lot_no  // เครื่องยังเดินงานนี้อยู่
                     return (
                       <button key={`${j.machine_no}-${j.lot_no}`}
                         onClick={() => { setMachine(j.machine_no); setLotNo(j.lot_no); setSelected(new Set()) }}
                         className={`w-full text-left p-3 rounded-xl border transition-all ${isSel ? 'border-brand-500 bg-brand-500/15' : 'border-slate-700 hover:border-slate-500 hover:bg-slate-800/50'}`}>
                         <div className="flex items-center justify-between mb-1">
                           <span className="bg-brand-600 text-white font-black text-xs px-2 py-0.5 rounded">เครื่อง {j.machine_no}</span>
-                          {j.pending > 0
-                            ? <span className="text-[10px] bg-amber-500/25 text-amber-300 px-2 py-0.5 rounded-full font-bold">รอโอน {j.pending}</span>
-                            : <span className="text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full">โอนครบ</span>
-                          }
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                            isRunning
+                              ? 'bg-green-500/20 text-green-400 animate-pulse'
+                              : 'bg-slate-700 text-slate-400'
+                          }`}>
+                            {isRunning ? '● กำลังเดิน' : '■ จบงานแล้ว'}
+                          </span>
                         </div>
                         <p className="text-white text-xs font-semibold leading-tight truncate">{j.product || '—'}</p>
                         <p className="text-slate-500 text-[10px] mt-0.5 truncate">{j.customer || ''}</p>
                         <p className="text-slate-600 text-[10px]">Lot {String(j.lot_no).slice(-8)} · รวม {j.total} ม้วน</p>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold">รอโอน {j.pending} ม้วน</span>
+                        </div>
                       </button>
                     )
                   })}

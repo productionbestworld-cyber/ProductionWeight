@@ -501,11 +501,27 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
                     </div>
                   ) : (
                     <div className="flex-1 flex flex-col items-center justify-center text-center px-3 py-4">
-                      <div className="w-8 h-8 rounded-full border-2 border-dashed border-slate-700 flex items-center justify-center mb-2">
-                        <span className="text-slate-600 text-lg">+</span>
-                      </div>
-                      <p className="text-slate-500 text-xs font-medium">เครื่องว่าง</p>
-                      <p className="text-slate-600 text-[10px] mt-0.5">คลิกเพื่อกรอกข้อมูลงาน</p>
+                      {parked[p.machine_no] ? (
+                        <>
+                          <div className="w-8 h-8 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center mb-2">
+                            <span className="text-amber-400 text-base">🅿</span>
+                          </div>
+                          <p className="text-amber-300 text-xs font-bold">มีงานจอดอยู่</p>
+                          <p className="text-amber-400/70 text-[10px] mt-0.5 truncate max-w-full px-2">{parked[p.machine_no]?.profile_snapshot?.productName}</p>
+                          <button className="pointer-events-auto z-10 mt-2 text-xs font-bold px-3 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/40 transition-colors"
+                            onClick={e => { e.stopPropagation(); restoreParked(p.machine_no) }}>
+                            ↩ คืนงานนี้
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <div className="w-8 h-8 rounded-full border-2 border-dashed border-slate-700 flex items-center justify-center mb-2">
+                            <span className="text-slate-600 text-lg">+</span>
+                          </div>
+                          <p className="text-slate-500 text-xs font-medium">เครื่องว่าง</p>
+                          <p className="text-slate-600 text-[10px] mt-0.5">คลิกเพื่อกรอกข้อมูลงาน</p>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>

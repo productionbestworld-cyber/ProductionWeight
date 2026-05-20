@@ -23,6 +23,7 @@ export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   const [dateFrom, setDateFrom]   = useState('')
   const [dateTo,   setDateTo]     = useState('')
   const [tab, setTab]             = useState<'history'|'deleted'|'machinelog'>('history')
+  const [selectedRoll, setSelectedRoll] = useState<any|null>(null)
   const [deletedLogs, setDeletedLogs] = useState<any[]>([])
   const [loadingDel,  setLoadingDel]  = useState(false)
   const [machineLog,  setMachineLog]  = useState<any[]>([])
@@ -360,6 +361,74 @@ export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
         </div>
       </>}
       </div>{/* /max-w-6xl */}
+      {/* Roll Detail Modal */}
+      {selectedRoll && (
+        <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4"
+          onClick={() => setSelectedRoll(null)}>
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm shadow-2xl"
+            onClick={e => e.stopPropagation()}>
+            {/* header */}
+            <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+              <div>
+                <p className="text-white font-bold text-sm">
+                  ม้วน {selectedRoll.roll_no ?? '—'}
+                  <span className={`ml-2 text-[10px] font-bold px-2 py-0.5 rounded ${
+                    selectedRoll.roll_type==='good' ? 'bg-green-500/20 text-green-400' :
+                    selectedRoll.roll_type==='bad'  ? 'bg-orange-500/20 text-orange-400' :
+                    'bg-amber-500/20 text-amber-400'
+                  }`}>
+                    {({'good':'ม้วนดี','bad':'ม้วนกรอ','scrap_clear':'เศษใส','scrap_color':'เศษสี','scrap_lump':'เศษก้อน'} as any)[selectedRoll.roll_type] ?? selectedRoll.roll_type}
+                  </span>
+                </p>
+                <p className="text-slate-400 text-xs mt-0.5">{selectedRoll.machine_no} · {fmtDateTime(selectedRoll.created_at)}</p>
+              </div>
+              <button onClick={() => setSelectedRoll(null)} className="text-slate-400 hover:text-white"><X size={18}/></button>
+            </div>
+            {/* body */}
+            <div className="px-5 py-4 space-y-3">
+              {/* น้ำหนัก */}
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="bg-slate-800 rounded-xl p-3">
+                  <p className="text-slate-500 text-[10px]">นน.เต็ม</p>
+                  <p className="text-white font-black text-lg">{fmt((selectedRoll.weight??0)+(selectedRoll.core_weight??0))}</p>
+                  <p className="text-slate-600 text-[10px]">Kgs.</p>
+                </div>
+                <div className="bg-slate-800 rounded-xl p-3">
+                  <p className="text-slate-500 text-[10px]">แกน (Core)</p>
+                  <p className="text-slate-300 font-bold text-lg">{fmt(selectedRoll.core_weight??0)}</p>
+                  <p className="text-slate-600 text-[10px]">Kgs.</p>
+                </div>
+                <div className="bg-brand-500/10 border border-brand-500/25 rounded-xl p-3">
+                  <p className="text-brand-400 text-[10px]">สุทธิ</p>
+                  <p className="text-brand-300 font-black text-lg">{fmt(selectedRoll.weight??0)}</p>
+                  <p className="text-slate-600 text-[10px]">Kgs.</p>
+                </div>
+              </div>
+              {/* รายละเอียด */}
+              <div className="bg-slate-800 rounded-xl p-3 space-y-2 text-sm">
+                {[
+                  { k:'สินค้า',      v: selectedRoll.product_name },
+                  { k:'ลูกค้า',      v: selectedRoll.customer },
+                  { k:'SO',          v: selectedRoll.sale_order || '—' },
+                  { k:'Lot No',      v: selectedRoll.lot_no },
+                  { k:'Mat Code',    v: selectedRoll.mat_code || selectedRoll.lot_no },
+                  { k:'ผู้ตรวจสอบ', v: selectedRoll.inspector || '—' },
+                  { k:'โอนเข้าคลัง', v: selectedRoll.transferred
+                      ? `✓ โดย ${selectedRoll.transferred_by || '—'}`
+                      : '— ยังไม่โอน' },
+                  { k:'หมายเหตุ',   v: selectedRoll.remark || '—' },
+                ].map(({ k, v }) => (
+                  <div key={k} className="flex justify-between gap-2">
+                    <span className="text-slate-500 shrink-0">{k}</span>
+                    <span className={`text-right font-semibold ${k==='โอนเข้าคลัง' ? (selectedRoll.transferred ? 'text-green-400' : 'text-slate-500') : 'text-white'}`}>{v || '—'}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Detail Modal */}
       {selected && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -413,12 +482,12 @@ export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
               {/* Rolls list */}
               {detailRolls.length > 0 && (
                 <div>
-                  <p className="text-slate-400 text-xs font-semibold mb-2">รายม้วน ({detailRolls.length})</p>
-                  <div className="bg-slate-800 rounded-xl overflow-hidden max-h-64 overflow-y-auto">
+                  <p className="text-slate-400 text-xs font-semibold mb-2">รายม้วน ({detailRolls.length}) — <span className="text-slate-500">คลิกม้วนเพื่อดูรายละเอียด</span></p>
+                  <div className="bg-slate-800 rounded-xl overflow-hidden max-h-72 overflow-y-auto">
                     <table className="w-full text-xs">
                       <thead className="bg-slate-700/50 sticky top-0">
                         <tr>
-                          {['เวลา','ประเภท','ม้วน','สุทธิ','โอน','ผู้ตรวจ'].map(h => (
+                          {['วันที่/เวลา','ประเภท','ม้วน','นน.เต็ม','สุทธิ','โอน','ผู้ตรวจ',''].map(h => (
                             <th key={h} className="px-2 py-1.5 text-left text-slate-500 text-[9px] uppercase font-semibold">{h}</th>
                           ))}
                         </tr>
@@ -428,14 +497,29 @@ export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                           const labels: Record<string,string> = {
                             good:'ดี', bad:'กรอ', scrap_clear:'เศษใส', scrap_color:'เศษสี', scrap_lump:'เศษก้อน'
                           }
+                          const d = new Date(r.created_at)
+                          const dateShort = `${d.getDate()}/${d.getMonth()+1}`
+                          const timeStr   = d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})
                           return (
-                            <tr key={r.id}>
-                              <td className="px-2 py-1.5 text-slate-500">{new Date(r.created_at).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})}</td>
-                              <td className="px-2 py-1.5 text-slate-400">{labels[r.roll_type]||r.roll_type}</td>
-                              <td className="px-2 py-1.5 text-white font-mono">{r.roll_no??'—'}</td>
-                              <td className="px-2 py-1.5 text-brand-300 font-bold">{fmt(r.weight)}</td>
-                              <td className="px-2 py-1.5">{r.transferred ? <span className="text-green-400">✓</span> : <span className="text-slate-700">—</span>}</td>
-                              <td className="px-2 py-1.5 text-slate-400">{r.inspector||'—'}</td>
+                            <tr key={r.id} onClick={() => setSelectedRoll(r)}
+                              className="hover:bg-slate-700/50 cursor-pointer transition-colors">
+                              <td className="px-2 py-2 text-slate-500 leading-tight">
+                                <div className="text-[9px] text-slate-600">{dateShort}</div>
+                                <div>{timeStr}</div>
+                              </td>
+                              <td className="px-2 py-2">
+                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                  r.roll_type==='good' ? 'bg-green-500/20 text-green-400' :
+                                  r.roll_type==='bad'  ? 'bg-orange-500/20 text-orange-400' :
+                                  'bg-amber-500/20 text-amber-400'
+                                }`}>{labels[r.roll_type]||r.roll_type}</span>
+                              </td>
+                              <td className="px-2 py-2 text-white font-mono font-bold">{r.roll_no??'—'}</td>
+                              <td className="px-2 py-2 text-slate-400">{fmt((r.weight??0)+(r.core_weight??0))}</td>
+                              <td className="px-2 py-2 text-brand-300 font-bold">{fmt(r.weight)}</td>
+                              <td className="px-2 py-2">{r.transferred ? <span className="text-green-400 font-bold">✓</span> : <span className="text-slate-700">—</span>}</td>
+                              <td className="px-2 py-2 text-slate-400">{r.inspector||'—'}</td>
+                              <td className="px-2 py-2 text-slate-600 text-[10px]">→</td>
                             </tr>
                           )
                         })}

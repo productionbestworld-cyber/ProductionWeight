@@ -145,23 +145,26 @@ function buildTransferSheet(
 ) {
   const { docNo, date, staff, sheetName = 'Transfer' } = opts
   const totalKg  = rolls.reduce((s, r) => s + (r.weight ?? 0), 0)
-  const machines = Array.from(new Set(rolls.map(r => r.machine_no).filter(Boolean))).join(', ')
-  const lots     = Array.from(new Set(rolls.map(r => r.lot_no).filter(Boolean))).join(', ')
-  const products = Array.from(new Set(rolls.map(r => r.product_name).filter(Boolean))).join(', ')
-  const dateStr  = date.toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit', year:'numeric' })
-  const timeStr  = date.toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit' })
+  const machines  = Array.from(new Set(rolls.map(r => r.machine_no).filter(Boolean))).join(', ')
+  const lots      = Array.from(new Set(rolls.map(r => r.lot_no).filter(Boolean))).join(', ')
+  const products  = Array.from(new Set(rolls.map(r => r.product_name).filter(Boolean))).join(', ')
+  const soNos     = Array.from(new Set(rolls.map(r => r.sale_order).filter(Boolean))).join(', ')
+  const dateStr   = date.toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit', year:'numeric' })
+  const timeStr   = date.toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit' })
 
-  // header rows (AOA = array of arrays)
+  const COLS = 15 // จำนวน column (เพิ่ม SO)
+
+  // header rows
   const header: any[][] = [
     ['บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด'],
     ['ใบโอนสินค้าเข้าคลัง (BWP TRANSFER NOTE)'],
     [],
-    ['เลขที่ใบโอน :', docNo,  '',  'วันที่ :', dateStr,  'เวลา :', timeStr],
-    ['ผู้โอน :',      staff,  '',  'เครื่อง :', machines, 'Lot :', lots],
-    ['สินค้า :',     products,'',  'จำนวน :', `${rolls.length} ม้วน`, 'น้ำหนักรวม (สุทธิ) :', `${totalKg.toFixed(2)} Kgs.`],
+    ['เลขที่ใบโอน :', docNo,    '', 'วันที่ :', dateStr,  'เวลา :', timeStr],
+    ['ผู้โอน :',      staff,    '', 'เครื่อง :', machines, 'Lot :', lots],
+    ['สินค้า :',      products, '', 'จำนวน :', `${rolls.length} ม้วน`, 'น้ำหนักรวม (สุทธิ) :', `${totalKg.toFixed(2)} Kgs.`],
+    ['Sale Order :',  soNos || '—'],
     [],
-    // column headers — ลำดับ ม้วนที่ นนม้วน นนแกน นนสุทธิ แล้วรายละเอียดตาม
-    ['ลำดับ','ม้วนที่','นน.ม้วน (Kgs.)','นน.แกน (Kgs.)','นน.สุทธิ (Kgs.)','เครื่อง','รหัสสินค้า','สินค้า','ลูกค้า','Lot','ผู้ตรวจสอบ','เวลาชั่ง','เวลาโอน','ผู้โอน'],
+    ['ลำดับ','ม้วนที่','นน.ม้วน (Kgs.)','นน.แกน (Kgs.)','นน.สุทธิ (Kgs.)','เครื่อง','Sale Order','รหัสสินค้า','สินค้า','ลูกค้า','Lot','ผู้ตรวจสอบ','เวลาชั่ง','เวลาโอน','ผู้โอน'],
   ]
 
   const dataRows = rolls.map((r, i) => [
@@ -170,32 +173,33 @@ function buildTransferSheet(
     Number(((r.weight??0)+(r.core_weight??0)).toFixed(2)),
     Number((r.core_weight??0).toFixed(2)),
     Number((r.weight??0).toFixed(2)),
-    r.machine_no ?? '',
-    r.product_code ?? '',
-    r.product_name ?? '',
-    r.customer ?? '',
-    r.lot_no ?? '',
-    r.inspector ?? '',
+    r.machine_no    ?? '',
+    r.sale_order    ?? '',
+    r.product_code  ?? '',
+    r.product_name  ?? '',
+    r.customer      ?? '',
+    r.lot_no        ?? '',
+    r.inspector     ?? '',
     new Date(r.created_at).toLocaleString('th-TH'),
     r.transferred_at ? new Date(r.transferred_at).toLocaleString('th-TH') : '',
     r.transferred_by ?? '',
   ])
 
   // total row
-  dataRows.push(['', `รวม ${rolls.length} ม้วน`, '', '', Number(totalKg.toFixed(2)), '', '', '', '', '', '', '', '', ''])
+  dataRows.push(['', `รวม ${rolls.length} ม้วน`, '', '', Number(totalKg.toFixed(2)), '', '', '', '', '', '', '', '', '', ''])
 
   const ws = XLSX.utils.aoa_to_sheet([...header, ...dataRows])
 
   // column widths
   ws['!cols'] = [
     {wch:6},{wch:8},{wch:16},{wch:14},{wch:16},
-    {wch:8},{wch:14},{wch:26},{wch:20},{wch:14},{wch:12},{wch:20},{wch:20},{wch:14},
+    {wch:8},{wch:16},{wch:14},{wch:26},{wch:20},{wch:16},{wch:12},{wch:20},{wch:20},{wch:14},
   ]
 
-  // merge title rows A1:N1 and A2:N2
+  // merge title rows
   ws['!merges'] = [
-    { s:{r:0,c:0}, e:{r:0,c:13} },
-    { s:{r:1,c:0}, e:{r:1,c:13} },
+    { s:{r:0,c:0}, e:{r:0,c:COLS-1} },
+    { s:{r:1,c:0}, e:{r:1,c:COLS-1} },
   ]
 
   return ws

@@ -123,94 +123,103 @@ ${savedLayout.fields.map(renderLongField).join('\n')}
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{font-family:'Sarabun','Arial',sans-serif;font-size:8pt;color:#000;background:#fff;width:165mm;height:70mm}
-.wrap{width:165mm;height:70mm;padding:1mm 2.5mm;display:flex;flex-direction:column;border:1.5px solid #000;overflow:hidden}
-.title{text-align:center;font-size:10.5pt;font-weight:700;border-bottom:1.5px solid #000;padding-bottom:.5mm;margin-bottom:.5mm;line-height:1.3}
-.hdr{display:flex;border-bottom:1px solid #000;padding-bottom:.5mm;margin-bottom:.5mm}
-.hc1{flex:1;border-right:1px solid #aaa;padding-right:2mm}
-.hc2{flex:1.4;border-right:1px solid #aaa;padding:0 2mm;text-align:center}
-.hc3{flex:.7;padding-left:2mm;text-align:right}
-.body{display:flex;flex:1;min-height:0}
-.L{flex:1.5;padding-right:2.5mm;border-right:1px solid #000;display:flex;flex-direction:column}
-.R{flex:1;padding-left:2.5mm;display:flex;flex-direction:column}
-.row{display:flex;align-items:baseline;line-height:1.35;margin-bottom:.2mm}
-.k{font-size:7pt;min-width:20mm;display:inline-block;color:#333}
-.v{font-size:8pt;font-weight:700}
-.v2{font-size:10pt;font-weight:700}
-.sn{font-size:11pt;font-weight:800;vertical-align:middle}
-.su{font-size:7pt;vertical-align:middle;color:#333}
-.wr{display:flex;justify-content:space-between;align-items:baseline;border-bottom:.5px solid #ccc;padding:.3mm 0}
-.wk{font-size:7pt;color:#333}
-.wv{font-size:9pt;font-weight:700}
-.wvn{font-size:13pt;font-weight:800;color:#003087}
-.bcno{border-bottom:1px solid #000;height:2.5mm;margin-top:.3mm;width:100%}
+html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;width:165mm;height:70mm}
+.wrap{width:165mm;height:70mm;padding:.8mm 2mm;display:flex;flex-direction:column;border:2px solid #000;overflow:hidden}
+
+/* ── Row 1: หัวกระดาษ ── */
+.title{text-align:center;font-size:11pt;font-weight:700;border-bottom:2px solid #000;padding-bottom:.5mm;margin-bottom:.5mm;line-height:1.25;letter-spacing:.2px}
+
+/* ── Row 2: Mat / MFG / Roll ── */
+.hdr{display:flex;border-bottom:1px solid #000;padding-bottom:.4mm;margin-bottom:.4mm;align-items:center}
+.hc{flex:1;font-size:7pt;color:#444}
+.hc b{font-size:9.5pt;font-weight:700;color:#000;margin-left:.5mm}
+.hc.mid{text-align:center;border-left:1px solid #bbb;border-right:1px solid #bbb;padding:0 2mm}
+.hc.right{text-align:right}
+
+/* ── Row 3: Product name + Size + Lot ── */
+.prod-row{display:flex;align-items:baseline;border-bottom:1px solid #ddd;padding-bottom:.4mm;margin-bottom:.4mm;gap:1.5mm;flex-wrap:nowrap;overflow:hidden}
+.pname{font-size:11pt;font-weight:800;white-space:nowrap;flex-shrink:0}
+.pdot{color:#bbb;font-size:9pt;flex-shrink:0}
+.psize{font-size:8.5pt;font-weight:700;white-space:nowrap;flex-shrink:0}
+.plot{margin-left:auto;font-size:7.5pt;font-weight:700;white-space:nowrap;flex-shrink:0;color:#333}
+
+/* ── Row 4-5: info rows ── */
+.irow{display:flex;justify-content:space-between;font-size:7.5pt;padding:.25mm 0;border-bottom:.5px solid #eee}
+.il{color:#444}
+.il b{color:#000;font-weight:700}
+.ir{color:#444;text-align:right}
+.ir b{color:#000;font-weight:700}
+
+/* ── Row 6: Weight + QR ── */
+.wsec{flex:1;display:flex;border-top:2px solid #000;margin-top:.4mm;min-height:0}
+.wleft{flex:1;display:flex;flex-direction:column;padding-right:1.5mm;padding-top:.5mm;overflow:hidden}
+.wlbl{font-size:6.5pt;font-weight:600;color:#555;letter-spacing:.3px;text-transform:uppercase}
+.wnum{font-size:20pt;font-weight:800;line-height:1;color:#001a5c;letter-spacing:-1px}
+.wunit{font-size:8.5pt;font-weight:700;margin-top:.2mm}
+.wgross{font-size:7.5pt;font-weight:600;color:#333;margin-top:.5mm;border-top:.5px solid #ccc;padding-top:.3mm}
+.wbc{margin-top:auto}
+.wbclbl{font-size:6.5pt;color:#666;margin-bottom:.3mm}
+.wbcline{border-bottom:1px solid #000;width:26mm;height:2.5mm}
+.winsp{font-size:8pt;font-weight:700;margin-top:.8mm}
+.qrbox{width:22mm;display:flex;align-items:center;justify-content:center;border-left:1px solid #ddd;padding-left:1.5mm;flex-shrink:0}
+
 @media print{@page{size:165mm 70mm;margin:0}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style>
+
 <div class="wrap">
-  <div class="title">บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด
-    ${rollType !== 'good' ? `<span style="font-size:8pt;font-weight:700;color:#c00;margin-left:4mm">[${
-      rollType === 'bad'         ? 'ม้วนกรอ' :
-      rollType === 'scrap_clear' ? 'เศษเสีย (ใส)' :
-      rollType === 'scrap_color' ? 'เศษเสีย (สี)' :
-      rollType === 'scrap_lump'  ? 'เศษก้อน' : ''
-    }]</span>` : ''}
-  </div>
-  ${reason ? `<div style="font-size:7.5pt;color:#c00;text-align:center;margin-bottom:1mm">เหตุผล: ${reason}</div>` : ''}
 
-  <!-- Header: ไม่มี barcode แค่ text -->
+  <!-- Row 1: หัวกระดาษ -->
+  <div class="title">
+    ${p.blankHeader ? '' : (p.headerText?.trim() || 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด')}
+    ${rollType !== 'good' ? `<span style="font-size:8pt;font-weight:700;margin-left:3mm">[${rollTypeLabelLong}]</span>` : ''}
+  </div>
+  ${reason ? `<div style="font-size:7pt;color:#c00;text-align:center;line-height:1.2;margin-bottom:.3mm">เหตุผล: ${reason}</div>` : ''}
+
+  <!-- Row 2: Mat / MFG / Roll -->
   <div class="hdr">
-    <div class="hc1">
-      <span style="font-size:8pt">Mat Code &nbsp;</span><b style="font-size:9pt">${p.matCode}</b>
+    <div class="hc"><span>Mat</span><b>${p.matCode}</b></div>
+    <div class="hc mid"><span>MFG</span><b>${mfgDate}</b></div>
+    <div class="hc right"><span>${rollType.startsWith('scrap') ? 'ถุง' : rollType==='bad' ? 'กรอ' : 'Roll'}</span><b>#${rollNo===0?'—':rollNo}</b></div>
+  </div>
+
+  <!-- Row 3: Product + Size + Lot -->
+  <div class="prod-row">
+    <span class="pname">${p.productName}</span>
+    <span class="pdot">·</span>
+    <span class="psize">${p.widthCm} cm × ${p.thickMc} mc</span>
+    <span class="plot">Lot: ${p.lotNo}</span>
+  </div>
+
+  <!-- Row 4: Code + Length -->
+  <div class="irow">
+    <span class="il">Code&nbsp;<b>${p.productCode||p.matCode}</b></span>
+    <span class="ir">Length&nbsp;<b>${p.length||'—'} M.</b>${p.pcs ? `&nbsp;&nbsp;Pcs.&nbsp;<b>${p.pcs}</b>` : ''}</span>
+  </div>
+
+  <!-- Row 5: Machine + Core -->
+  <div class="irow" style="border-bottom:none">
+    <span class="il">เครื่อง&nbsp;<b>${p.machine_no}</b></span>
+    <span class="ir">Core&nbsp;<b>${fmt(core,dec)} Kg</b></span>
+  </div>
+
+  <!-- Row 6: Weight + QR -->
+  <div class="wsec">
+    <div class="wleft">
+      <div class="wlbl">Net Weight</div>
+      <div class="wnum">${fmt(net,dec)}</div>
+      <div class="wunit">Kgs.</div>
+      <div class="wgross">Gross&nbsp;&nbsp;${fmt(gross,dec)} Kgs.</div>
+      <div class="wbc">
+        <div class="wbclbl">Barcode No.</div>
+        <div class="wbcline"></div>
+        <div class="winsp">ผู้ตรวจสอบ&nbsp;&nbsp;${p.inspector||'—'}</div>
+      </div>
     </div>
-    <div class="hc2">
-      <span style="font-size:8pt">MFG Date &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span><b style="font-size:9pt">${mfgDate}</b>
-    </div>
-    <div class="hc3">
-      <span style="font-size:8pt">${rollType.startsWith('scrap') ? 'ถุงเศษ' : rollType==='bad' ? 'กรอ No.' : 'Roll No.'} &nbsp;</span>
-      <b style="font-size:9pt">${rollNo === 0 ? '—' : rollNo}</b>
+    <div class="qrbox">
+      <img src="${qrUrl(72)}" width="76" height="76" style="image-rendering:pixelated;display:block"/>
     </div>
   </div>
 
-  <div class="body">
-    <!-- LEFT: Product top, Machine bottom-left -->
-    <div class="L" style="justify-content:space-between">
-      <div>
-        <div class="row"><span class="k">Product Code</span><span class="v">${p.productCode||p.matCode}</span></div>
-        <div class="row"><span class="k">Product Name</span><span class="v2">${p.productName}</span></div>
-      </div>
-      <div>
-        <div class="row"><span class="k">เครื่อง</span><span class="v">${p.machine_no}</span></div>
-        <div class="row"><span class="k">Core Weight</span><span class="v">${fmt(core,dec)}</span></div>
-        <div class="row" style="align-items:center">
-          <span class="k">Size</span>
-          <span class="sn">${p.widthCm}</span><span class="su">&nbsp;cm&nbsp;x&nbsp;</span>
-          <span class="sn">${p.thickMc}</span><span class="su">&nbsp;mc</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- RIGHT -->
-    <div class="R">
-      <div class="row"><span class="k">Lot No</span><span class="v">${p.lotNo}</span></div>
-      <div class="row">
-        <span class="k">Length</span><span class="v">${p.length||'—'}</span>
-        <span style="font-size:7.5pt">&nbsp;M.&nbsp;&nbsp;</span>
-        <span class="v">${p.pcs||''}</span>
-        <span style="font-size:7.5pt">&nbsp;Pcs.</span>
-      </div>
-      <div style="height:1mm"></div>
-      <div class="wr"><span class="wk">Gross Weight</span><span class="wv">${fmt(gross,dec)} Kgs.</span></div>
-      <div class="wr" style="border-bottom:none"><span class="wk">Net Weight</span><span class="wvn">${fmt(net,dec)} Kgs.</span></div>
-      <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-top:auto">
-        <div>
-          <div style="font-size:7.5pt">Barcode No.</div>
-          <div class="bcno" style="width:24mm"></div>
-          <div style="margin-top:1mm;font-size:8pt">ผู้ตรวจสอบ &nbsp;<b>${p.inspector}</b></div>
-        </div>
-        <img src="${qrUrl(72)}" width="72" height="72" style="flex-shrink:0;image-rendering:pixelated"/>
-      </div>
-    </div>
-  </div>
 </div>`
 
   // ═══════════════════════════════════════════════════════

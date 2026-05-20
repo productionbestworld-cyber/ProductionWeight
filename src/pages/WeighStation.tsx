@@ -464,8 +464,9 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
                         <p className="text-slate-400 text-xs truncate mt-0.5">{p.custName}</p>
                       </div>
 
-                      {/* Lot + Size */}
+                      {/* SO + Lot + Size */}
                       <div className="flex gap-1.5 flex-wrap">
+                        {p.soNo && <span className="text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/25 px-2 py-0.5 rounded font-bold">SO {p.soNo}</span>}
                         <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded font-mono border border-slate-700">Lot {p.lotNo.slice(-8)}</span>
                         {p.widthCm && <span className="text-[10px] bg-brand-500/15 text-brand-300 border border-brand-500/25 px-2 py-0.5 rounded font-bold">{p.widthCm}×{p.thickMc}mc</span>}
                       </div>
@@ -653,6 +654,7 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
         header_text:   p.headerText ?? '',
         blank_header:  p.blankHeader ?? false,
         section:       p.section ?? 'blow',
+        sale_order:    p.soNo ?? '',
         updated_at:    new Date().toISOString(),
       }, { onConflict: 'machine_no' })
       if (error) throw new Error(error.message)
@@ -703,6 +705,7 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
         <div className="px-5 py-4 overflow-y-auto space-y-3">
           <p className="text-brand-400 text-[10px] font-bold uppercase tracking-wider">ลูกค้า</p>
           <div className="grid grid-cols-2 gap-2">
+            {inp('Sale Order (SO)', 'soNo', 'SO-2026-0001')}
             {inp('รหัสลูกค้า', 'custCode', 'C-001', true)}
             <div>
               <label className="block text-[10px] text-slate-500 mb-1">ทศนิยม</label>
@@ -1031,6 +1034,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       await supabase.from('job_summaries').insert({
         machine_no:     profile.machine_no,
         lot_no:         profile.lotNo,
+        sale_order:     profile.soNo ?? '',
         product_name:   profile.productName,
         customer:       profile.custName,
         mat_code:       profile.matCode,
@@ -1092,6 +1096,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         inspector:    inspector || null,
         machine_no:   profile.machine_no,
         lot_no:       profile.lotNo,
+        sale_order:   profile.soNo ?? '',
         product_name: profile.productName,
         customer:     profile.custName,
         section:      profile.section ?? 'blow',
@@ -1208,7 +1213,10 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
           </div>
           <div>
             <p className="text-white font-bold text-sm">{profile.productName}</p>
-            <p className="text-slate-400 text-xs">{profile.custName} · Lot {profile.lotNo}</p>
+            <p className="text-slate-400 text-xs">
+              {profile.soNo && <span className="text-amber-300 font-bold mr-1.5">SO {profile.soNo}</span>}
+              {profile.custName} · Lot {profile.lotNo}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -1820,6 +1828,7 @@ export default function WeighStation({ dept }: { dept?: 'blow' | 'print' | 'rewi
           headerText:  r.header_text  ?? '',
           blankHeader: r.blank_header ?? false,
           section:    (r.section      ?? 'blow') as 'blow'|'print'|'rewind',
+          soNo:        r.sale_order   ?? '',
         }))
         setProfiles(list)
         saveProfiles(list)

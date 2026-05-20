@@ -31,6 +31,8 @@ export interface MachineProfile {
   blankHeader: boolean  // ติ๊ก = เว้นหัวว่าง
   // แผนก
   section:     'blow' | 'print' | 'rewind'
+  // Sale Order
+  soNo:        string
 }
 
 const EMPTY_PROFILE: MachineProfile = {
@@ -38,6 +40,7 @@ const EMPTY_PROFILE: MachineProfile = {
   matCode:'', productCode:'', productName:'', widthCm:'', thickMc:'',
   lotNo:'', length:'', pcs:'', coreWeight:'1.25', inspector:'', locked:false,
   plannedQty:'', labelSize:'long', headerText:'', blankHeader:false, section:'blow',
+  soNo:'',
 }
 
 function nextMachineNo(profiles: MachineProfile[]): string {
@@ -73,6 +76,7 @@ function dbToProfile(row: any): MachineProfile {
     headerText:  row.header_text  ?? '',
     blankHeader: row.blank_header ?? false,
     section:     (row.section     ?? 'blow') as 'blow'|'print'|'rewind',
+    soNo:        row.sale_order   ?? '',
   }
 }
 function profileToDb(p: MachineProfile) {
@@ -98,6 +102,7 @@ function profileToDb(p: MachineProfile) {
     header_text:   p.headerText,
     blank_header:  p.blankHeader,
     section:       p.section,
+    sale_order:    p.soNo ?? '',
     updated_at:    new Date().toISOString(),
   }
 }

@@ -157,26 +157,31 @@ const LAYOUT_ID = 'long'
 
 export async function loadLongLayout(): Promise<LabelLayout> {
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('label_layouts')
       .select('layout')
       .eq('id', LAYOUT_ID)
       .maybeSingle()
+    if (error) { console.warn('[LabelDesigner] load error:', error.message); return DEFAULT_LAYOUT }
     if (data?.layout) {
       const parsed = data.layout as LabelLayout
-      // merge — เพิ่ม field ใหม่ที่อาจยังไม่มีใน saved version
       const savedIds = new Set(parsed.fields.map((f: FieldConfig) => f.id))
       const missing  = DEFAULT_LAYOUT.fields.filter(f => !savedIds.has(f.id))
       return { ...parsed, fields: [...parsed.fields, ...missing] }
     }
-  } catch {}
+    // ยังไม่มีข้อมูล → บันทึก default ลง DB เลย
+    await saveLayoutToDB(DEFAULT_LAYOUT)
+  } catch (e) { console.warn('[LabelDesigner] load exception:', e) }
   return DEFAULT_LAYOUT
 }
 
-async function saveLayoutToDB(layout: LabelLayout) {
-  await supabase
+async function saveLayoutToDB(layout: LabelLayout): Promise<boolean> {
+  const { error } = await supabase
     .from('label_layouts')
-    .upsert({ id: LAYOUT_ID, layout, updated_at: new Date().toISOString() })
+    .upsert({ id: LAYOUT_ID, layout, updated_at: new Date().toISOString() },
+             { onConflict: 'id' })
+  if (error) { console.error('[LabelDesigner] save error:', error.message); return false }
+  return true
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
@@ -199,15 +204,21 @@ export default function LabelDesigner() {
   // ── save ──────────────────────────────────────────────────────────────────
   async function doSave() {
     setSavedFlash(true)
-    await saveLayoutToDB(layout)
-    setTimeout(() => setSavedFlash(false), 2000)
+    const ok = await saveLayoutToDB(layout)
+    if (!ok) {
+      alert('❌ บันทึกไม่สำเร็จ — กรุณาตรวจสอบ Supabase RLS policy')
+      setSavedFlash(false)
+    } else {
+      setTimeout(() => setSavedFlash(false), 2000)
+    }
   }
 
   async function doReset() {
     if (!confirm('รีเซ็ตกลับค่าเริ่มต้น? (layout ที่บันทึกไว้จะหายไป)')) return
     setLayout(DEFAULT_LAYOUT)
     setSelected(null)
-    await saveLayoutToDB(DEFAULT_LAYOUT)
+    const ok = await saveLayoutToDB(DEFAULT_LAYOUT)
+    if (!ok) alert('❌ บันทึกไม่สำเร็จ — กรุณาตรวจสอบ Supabase RLS policy')
   }
 
   // ── add / delete ─────────────────────────────────────────────────────────

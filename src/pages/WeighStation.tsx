@@ -835,15 +835,16 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
   const serialPortRef     = useRef<any>(null)
   const serialReaderRef   = useRef<any>(null)
 
-  async function connectSerial() {
+  async function connectSerial(autoPort?: any) {
     try {
       const nav: any = navigator
       if (!nav.serial) {
         alert('Browser นี้ไม่รองรับ Web Serial — ใช้ Chrome หรือ Edge')
         return
       }
-      const port = await nav.serial.requestPort()
+      const port = autoPort ?? await nav.serial.requestPort()
       localStorage.setItem('bwp_baud', String(baudRate))
+      localStorage.setItem('bwp_serial_autoconnect', '1')
       await port.open({ baudRate, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' })
       serialPortRef.current = port
       setSerialConnected(true)
@@ -891,9 +892,23 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
     } catch {}
     serialPortRef.current = null
     serialReaderRef.current = null
+    localStorage.removeItem('bwp_serial_autoconnect')
     setSerialConnected(false)
     setSerialStable(false)
   }
+
+  // ── Auto-reconnect ตอนเปิดหน้า ────────────────────────────
+  useEffect(() => {
+    if (localStorage.getItem('bwp_serial_autoconnect') !== '1') return
+    const nav: any = navigator
+    if (!nav.serial) return
+    nav.serial.getPorts().then((ports: any[]) => {
+      if (ports.length > 0) {
+        connectSerial(ports[0]).catch(() => {})
+      }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ── parse format Azano VC50: ST,GS,+00.00kg ────────────────────────────
   function parseScaleLine(line: string) {

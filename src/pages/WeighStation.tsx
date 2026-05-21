@@ -830,6 +830,8 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
   // ── Serial / เครื่องชั่งจริง ────────────────────────────────────────────
   const [serialConnected, setSerialConnected] = useState(false)
   const [serialStable,    setSerialStable]    = useState(false)
+  const [baudRate,        setBaudRate]        = useState(() => parseInt(localStorage.getItem('bwp_baud') ?? '9600'))
+  const [rawSerial,       setRawSerial]       = useState('')  // debug raw data
   const serialPortRef     = useRef<any>(null)
   const serialReaderRef   = useRef<any>(null)
 
@@ -841,7 +843,8 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
         return
       }
       const port = await nav.serial.requestPort()
-      await port.open({ baudRate: 9600, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' })
+      localStorage.setItem('bwp_baud', String(baudRate))
+      await port.open({ baudRate, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' })
       serialPortRef.current = port
       setSerialConnected(true)
       // อ่านค่าต่อเนื่อง
@@ -856,6 +859,7 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
             const { value, done } = await reader.read()
             if (done) break
             buf += value
+            setRawSerial(prev => (prev + value).slice(-200))  // debug last 200 chars
             // หาบรรทัดสมบูรณ์ (\r\n หรือ \n)
             let idx
             while ((idx = buf.indexOf('\n')) >= 0) {
@@ -863,6 +867,11 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
               buf = buf.slice(idx + 1)
               if (!line) continue
               parseScaleLine(line)
+            }
+            // ถ้า buf ยาวเกิน 200 chars แต่ไม่เจอ \n → ลอง parse เลย
+            if (buf.length > 200) {
+              parseScaleLine(buf)
+              buf = ''
             }
           }
         } catch (e) {
@@ -1419,10 +1428,16 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                   {serialStable ? '● เครื่องชั่ง (นิ่ง)' : '◌ เครื่องชั่ง (อ่าน...)'}
                 </button>
               ) : (
-                <button onClick={connectSerial}
-                  className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/40 hover:bg-blue-500/30">
-                  🔌 เชื่อมต่อเครื่องชั่ง
-                </button>
+                <div className="flex items-center gap-1">
+                  <select value={baudRate} onChange={e => setBaudRate(parseInt(e.target.value))}
+                    className="text-[10px] bg-slate-800 text-slate-300 border border-slate-600 rounded px-1 py-0.5 outline-none">
+                    {[1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200].map(b => <option key={b} value={b}>{b}</option>)}
+                  </select>
+                  <button onClick={connectSerial}
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/40 hover:bg-blue-500/30">
+                    🔌 เชื่อมต่อ
+                  </button>
+                </div>
               )}
             </div>
             <input
@@ -1433,7 +1448,12 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
               readOnly={serialConnected}
               className="w-full font-mono text-[72px] font-black tracking-tight leading-none mb-1 text-white bg-transparent text-center outline-none placeholder-slate-700 focus:bg-slate-800/50 rounded-xl"
             />
-            <p className="text-slate-500 text-xs font-semibold mb-4">Kgs.</p>
+            <p className="text-slate-500 text-xs font-semibold mb-2">Kgs.</p>
+            {serialConnected && rawSerial && (
+              <div className="bg-slate-950 border border-slate-800 rounded px-2 py-1 mb-3 font-mono text-[9px] text-slate-500 truncate text-left" title={rawSerial}>
+                📥 {rawSerial.replace(/[\r\n]/g, '·').slice(-80)}
+              </div>
+            )}
 
             {!isScrap && (
               <div className="flex items-center justify-center gap-5 mb-4">

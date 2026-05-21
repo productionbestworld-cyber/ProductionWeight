@@ -151,15 +151,15 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
 .ir b{color:#000;font-weight:700}
 
 /* ── Row 6: Weight + QR ── */
-.wsec{flex:1;display:flex;border-top:2px solid #000;margin-top:.4mm;min-height:0}
-.wleft{flex:1;display:flex;flex-direction:column;padding-right:1.5mm;padding-top:.5mm;overflow:hidden}
-.wlbl{font-size:6.5pt;font-weight:600;color:#555;letter-spacing:.3px;text-transform:uppercase}
-.wnum{font-size:20pt;font-weight:800;line-height:1;color:#001a5c;letter-spacing:-1px}
-.wunit{font-size:8.5pt;font-weight:700;margin-top:.2mm}
-.wgross{font-size:7.5pt;font-weight:600;color:#333;margin-top:.5mm;border-top:.5px solid #ccc;padding-top:.3mm}
+.wsec{flex:1;display:flex;border-top:2px solid #000;margin-top:.3mm;min-height:0;overflow:hidden}
+.wleft{flex:1;display:flex;flex-direction:column;padding-right:1.5mm;padding-top:.3mm;overflow:hidden}
+.wlbl{font-size:6pt;font-weight:600;color:#555;letter-spacing:.3px;text-transform:uppercase;line-height:1.2}
+.wnum{font-size:17pt;font-weight:800;line-height:1;color:#001a5c;letter-spacing:-1px}
+.wunit{font-size:7.5pt;font-weight:700;margin-top:.1mm;line-height:1.2}
+.wgross{font-size:7pt;font-weight:600;color:#333;margin-top:.3mm;border-top:.5px solid #ccc;padding-top:.2mm;line-height:1.2}
 .wbc{margin-top:auto}
-.wbclbl{font-size:6.5pt;color:#666;margin-bottom:.3mm}
-.wbcline{border-bottom:1px solid #000;width:26mm;height:2.5mm}
+.wbclbl{font-size:6pt;color:#666;margin-bottom:.2mm;line-height:1.2}
+.wbcline{border-bottom:1px solid #000;width:24mm;height:2mm}
 .winsp{font-size:8pt;font-weight:700;margin-top:.8mm}
 .qrbox{width:22mm;display:flex;align-items:center;justify-content:center;border-left:1px solid #ddd;padding-left:1.5mm;flex-shrink:0}
 
@@ -235,22 +235,22 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;width:76.2mm;height:76.2mm}
 .page{width:76.2mm;height:76.2mm;display:flex;flex-direction:column;border:2px solid #000;overflow:hidden}
-.hdr{text-align:center;font-size:11.5pt;font-weight:900;padding:1mm 2mm;border-bottom:2px solid #000;letter-spacing:.3px;line-height:1.2}
-.meta{display:flex;justify-content:space-between;border-bottom:2px solid #000;padding:.8mm 2mm;font-size:9pt;font-weight:700}
-.meta b{font-size:10.5pt;font-weight:900}
-.body{flex:1;padding:.5mm 2mm;display:flex;flex-direction:column;overflow:hidden}
-.r{display:flex;justify-content:space-between;align-items:baseline;font-size:9.5pt;font-weight:700;line-height:1.45}
-.r .k{flex-shrink:0;min-width:17mm}
+.hdr{text-align:center;font-size:10.5pt;font-weight:900;padding:.7mm 2mm;border-bottom:2px solid #000;letter-spacing:.3px;line-height:1.2}
+.meta{display:flex;justify-content:space-between;border-bottom:2px solid #000;padding:.5mm 2mm;font-size:8pt;font-weight:700}
+.meta b{font-size:9.5pt;font-weight:900}
+.body{flex:1;padding:.3mm 2mm;display:flex;flex-direction:column;overflow:hidden}
+.r{display:flex;justify-content:space-between;align-items:baseline;font-size:8.5pt;font-weight:700;line-height:1.35}
+.r .k{flex-shrink:0;min-width:16mm}
 .r .v{font-weight:900;text-align:right;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.r .v.xl{font-size:11pt;font-weight:900}
-.sep{border-top:2px solid #000;margin:.3mm 0}
-.wrow{display:flex;justify-content:space-between;align-items:center;border-top:2px solid #000;border-bottom:2px solid #000;padding:1mm 2mm;flex-shrink:0}
-.wlbl{font-size:8.5pt;font-weight:800}
-.wval{font-size:28pt;font-weight:900;line-height:1}
-.wunit{font-size:9.5pt;font-weight:900}
-.wgross{font-size:8pt;font-weight:700;margin-top:.2mm}
-.foot{padding:.8mm 2mm;border-top:2px solid #000;flex-shrink:0}
-.inspector{font-size:10pt;font-weight:900}
+.r .v.xl{font-size:10pt;font-weight:900}
+.sep{border-top:2px solid #000;margin:.2mm 0}
+.wrow{display:flex;justify-content:space-between;align-items:center;border-top:2px solid #000;border-bottom:2px solid #000;padding:.7mm 2mm;flex-shrink:0}
+.wlbl{font-size:7.5pt;font-weight:800}
+.wval{font-size:24pt;font-weight:900;line-height:1}
+.wunit{font-size:8.5pt;font-weight:900}
+.wgross{font-size:7pt;font-weight:700;margin-top:.1mm}
+.foot{padding:.6mm 2mm;border-top:2px solid #000;flex-shrink:0}
+.inspector{font-size:9pt;font-weight:900}
 @media print{@page{size:76.2mm 76.2mm;margin:0}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style>
 <div class="page">
@@ -1654,11 +1654,13 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                 className="absolute top-3 right-3 text-slate-500 hover:text-white w-7 h-7 rounded-lg hover:bg-slate-700 flex items-center justify-center transition-colors">
                 <X size={16}/>
               </button>
-              <div className="w-14 h-14 mx-auto rounded-full bg-brand-500/20 flex items-center justify-center mb-3">
-                <span className="text-3xl">👤</span>
+              {/* เลขเครื่อง — ใหญ่ชัดเจน */}
+              <div className="bg-brand-600/20 border-2 border-brand-500/50 rounded-2xl px-6 py-3 mb-4 inline-block">
+                <p className="text-brand-300 text-[11px] font-semibold uppercase tracking-widest mb-0.5">เครื่อง</p>
+                <p className="text-white font-black text-5xl tracking-wider">{profile.machine_no}</p>
               </div>
-              <p className="text-white font-bold text-lg">ผู้ตรวจสอบกะนี้คือใคร?</p>
-              <p className="text-slate-400 text-sm mt-1">{profile.machine_no} · {profile.productName}</p>
+              <p className="text-slate-300 text-sm font-semibold truncate px-2">{profile.productName}</p>
+              <p className="text-white font-bold text-lg mt-3">ผู้ตรวจสอบกะนี้คือใคร?</p>
               {isStale && inspector && (
                 <p className="text-amber-400 text-xs mt-2">⚠️ ผ่านมา {Math.floor(hoursSinceSet)} ชั่วโมง — เปลี่ยนกะหรือยัง?</p>
               )}

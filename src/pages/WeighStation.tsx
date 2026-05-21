@@ -299,7 +299,7 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
   if (!win) return
 
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
-  ${size === 'long' ? longHtml : shortHtml}
+  ${size === 'long' ? longHtmlFromLayout : shortHtml}
   </head><body><script>
     var imgs=document.images,n=0
     function doPrint(){

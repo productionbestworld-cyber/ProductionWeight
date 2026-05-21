@@ -842,7 +842,10 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
         alert('Browser นี้ไม่รองรับ Web Serial — ใช้ Chrome หรือ Edge')
         return
       }
-      const port = autoPort ?? await nav.serial.requestPort()
+      let port: any = autoPort
+      if (!port || typeof port.open !== 'function') {
+        port = await nav.serial.requestPort()
+      }
       localStorage.setItem('bwp_baud', String(baudRate))
       localStorage.setItem('bwp_serial_autoconnect', '1')
       await port.open({ baudRate, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' })
@@ -897,18 +900,60 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
     setSerialStable(false)
   }
 
-  // ── Auto-reconnect ตอนเปิดหน้า ────────────────────────────
+  // ── Auto-reconnect ตอนเปิดหน้า (silent — ถ้าพังก็ปล่อย user กดเอง) ──
   useEffect(() => {
     if (localStorage.getItem('bwp_serial_autoconnect') !== '1') return
     const nav: any = navigator
     if (!nav.serial) return
-    nav.serial.getPorts().then((ports: any[]) => {
-      if (ports.length > 0) {
-        connectSerial(ports[0]).catch(() => {})
-      }
-    })
+    // delay 500ms ให้ browser เคลียร์ port เก่าก่อน
+    const t = setTimeout(() => {
+      nav.serial.getPorts().then((ports: any[]) => {
+        if (ports.length === 0) return
+        const port = ports[0]
+        if (!port || typeof port.open !== 'function') return
+        // ลองเปิด port แบบไม่บล็อก
+        port.open({ baudRate, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' })
+          .then(() => {
+            serialPortRef.current = port
+            setSerialConnected(true)
+            startSerialReader(port)
+          })
+          .catch(() => {
+            // เปิดไม่ได้ → ลบ flag ให้ user กดเอง
+            localStorage.removeItem('bwp_serial_autoconnect')
+          })
+      }).catch(() => {})
+    }, 500)
+    return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // แยก reader logic ออกมา
+  function startSerialReader(port: any) {
+    const decoder = new TextDecoderStream()
+    port.readable.pipeTo(decoder.writable).catch(() => {})
+    const reader = decoder.readable.getReader()
+    serialReaderRef.current = reader
+    let buf = ''
+    ;(async () => {
+      try {
+        while (true) {
+          const { value, done } = await reader.read()
+          if (done) break
+          buf += value
+          setRawSerial(prev => (prev + value).slice(-200))
+          let idx
+          while ((idx = buf.indexOf('\n')) >= 0) {
+            const line = buf.slice(0, idx).trim()
+            buf = buf.slice(idx + 1)
+            if (!line) continue
+            parseScaleLine(line)
+          }
+          if (buf.length > 200) { parseScaleLine(buf); buf = '' }
+        }
+      } catch (e) { console.warn('serial read ended', e) }
+    })()
+  }
 
   // ── parse format Azano VC50: ST,GS,+00.00kg ────────────────────────────
   function parseScaleLine(line: string) {

@@ -851,37 +851,7 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
       await port.open({ baudRate, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' })
       serialPortRef.current = port
       setSerialConnected(true)
-      // อ่านค่าต่อเนื่อง
-      const decoder = new TextDecoderStream()
-      port.readable.pipeTo(decoder.writable)
-      const reader = decoder.readable.getReader()
-      serialReaderRef.current = reader
-      let buf = ''
-      ;(async () => {
-        try {
-          while (true) {
-            const { value, done } = await reader.read()
-            if (done) break
-            buf += value
-            setRawSerial(prev => (prev + value).slice(-200))  // debug last 200 chars
-            // หาบรรทัดสมบูรณ์ (\r\n หรือ \n)
-            let idx
-            while ((idx = buf.indexOf('\n')) >= 0) {
-              const line = buf.slice(0, idx).trim()
-              buf = buf.slice(idx + 1)
-              if (!line) continue
-              parseScaleLine(line)
-            }
-            // ถ้า buf ยาวเกิน 200 chars แต่ไม่เจอ \n → ลอง parse เลย
-            if (buf.length > 200) {
-              parseScaleLine(buf)
-              buf = ''
-            }
-          }
-        } catch (e) {
-          console.warn('serial read ended', e)
-        }
-      })()
+      startSerialReader(port)
     } catch (e: any) {
       console.error('serial connect error', e)
       if (e?.name !== 'NotFoundError') alert('เชื่อมต่อไม่สำเร็จ: ' + (e?.message ?? e))
@@ -928,28 +898,62 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // แยก reader logic ออกมา
+  // แยก reader logic ออกมา — throttle update เพื่อไม่ให้ render ถี่
   function startSerialReader(port: any) {
     const decoder = new TextDecoderStream()
     port.readable.pipeTo(decoder.writable).catch(() => {})
     const reader = decoder.readable.getReader()
     serialReaderRef.current = reader
     let buf = ''
+    let lastUpdate = 0
+    let pendingValue: number | null = null
+    let pendingStable = false
+    let pendingRaw = ''
     ;(async () => {
       try {
         while (true) {
           const { value, done } = await reader.read()
           if (done) break
           buf += value
-          setRawSerial(prev => (prev + value).slice(-200))
-          let idx
-          while ((idx = buf.indexOf('\n')) >= 0) {
-            const line = buf.slice(0, idx).trim()
-            buf = buf.slice(idx + 1)
+          pendingRaw = (pendingRaw + value).slice(-200)
+          // หลายๆ format: \n, \r, --
+          const parts = buf.split(/[\r\n]|--/)
+          buf = parts.pop() ?? ''  // เก็บส่วนที่ยังไม่จบไว้
+          for (const part of parts) {
+            const line = part.trim()
             if (!line) continue
-            parseScaleLine(line)
+            const m = line.match(/([SU])T?[\s,]*[GN]?S?[\s,]*([+-]?\d+\.?\d*)\s*(kg|g)?/i)
+              ?? line.match(/([+-]?\d+\.\d+)\s*(kg|g)?/)
+            if (!m) continue
+            let v: number
+            let stable = true
+            if (m.length === 4 && /[SU]/i.test(m[1])) {
+              stable = m[1].toUpperCase() === 'S'
+              v = parseFloat(m[2])
+              if (m[3]?.toLowerCase() === 'g') v = v / 1000
+            } else {
+              v = parseFloat(m[1])
+              if (m[2]?.toLowerCase() === 'g') v = v / 1000
+            }
+            if (isNaN(v) || v < 0) continue
+            pendingValue = parseFloat(v.toFixed(dec))
+            pendingStable = stable
           }
-          if (buf.length > 200) { parseScaleLine(buf); buf = '' }
+          // ตัดถ้า buf ยาวเกินไป กันบวม
+          if (buf.length > 500) buf = buf.slice(-200)
+
+          // throttle update ทุก 150ms
+          const now = Date.now()
+          if (now - lastUpdate > 150) {
+            lastUpdate = now
+            if (pendingValue !== null) {
+              setGross(pendingValue)
+              setSerialStable(pendingStable)
+              setStable(pendingStable)
+              pendingValue = null
+            }
+            setRawSerial(pendingRaw)
+          }
         }
       } catch (e) { console.warn('serial read ended', e) }
     })()

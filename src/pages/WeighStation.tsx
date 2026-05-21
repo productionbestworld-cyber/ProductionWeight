@@ -827,6 +827,89 @@ function saveQueue(q: any[]) { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)
 // ── Weigh Page ────────────────────────────────────────────────────────────────
 function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () => void }) {
   const [gross,        setGross]        = useState(0)
+  // ── Serial / เครื่องชั่งจริง ────────────────────────────────────────────
+  const [serialConnected, setSerialConnected] = useState(false)
+  const [serialStable,    setSerialStable]    = useState(false)
+  const serialPortRef     = useRef<any>(null)
+  const serialReaderRef   = useRef<any>(null)
+
+  async function connectSerial() {
+    try {
+      const nav: any = navigator
+      if (!nav.serial) {
+        alert('Browser นี้ไม่รองรับ Web Serial — ใช้ Chrome หรือ Edge')
+        return
+      }
+      const port = await nav.serial.requestPort()
+      await port.open({ baudRate: 9600, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' })
+      serialPortRef.current = port
+      setSerialConnected(true)
+      // อ่านค่าต่อเนื่อง
+      const decoder = new TextDecoderStream()
+      port.readable.pipeTo(decoder.writable)
+      const reader = decoder.readable.getReader()
+      serialReaderRef.current = reader
+      let buf = ''
+      ;(async () => {
+        try {
+          while (true) {
+            const { value, done } = await reader.read()
+            if (done) break
+            buf += value
+            // หาบรรทัดสมบูรณ์ (\r\n หรือ \n)
+            let idx
+            while ((idx = buf.indexOf('\n')) >= 0) {
+              const line = buf.slice(0, idx).trim()
+              buf = buf.slice(idx + 1)
+              if (!line) continue
+              parseScaleLine(line)
+            }
+          }
+        } catch (e) {
+          console.warn('serial read ended', e)
+        }
+      })()
+    } catch (e: any) {
+      console.error('serial connect error', e)
+      if (e?.name !== 'NotFoundError') alert('เชื่อมต่อไม่สำเร็จ: ' + (e?.message ?? e))
+    }
+  }
+
+  async function disconnectSerial() {
+    try {
+      if (serialReaderRef.current) { await serialReaderRef.current.cancel().catch(()=>{}) }
+      if (serialPortRef.current)   { await serialPortRef.current.close().catch(()=>{}) }
+    } catch {}
+    serialPortRef.current = null
+    serialReaderRef.current = null
+    setSerialConnected(false)
+    setSerialStable(false)
+  }
+
+  // ── parse format Azano VC50: ST,GS,+00.00kg ────────────────────────────
+  function parseScaleLine(line: string) {
+    // รองรับหลาย format: "ST,GS,+25.50kg", "+25.50kg", "ST +25.50 kg"
+    const m = line.match(/([SU])T?[\s,]*[GN]?S?[\s,]*([+-]?\d+\.?\d*)\s*(kg|g)?/i)
+    if (!m) {
+      // fallback — แค่หาตัวเลข
+      const m2 = line.match(/([+-]?\d+\.\d+)/)
+      if (!m2) return
+      const v = parseFloat(m2[1])
+      if (!isNaN(v) && v >= 0) { setGross(parseFloat(v.toFixed(dec))); setStable(true) }
+      return
+    }
+    const stable = m[1].toUpperCase() === 'S'  // S = Stable, U = Unstable
+    let v = parseFloat(m[2])
+    if (m[3]?.toLowerCase() === 'g') v = v / 1000
+    if (isNaN(v) || v < 0) return
+    setGross(parseFloat(v.toFixed(dec)))
+    setSerialStable(stable)
+    setStable(stable)
+  }
+
+  // ปิด port ตอน unmount
+  useEffect(() => () => { disconnectSerial() }, [])
+
   const [rollNo,       setRollNo]       = useState(1)
   const [saving,       setSaving]       = useState(false)
   const [lastRoll,     setLastRoll]     = useState<any>(null)
@@ -1325,12 +1408,29 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
             weighType==='bad'  ? 'bg-orange-500/5 border-orange-500/30' :
             'bg-slate-900 border-slate-700'
           }`}>
-            <p className="text-slate-500 text-[10px] uppercase tracking-widest mb-1">Gross Weight (พิมพ์ได้)</p>
+            <div className="flex items-center justify-between mb-1 px-1">
+              <p className="text-slate-500 text-[10px] uppercase tracking-widest">Gross Weight</p>
+              {serialConnected ? (
+                <button onClick={disconnectSerial}
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+                    serialStable ? 'bg-green-500/20 text-green-300 border-green-500/40' : 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse'
+                  }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full inline-block ${serialStable?'bg-green-400':'bg-amber-400'}`}/>
+                  {serialStable ? '● เครื่องชั่ง (นิ่ง)' : '◌ เครื่องชั่ง (อ่าน...)'}
+                </button>
+              ) : (
+                <button onClick={connectSerial}
+                  className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/40 hover:bg-blue-500/30">
+                  🔌 เชื่อมต่อเครื่องชั่ง
+                </button>
+              )}
+            </div>
             <input
               type="number" step="0.01" inputMode="decimal"
               value={gross || ''}
               onChange={e => { setGross(parseFloat(e.target.value)||0); setStable(true) }}
               placeholder="0.00"
+              readOnly={serialConnected}
               className="w-full font-mono text-[72px] font-black tracking-tight leading-none mb-1 text-white bg-transparent text-center outline-none placeholder-slate-700 focus:bg-slate-800/50 rounded-xl"
             />
             <p className="text-slate-500 text-xs font-semibold mb-4">Kgs.</p>

@@ -1388,19 +1388,32 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
           }`}>
             <div className="flex items-center justify-between mb-1 px-1">
               <p className="text-slate-500 text-[10px] uppercase tracking-widest">Gross Weight</p>
-              {serialConnected ? (
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
-                  serialStable ? 'bg-green-500/20 text-green-300 border-green-500/40' : 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse'
-                }`} title={`Bridge: ${bridgeUrl}`}>
-                  <span className={`w-1.5 h-1.5 rounded-full inline-block ${serialStable?'bg-green-400':'bg-amber-400'}`}/>
-                  {serialStable ? '● เครื่องชั่ง (นิ่ง)' : '◌ เครื่องชั่ง (อ่าน...)'}
-                </span>
-              ) : (
-                <a href={bridgeUrl.replace(/^ws/, 'http')} target="_blank" rel="noreferrer"
-                  className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/40 hover:bg-red-500/30">
-                  ⚠ Bridge ไม่เชื่อมต่อ — กดตั้งค่า
-                </a>
-              )}
+              <div className="flex items-center gap-1.5">
+                {serialConnected ? (
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+                    serialStable ? 'bg-green-500/20 text-green-300 border-green-500/40' : 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse'
+                  }`} title={`Bridge: ${bridgeUrl}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full inline-block ${serialStable?'bg-green-400':'bg-amber-400'}`}/>
+                    {serialStable ? '● เครื่องชั่ง (นิ่ง)' : '◌ เครื่องชั่ง (อ่าน...)'}
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/40">
+                    ⚠ Bridge ไม่เชื่อมต่อ
+                  </span>
+                )}
+                <button onClick={() => {
+                  const url = prompt('Bridge URL (ws://IP:8080)', bridgeUrl)
+                  if (!url) return
+                  setBridgeUrl(url)
+                  localStorage.setItem('bwp_bridge_url', url)
+                  disconnectBridge()
+                  setTimeout(connectBridge, 300)
+                }}
+                  className="text-[10px] text-slate-500 hover:text-slate-300 px-1 py-0.5 rounded hover:bg-slate-700"
+                  title="ตั้งค่า Bridge URL">
+                  ⚙
+                </button>
+              </div>
             </div>
             <input
               type="number" step="0.01" inputMode="decimal"

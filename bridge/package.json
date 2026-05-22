@@ -1,0 +1,16 @@
+{
+  "name": "bwp-scale-bridge",
+  "version": "1.0.0",
+  "description": "Local bridge - reads weight scale via serial and broadcasts via WebSocket",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "install-service": "node install-service.js"
+  },
+  "dependencies": {
+    "serialport": "^12.0.0",
+    "ws": "^8.18.0",
+    "express": "^4.21.0",
+    "cors": "^2.8.5"
+  }
+}

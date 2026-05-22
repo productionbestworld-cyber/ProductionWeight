@@ -827,161 +827,66 @@ function saveQueue(q: any[]) { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)
 // ── Weigh Page ────────────────────────────────────────────────────────────────
 function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () => void }) {
   const [gross,        setGross]        = useState(0)
-  // ── Serial / เครื่องชั่งจริง ────────────────────────────────────────────
+  // ── Scale Bridge (WebSocket) ─────────────────────────────────────────
   const [serialConnected, setSerialConnected] = useState(false)
   const [serialStable,    setSerialStable]    = useState(false)
-  const [baudRate,        setBaudRate]        = useState(() => parseInt(localStorage.getItem('bwp_baud') ?? '9600'))
-  const [rawSerial,       setRawSerial]       = useState('')  // debug raw data
-  const serialPortRef     = useRef<any>(null)
-  const serialReaderRef   = useRef<any>(null)
+  const [rawSerial,       setRawSerial]       = useState('')
+  const [bridgeUrl,       setBridgeUrl]       = useState(() => localStorage.getItem('bwp_bridge_url') ?? 'ws://localhost:8080')
+  const wsRef             = useRef<WebSocket | null>(null)
+  const wsReconnectRef    = useRef<any>(null)
 
-  async function connectSerial(autoPort?: any) {
+  // ── เชื่อมต่อ Bridge (WebSocket) — auto-reconnect ────────────────
+  function connectBridge() {
+    if (wsRef.current?.readyState === WebSocket.OPEN) return
     try {
-      const nav: any = navigator
-      if (!nav.serial) {
-        alert('Browser นี้ไม่รองรับ Web Serial — ใช้ Chrome หรือ Edge')
-        return
+      const ws = new WebSocket(bridgeUrl)
+      wsRef.current = ws
+      let lastUpdate = 0
+      ws.onopen = () => {
+        console.log('[bridge] connected')
+        localStorage.setItem('bwp_bridge_url', bridgeUrl)
       }
-      let port: any = autoPort
-      if (!port || typeof port.open !== 'function') {
-        port = await nav.serial.requestPort()
+      ws.onmessage = (ev) => {
+        try {
+          const d = JSON.parse(ev.data)
+          if (d.type !== 'weight') return
+          // ถ้า bridge ยังไม่ได้ต่อเครื่องชั่ง → connected = false
+          if (d.connected !== undefined) setSerialConnected(d.connected)
+          // throttle update ทุก 150ms
+          const now = Date.now()
+          if (now - lastUpdate < 150) return
+          lastUpdate = now
+          if (typeof d.value === 'number') setGross(parseFloat(d.value.toFixed(dec)))
+          setSerialStable(!!d.stable)
+          setStable(!!d.stable)
+          if (d.raw) setRawSerial(d.raw)
+        } catch {}
       }
-      localStorage.setItem('bwp_baud', String(baudRate))
-      localStorage.setItem('bwp_serial_autoconnect', '1')
-      await port.open({ baudRate, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' })
-      serialPortRef.current = port
-      setSerialConnected(true)
-      startSerialReader(port)
-    } catch (e: any) {
-      console.error('serial connect error', e)
-      if (e?.name !== 'NotFoundError') alert('เชื่อมต่อไม่สำเร็จ: ' + (e?.message ?? e))
+      ws.onclose = () => {
+        setSerialConnected(false)
+        // auto-reconnect ทุก 3 วินาที
+        wsReconnectRef.current = setTimeout(connectBridge, 3000)
+      }
+      ws.onerror = () => { setSerialConnected(false) }
+    } catch (e) {
+      console.error('ws error', e)
+      wsReconnectRef.current = setTimeout(connectBridge, 3000)
     }
   }
 
-  async function disconnectSerial() {
-    try {
-      if (serialReaderRef.current) { await serialReaderRef.current.cancel().catch(()=>{}) }
-      if (serialPortRef.current)   { await serialPortRef.current.close().catch(()=>{}) }
-    } catch {}
-    serialPortRef.current = null
-    serialReaderRef.current = null
-    localStorage.removeItem('bwp_serial_autoconnect')
+  function disconnectBridge() {
+    if (wsReconnectRef.current) clearTimeout(wsReconnectRef.current)
+    if (wsRef.current) { wsRef.current.close(); wsRef.current = null }
     setSerialConnected(false)
     setSerialStable(false)
   }
 
-  // ── Auto-reconnect ตอนเปิดหน้า (silent — ถ้าพังก็ปล่อย user กดเอง) ──
+  // ── เชื่อม Bridge อัตโนมัติตอนเปิดหน้า ────────────────────────
   useEffect(() => {
-    if (localStorage.getItem('bwp_serial_autoconnect') !== '1') return
-    const nav: any = navigator
-    if (!nav.serial) return
-    // delay 500ms ให้ browser เคลียร์ port เก่าก่อน
-    const t = setTimeout(() => {
-      nav.serial.getPorts().then((ports: any[]) => {
-        if (ports.length === 0) return
-        const port = ports[0]
-        if (!port || typeof port.open !== 'function') return
-        // ลองเปิด port แบบไม่บล็อก
-        port.open({ baudRate, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' })
-          .then(() => {
-            serialPortRef.current = port
-            setSerialConnected(true)
-            startSerialReader(port)
-          })
-          .catch(() => {
-            // เปิดไม่ได้ → ลบ flag ให้ user กดเอง
-            localStorage.removeItem('bwp_serial_autoconnect')
-          })
-      }).catch(() => {})
-    }, 500)
-    return () => clearTimeout(t)
+    connectBridge()
+    return () => disconnectBridge()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  // แยก reader logic ออกมา — throttle update เพื่อไม่ให้ render ถี่
-  function startSerialReader(port: any) {
-    const decoder = new TextDecoderStream()
-    port.readable.pipeTo(decoder.writable).catch(() => {})
-    const reader = decoder.readable.getReader()
-    serialReaderRef.current = reader
-    let buf = ''
-    let lastUpdate = 0
-    let pendingValue: number | null = null
-    let pendingStable = false
-    let pendingRaw = ''
-    ;(async () => {
-      try {
-        while (true) {
-          const { value, done } = await reader.read()
-          if (done) break
-          buf += value
-          pendingRaw = (pendingRaw + value).slice(-200)
-          // หลายๆ format: \n, \r, --
-          const parts = buf.split(/[\r\n]|--/)
-          buf = parts.pop() ?? ''  // เก็บส่วนที่ยังไม่จบไว้
-          for (const part of parts) {
-            const line = part.trim()
-            if (!line) continue
-            const m = line.match(/([SU])T?[\s,]*[GN]?S?[\s,]*([+-]?\d+\.?\d*)\s*(kg|g)?/i)
-              ?? line.match(/([+-]?\d+\.\d+)\s*(kg|g)?/)
-            if (!m) continue
-            let v: number
-            let stable = true
-            if (m.length === 4 && /[SU]/i.test(m[1])) {
-              stable = m[1].toUpperCase() === 'S'
-              v = parseFloat(m[2])
-              if (m[3]?.toLowerCase() === 'g') v = v / 1000
-            } else {
-              v = parseFloat(m[1])
-              if (m[2]?.toLowerCase() === 'g') v = v / 1000
-            }
-            if (isNaN(v) || v < 0) continue
-            pendingValue = parseFloat(v.toFixed(dec))
-            pendingStable = stable
-          }
-          // ตัดถ้า buf ยาวเกินไป กันบวม
-          if (buf.length > 500) buf = buf.slice(-200)
-
-          // throttle update ทุก 150ms
-          const now = Date.now()
-          if (now - lastUpdate > 150) {
-            lastUpdate = now
-            if (pendingValue !== null) {
-              setGross(pendingValue)
-              setSerialStable(pendingStable)
-              setStable(pendingStable)
-              pendingValue = null
-            }
-            setRawSerial(pendingRaw)
-          }
-        }
-      } catch (e) { console.warn('serial read ended', e) }
-    })()
-  }
-
-  // ── parse format Azano VC50: ST,GS,+00.00kg ────────────────────────────
-  function parseScaleLine(line: string) {
-    // รองรับหลาย format: "ST,GS,+25.50kg", "+25.50kg", "ST +25.50 kg"
-    const m = line.match(/([SU])T?[\s,]*[GN]?S?[\s,]*([+-]?\d+\.?\d*)\s*(kg|g)?/i)
-    if (!m) {
-      // fallback — แค่หาตัวเลข
-      const m2 = line.match(/([+-]?\d+\.\d+)/)
-      if (!m2) return
-      const v = parseFloat(m2[1])
-      if (!isNaN(v) && v >= 0) { setGross(parseFloat(v.toFixed(dec))); setStable(true) }
-      return
-    }
-    const stable = m[1].toUpperCase() === 'S'  // S = Stable, U = Unstable
-    let v = parseFloat(m[2])
-    if (m[3]?.toLowerCase() === 'g') v = v / 1000
-    if (isNaN(v) || v < 0) return
-    setGross(parseFloat(v.toFixed(dec)))
-    setSerialStable(stable)
-    setStable(stable)
-  }
-
-  // ปิด port ตอน unmount
-  useEffect(() => () => { disconnectSerial() }, [])
 
   const [rollNo,       setRollNo]       = useState(1)
   const [saving,       setSaving]       = useState(false)
@@ -1484,24 +1389,17 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
             <div className="flex items-center justify-between mb-1 px-1">
               <p className="text-slate-500 text-[10px] uppercase tracking-widest">Gross Weight</p>
               {serialConnected ? (
-                <button onClick={disconnectSerial}
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
-                    serialStable ? 'bg-green-500/20 text-green-300 border-green-500/40' : 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse'
-                  }`}>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+                  serialStable ? 'bg-green-500/20 text-green-300 border-green-500/40' : 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse'
+                }`} title={`Bridge: ${bridgeUrl}`}>
                   <span className={`w-1.5 h-1.5 rounded-full inline-block ${serialStable?'bg-green-400':'bg-amber-400'}`}/>
                   {serialStable ? '● เครื่องชั่ง (นิ่ง)' : '◌ เครื่องชั่ง (อ่าน...)'}
-                </button>
+                </span>
               ) : (
-                <div className="flex items-center gap-1">
-                  <select value={baudRate} onChange={e => setBaudRate(parseInt(e.target.value))}
-                    className="text-[10px] bg-slate-800 text-slate-300 border border-slate-600 rounded px-1 py-0.5 outline-none">
-                    {[1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200].map(b => <option key={b} value={b}>{b}</option>)}
-                  </select>
-                  <button onClick={connectSerial}
-                    className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/40 hover:bg-blue-500/30">
-                    🔌 เชื่อมต่อ
-                  </button>
-                </div>
+                <a href={bridgeUrl.replace(/^ws/, 'http')} target="_blank" rel="noreferrer"
+                  className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/40 hover:bg-red-500/30">
+                  ⚠ Bridge ไม่เชื่อมต่อ — กดตั้งค่า
+                </a>
               )}
             </div>
             <input

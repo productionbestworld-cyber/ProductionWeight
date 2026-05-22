@@ -9,8 +9,19 @@ const cors = require('cors')
 const fs = require('fs')
 const path = require('path')
 
-const PORT          = 8080
-const CONFIG_FILE   = path.join(__dirname, 'config.json')
+const PORT = 8080
+// ── หา path สำหรับเก็บ config (writable) ──
+// เมื่อรันเป็น .exe (pkg) → __dirname เป็น virtual fs read-only
+// ใช้ path ข้าง .exe (process.execPath) หรือ cwd แทน
+function getConfigPath() {
+  const isPkg = typeof process.pkg !== 'undefined'
+  if (isPkg) {
+    return path.join(path.dirname(process.execPath), 'config.json')
+  }
+  return path.join(__dirname, 'config.json')
+}
+const CONFIG_FILE = getConfigPath()
+console.log('[bridge] config file:', CONFIG_FILE)
 
 // ── โหลด/บันทึก config ────────────────────────────────────
 function loadConfig() {
@@ -133,12 +144,17 @@ app.get('/ports', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
 app.post('/config', (req, res) => {
-  const { comPort, baudRate } = req.body
-  if (comPort !== undefined) config.comPort = comPort
-  if (baudRate !== undefined) config.baudRate = baudRate
-  saveConfig(config)
-  openSerial()
-  res.json(config)
+  try {
+    const { comPort, baudRate } = req.body
+    if (comPort !== undefined) config.comPort = comPort
+    if (baudRate !== undefined) config.baudRate = baudRate
+    saveConfig(config)
+    openSerial()
+    res.json(config)
+  } catch (e) {
+    console.error('[bridge] /config error:', e)
+    res.status(500).json({ error: e.message, path: CONFIG_FILE })
+  }
 })
 
 // Config UI (เปิดที่ http://localhost:8080)

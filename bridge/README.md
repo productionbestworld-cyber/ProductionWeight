@@ -1,52 +1,66 @@
-# BWP Scale Bridge
+# BWP Scale Bridge — Installer
 
-Service ที่อ่านค่าน้ำหนักจาก Serial Port แล้ว broadcast ผ่าน WebSocket ให้ Web App
+Service ที่อ่านน้ำหนักจากเครื่องชั่ง (RS232/USB) แล้วส่งให้ Web App ผ่าน WebSocket
 
-## ติดตั้ง
+---
 
-```bash
-cd bridge
-npm install
+## ติดตั้ง (1 ครั้ง)
+
+### ก่อนติดตั้ง
+
+ติดตั้ง **Node.js** จาก https://nodejs.org (LTS version) ก่อน
+
+### ขั้นตอน
+
+1. คลิกขวาที่ **`install.bat`** → เลือก **"Run as administrator"**
+2. รอจนเสร็จ — เปิด `http://localhost:8080` อัตโนมัติ
+3. เลือก COM port + Baud rate ในหน้าเว็บ → กดบันทึก
+4. **เสร็จ!** Bridge จะรันทุกครั้งที่เปิดเครื่อง
+
+---
+
+## ไฟล์ที่มี
+
+| ไฟล์ | คำอธิบาย |
+|------|---------|
+| `install.bat` | ติดตั้งเป็น Auto-start Task |
+| `uninstall.bat` | ถอนการติดตั้ง |
+| `start.bat` | รันชั่วคราว (ไม่ติดตั้ง) |
+| `server.js` | Source code |
+
+---
+
+## หาก Service ไม่ทำงาน
+
+ลองรัน `start.bat` ดูว่ามี error อะไร
+
+### เช็ค Task
+
+```cmd
+schtasks /query /tn "BWPScaleBridge"
 ```
 
-## รัน
+### เปิด Task Scheduler
 
-```bash
-npm start
+```cmd
+taskschd.msc
+```
+มองหา "BWPScaleBridge" → Run
+
+---
+
+## เปิด Bridge ให้ PC อื่นใช้ได้
+
+หา IP ของเครื่อง:
+```cmd
+ipconfig
 ```
 
-จะเปิดที่ `http://localhost:8080` — เปิดเบราว์เซอร์เพื่อตั้งค่า COM port + Baud rate
+PC อื่นในเครือข่ายเปิด `http://<IP>:8080` ได้เลย
+ใน Web App กดปุ่ม ⚙ → ใส่ `ws://<IP>:8080`
 
-## วิธีตั้งค่า
+---
 
-1. รัน `npm start`
-2. เปิด `http://localhost:8080`
-3. เลือก COM port ของเครื่องชั่ง + Baud rate
-4. กด **บันทึก + เชื่อมต่อ**
-5. ระบบจะเริ่มอ่านค่าและแสดงน้ำหนักสด
+## ถอนการติดตั้ง
 
-## ทำให้รันตอนเปิดเครื่อง (Windows Service)
-
-ใช้ NSSM (Non-Sucking Service Manager):
-
-```bash
-# ดาวน์โหลด nssm.exe จาก https://nssm.cc
-nssm install BWPScaleBridge "C:\Program Files\nodejs\node.exe" "C:\path\to\bridge\server.js"
-nssm start BWPScaleBridge
-```
-
-หรือใช้ PM2:
-
-```bash
-npm install -g pm2 pm2-windows-startup
-pm2-startup install
-pm2 start server.js --name bwp-scale-bridge
-pm2 save
-```
-
-## API
-
-- `GET /status` → สถานะปัจจุบัน
-- `GET /ports` → list COM ports
-- `POST /config` → ตั้งค่า `{ comPort, baudRate }`
-- `WS /` → WebSocket รับค่าน้ำหนักสด
+คลิกขวาที่ **`uninstall.bat`** → **"Run as administrator"**

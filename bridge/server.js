@@ -73,33 +73,24 @@ async function openSerial() {
 
     let buf = ''
     currentPort.on('data', (chunk) => {
-      buf += chunk.toString('utf8')
-      lastWeight.raw = (lastWeight.raw + chunk.toString('utf8')).slice(-200)
-      // split on \r, \n, --
-      const parts = buf.split(/[\r\n]|--/)
-      buf = parts.pop() ?? ''
-      for (const part of parts) {
-        const line = part.trim()
-        if (!line) continue
-        // format: ST,GS +25.50 kg | US,GS +25.50 kg | +25.50 kg
-        const m = line.match(/([SU])T?[\s,]*[GN]?S?[\s,]*([+-]?\d+\.?\d*)\s*(kg|g)?/i)
-                ?? line.match(/([+-]?\d+\.\d+)\s*(kg|g)?/)
-        if (!m) continue
-        let v, stable = true
-        if (m.length === 4 && /[SU]/i.test(m[1])) {
-          stable = m[1].toUpperCase() === 'S'
-          v = parseFloat(m[2])
-          if (m[3]?.toLowerCase() === 'g') v = v / 1000
-        } else {
-          v = parseFloat(m[1])
-          if (m[2]?.toLowerCase() === 'g') v = v / 1000
+      const str = chunk.toString('utf8')
+      buf += str
+      lastWeight.raw = (lastWeight.raw + str).slice(-200)
+
+      // หาตัวเลขทศนิยมทั้งหมดใน buffer → เอาตัวสุดท้าย (ใหม่ที่สุด)
+      const nums = [...buf.matchAll(/(\d+\.\d+)/g)]
+      if (nums.length > 0) {
+        const v = parseFloat(nums[nums.length - 1][1])
+        if (!isNaN(v) && v >= 0) {
+          lastWeight.value = parseFloat(v.toFixed(2))
+          lastWeight.stable = !buf.toUpperCase().includes('US,')
+          lastWeight.timestamp = Date.now()
+          broadcast()
         }
-        if (isNaN(v) || v < 0) continue
-        lastWeight.value = parseFloat(v.toFixed(2))
-        lastWeight.stable = stable
-        lastWeight.timestamp = Date.now()
+        buf = '' // ล้าง buffer หลัง parse
       }
-      if (buf.length > 500) buf = buf.slice(-200)
+
+      if (buf.length > 200) buf = buf.slice(-100)
     })
 
     currentPort.on('error', (e) => {
@@ -126,10 +117,10 @@ function broadcast() {
   })
 }
 
-// broadcast ค่าทุก 100ms
+// broadcast keepalive ทุก 50ms (fallback กรณี parse ไม่ได้)
 setInterval(() => {
   if (wss.clients.size > 0) broadcast()
-}, 100)
+}, 50)
 
 // ── HTTP API + Config UI ─────────────────────────────────
 const app = express()

@@ -1,6 +1,7 @@
-﻿import { useState, useEffect, useRef } from 'react'
-import { Plus, Trash2, Save, ChevronDown, ChevronUp, RefreshCw, X } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Plus, Trash2, Save, ChevronDown, ChevronUp, RefreshCw, X, Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { fetchProducts, type Product } from './Products'
 
 // ── Full Machine Profile ──────────────────────────────────────────────────────
 export interface MachineProfile {
@@ -11,7 +12,8 @@ export interface MachineProfile {
   custAddress: string
   decimal:     1 | 2
   // สินค้า
-  matCode:     string
+  itemCode:    string   // ใช้เลือกจากคลัง (lookup master)
+  matCode:     string   // กรอกเองในแต่ละงาน
   productCode: string
   productName: string
   widthCm:     string
@@ -37,7 +39,7 @@ export interface MachineProfile {
 
 const EMPTY_PROFILE: MachineProfile = {
   machine_no:'', custCode:'', custName:'', custAddress:'', decimal:2,
-  matCode:'', productCode:'', productName:'', widthCm:'', thickMc:'',
+  itemCode:'', matCode:'', productCode:'', productName:'', widthCm:'', thickMc:'',
   lotNo:'', length:'', pcs:'', coreWeight:'1.25', inspector:'', locked:false,
   plannedQty:'', labelSize:'long', headerText:'', blankHeader:false, section:'blow',
   soNo:'',
@@ -62,6 +64,7 @@ function dbToProfile(row: any): MachineProfile {
     custName:    row.cust_name    ?? '',
     custAddress: row.cust_address ?? '',
     decimal:     (row.decimal_places ?? 2) as 1|2,
+    itemCode:    row.item_code    ?? '',
     matCode:     row.mat_code     ?? '',
     productCode: row.product_code ?? '',
     productName: row.product_name ?? '',
@@ -88,6 +91,7 @@ function profileToDb(p: MachineProfile) {
     cust_name:     p.custName,
     cust_address:  p.custAddress,
     decimal_places: p.decimal,
+    item_code:     p.itemCode,
     mat_code:      p.matCode,
     product_code:  p.productCode,
     product_name:  p.productName,
@@ -120,7 +124,7 @@ export function saveProfiles(p: MachineProfile[]) {
 
 // ─── Compact Machine Card (grid view) ────────────────────────────────────────
 function MachineCard({ p, onEdit }: { p: MachineProfile; onEdit: () => void }) {
-  const ready = !!(p.machine_no && p.custName && p.productName && p.matCode && p.lotNo)
+  const ready = !!(p.machine_no && p.custName && p.productName && (p.itemCode || p.matCode) && p.lotNo)
   return (
     <button onClick={onEdit} className={`w-full text-left rounded-2xl border-2 transition-all hover:border-brand-500 overflow-hidden group ${
       ready ? 'bg-slate-900 border-slate-700' : 'bg-slate-900/60 border-amber-500/40 border-dashed'
@@ -151,7 +155,8 @@ function MachineCard({ p, onEdit }: { p: MachineProfile; onEdit: () => void }) {
             {p.widthCm && <span className="text-[10px] bg-brand-500/15 text-brand-300 border border-brand-500/25 px-1.5 py-0.5 rounded font-bold">{p.widthCm}×{p.thickMc}mc</span>}
           </div>
           <div className="grid grid-cols-2 gap-x-2 text-[10px] text-slate-500 mt-0.5">
-            <span>Mat: <b className="text-slate-300">{p.matCode}</b></span>
+            <span>Item: <b className="text-slate-300">{p.itemCode || '—'}</b></span>
+            <span>Mat: <b className="text-slate-300">{p.matCode || '—'}</b></span>
             <span>ผู้ตรวจ: <b className="text-slate-300">{p.inspector || '—'}</b></span>
             <span>เป้า: <b className="text-slate-300">{p.plannedQty ? Number(p.plannedQty).toLocaleString() + ' Kgs.' : '—'}</b></span>
             <span>Core: <b className="text-slate-300">{p.coreWeight} Kg</b></span>
@@ -164,10 +169,85 @@ function MachineCard({ p, onEdit }: { p: MachineProfile; onEdit: () => void }) {
   )
 }
 
+// ─── Item Code Autocomplete (ดึงจาก products table) ──────────────────────────
+function ItemCodeAutocomplete({ value, products, onChange, onPick }: {
+  value: string
+  products: Product[]
+  onChange: (v: string) => void
+  onPick: (s: Product) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [])
+
+  const filtered = (() => {
+    const v = value.trim().toLowerCase()
+    return products
+      .filter(s => s.item_code && (!v || s.item_code.toLowerCase().includes(v) ||
+        s.product_name?.toLowerCase().includes(v) ||
+        s.cust_name?.toLowerCase().includes(v)))
+      .slice(0, 10)
+  })()
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <div className="relative">
+        <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"/>
+        <input
+          value={value}
+          onChange={e => { onChange(e.target.value); setOpen(true) }}
+          onFocus={() => setOpen(true)}
+          onClick={() => setOpen(true)}
+          placeholder="คลิกเพื่อเลือก Item Code จากคลัง..."
+          className="w-full bg-slate-800 border-2 border-brand-500/40 hover:border-brand-500 focus:border-brand-500 rounded-lg pl-8 pr-8 py-2 text-white text-sm outline-none cursor-pointer"
+        />
+        <ChevronDown size={14} className={`absolute right-2.5 top-1/2 -translate-y-1/2 text-brand-400 pointer-events-none transition-transform ${open?'rotate-180':''}`}/>
+      </div>
+      {open && (
+        <div className="absolute z-10 mt-1 w-[200%] max-w-md bg-slate-800 border border-brand-500/40 rounded-lg shadow-2xl max-h-72 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-4 text-xs text-slate-400 text-center">
+              <p className="mb-1">ยังไม่มี Item Code ในระบบ</p>
+              <p className="text-brand-400">→ ไปเพิ่มที่เมนู "คลัง Item Code" ก่อน</p>
+            </div>
+          ) : filtered.map((s, i) => (
+            <button
+              key={s.id ?? s.item_code + i}
+              type="button"
+              onMouseDown={e => { e.preventDefault(); onPick(s); setOpen(false) }}
+              className="w-full text-left px-3 py-2 hover:bg-slate-700 border-b border-slate-700/50 last:border-0"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-brand-400 font-mono font-bold text-xs">{s.item_code}</span>
+                {s.width_cm && (
+                  <span className="text-[10px] bg-brand-500/15 text-brand-300 px-1.5 py-0.5 rounded">
+                    {s.width_cm}×{s.thick_mc}mc
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-slate-300 mt-0.5 truncate">{s.product_name || '—'}</div>
+              <div className="text-[10px] text-slate-500 truncate">👤 {s.cust_name || '—'}</div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Edit Modal ───────────────────────────────────────────────────────────────
-function EditModal({ p, onChange, onRemove, onClose }: {
+function EditModal({ p, products, onChange, onAutoFill, onRemove, onClose }: {
   p: MachineProfile
+  products: Product[]
   onChange: (k: keyof MachineProfile, v: any) => void
+  onAutoFill: (patch: Partial<MachineProfile>) => void
   onRemove: () => void
   onClose: () => void
 }) {
@@ -188,6 +268,8 @@ function EditModal({ p, onChange, onRemove, onClose }: {
         </div>
         <div className="overflow-y-auto px-5 py-4 space-y-4">
 
+          {/* ── 1) เครื่อง ─────────────────────────────────────── */}
+          <p className="text-[10px] text-brand-400 font-bold uppercase tracking-wider">ขั้นที่ 1 — เครื่อง</p>
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="block text-[10px] text-slate-500 mb-1">แผนก *</label>
@@ -200,13 +282,62 @@ function EditModal({ p, onChange, onRemove, onClose }: {
                 ))}
               </div>
             </div>
-            {f('หมายเลขเครื่อง *','machine_no','BL01',true)}
+            {f('หมายเลขเครื่อง *','machine_no','',true)}
           </div>
 
-          <p className="text-[10px] text-brand-400 font-bold uppercase tracking-wider">ลูกค้า</p>
+          {/* ── 2) งานครั้งนี้ + เลือก Item Code ───────────────── */}
+          <p className="text-[10px] text-brand-400 font-bold uppercase tracking-wider mt-1">
+            ขั้นที่ 2 — งานครั้งนี้ <span className="text-emerald-400 normal-case">(เลือก Item Code → เติมสินค้า+ลูกค้าให้อัตโนมัติ)</span>
+          </p>
           <div className="grid grid-cols-2 gap-2">
-            {f('Sale Order (SO)','soNo','SO-2026-0001')}
-            {f('รหัสลูกค้า','custCode','C-001',true)}
+            {f('Sale Order (SO)','soNo','',true)}
+            <div>
+              <label className="block text-[10px] text-slate-500 mb-1">Item Code *</label>
+              <ItemCodeAutocomplete
+                value={p.itemCode}
+                products={products}
+                onChange={v => {
+                  // หา product ที่ตรงกับ value
+                  const match = products.find(x => x.item_code === v.trim())
+                  if (match) {
+                    // ตรงเป๊ะ → auto-fill
+                    onAutoFill({
+                      itemCode:    match.item_code,
+                      productCode: match.product_code,
+                      productName: match.product_name,
+                      widthCm:     match.width_cm,
+                      thickMc:     match.thick_mc,
+                      custCode:    match.cust_code,
+                      custName:    match.cust_name ?? '',
+                      custAddress: match.cust_address ?? '',
+                    })
+                  } else {
+                    // ไม่ตรง → เก็บแค่ itemCode + ล้าง auto-fill ที่เหลือ
+                    onAutoFill({
+                      itemCode: v,
+                      productCode:'', productName:'',
+                      widthCm:'', thickMc:'',
+                      custCode:'', custName:'', custAddress:'',
+                    })
+                  }
+                }}
+                onPick={s => onAutoFill({
+                  itemCode:    s.item_code,
+                  productCode: s.product_code,
+                  productName: s.product_name,
+                  widthCm:     s.width_cm,
+                  thickMc:     s.thick_mc,
+                  custCode:    s.cust_code,
+                  custName:    s.cust_name,
+                  custAddress: s.cust_address,
+                })}
+              />
+            </div>
+            {f('Mat Code','matCode','',true)}
+            {f('Lot No *','lotNo','',true)}
+            {f('Length (Ms.)','length','',true)}
+            {f('Pcs.','pcs','',true)}
+            {f('ยอดสั่งผลิต (kg) *','plannedQty','',true)}
             <div>
               <label className="block text-[10px] text-slate-500 mb-1">ทศนิยม</label>
               <div className="flex gap-1">
@@ -218,28 +349,31 @@ function EditModal({ p, onChange, onRemove, onClose }: {
                 ))}
               </div>
             </div>
-            {f('ชื่อลูกค้า *','custName','บริษัท ...')}
-            {f('ที่อยู่','custAddress','ที่อยู่...')}
           </div>
 
-          <p className="text-[10px] text-brand-400 font-bold uppercase tracking-wider">สินค้า</p>
+          {/* ── 3) ข้อมูลสินค้า (auto-fill ได้, แก้ไขได้) ─────── */}
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">รายละเอียดสินค้า</p>
           <div className="grid grid-cols-2 gap-2">
-            {f('Mat Code *','matCode','60004224',true)}
-            {f('Product Code','productCode','60004224',true)}
-            {f('ชื่อสินค้า *','productName','PET 1.45L RED SHRINK')}
-            {f('กว้าง (cm)','widthCm','57',true)}
-            {f('หนา (mc)','thickMc','80',true)}
-            {f('Lot No *','lotNo','69S0200010005',true)}
-            {f('Length (Ms.)','length','1360',true)}
-            {f('Pcs.','pcs','',true)}
+            {f('Product Code','productCode','',true)}
+            {f('ชื่อสินค้า *','productName','')}
+            {f('กว้าง (cm)','widthCm','',true)}
+            {f('หนา (mc)','thickMc','',true)}
           </div>
 
-          <p className="text-[10px] text-brand-400 font-bold uppercase tracking-wider">เครื่อง</p>
+          {/* ── 4) ลูกค้า (auto-fill ได้) ──────────────────────── */}
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">ลูกค้า</p>
           <div className="grid grid-cols-2 gap-2">
-            {f('Core Weight (kg)','coreWeight','1.25',true)}
-            {f('ผู้ตรวจสอบ','inspector','เมทนี',true)}
-            {f('ยอดสั่งผลิต (kg) *','plannedQty','5000',true)}
-            <div>
+            {f('รหัสลูกค้า','custCode','',true)}
+            {f('ชื่อลูกค้า *','custName','',true)}
+            {f('ที่อยู่','custAddress','')}
+          </div>
+
+          {/* ── 5) ตั้งค่าการชั่ง + ใบปะหน้า ───────────────────── */}
+          <p className="text-[10px] text-brand-400 font-bold uppercase tracking-wider mt-1">ขั้นที่ 3 — ตั้งค่าการชั่ง</p>
+          <div className="grid grid-cols-2 gap-2">
+            {f('Core Weight (kg)','coreWeight','',true)}
+            {f('ผู้ตรวจสอบ','inspector','',true)}
+            <div className="col-span-2">
               <label className="block text-[10px] text-slate-500 mb-1">ใบปะหน้า</label>
               <div className="flex gap-1">
                 {(['long','short'] as const).map(s => (
@@ -283,6 +417,7 @@ function EditModal({ p, onChange, onRemove, onClose }: {
 // ─── Main Settings Page ───────────────────────────────────────────────────────
 export default function MachineSettings({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   const [profiles,     setProfiles]     = useState<MachineProfile[]>([])
+  const [products,     setProducts]     = useState<Product[]>([])
   const [saved,        setSaved]        = useState(false)
   const [loading,      setLoading]      = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -294,6 +429,9 @@ export default function MachineSettings({ dept }: { dept?: 'blow'|'print'|'rewin
 
   // ถ้า dept เปลี่ยน (เช่นสลับฝั่งแล้วกดตั้งค่า) → sync tab
   useEffect(() => { if (dept) { setActiveTab(dept); setNewSection(dept) } }, [dept])
+
+  // โหลด products (คลัง Item Code) สำหรับ autocomplete
+  useEffect(() => { fetchProducts().then(setProducts) }, [])
 
   // โหลดจาก Supabase เมื่อเปิดหน้า
   useEffect(() => {
@@ -335,6 +473,9 @@ export default function MachineSettings({ dept }: { dept?: 'blow'|'print'|'rewin
   function update(i: number, k: keyof MachineProfile, v: any) {
     setProfiles(p => p.map((m, idx) => idx === i ? { ...m, [k]: v } : m))
   }
+  function updateMany(i: number, patch: Partial<MachineProfile>) {
+    setProfiles(p => p.map((m, idx) => idx === i ? { ...m, ...patch } : m))
+  }
   async function handleSave() {
     const valid = profiles.filter(p => p.machine_no)
     for (const p of valid) {
@@ -346,7 +487,7 @@ export default function MachineSettings({ dept }: { dept?: 'blow'|'print'|'rewin
     setTimeout(() => setSaved(false), 2000)
   }
 
-  const ready = profiles.filter(p => p.machine_no && p.custName && p.productName && p.matCode && p.lotNo).length
+  const ready = profiles.filter(p => p.machine_no && p.custName && p.productName && (p.itemCode || p.matCode) && p.lotNo).length
 
   return (<>
     {/* Modal กำหนดชื่อเครื่อง */}
@@ -398,7 +539,9 @@ export default function MachineSettings({ dept }: { dept?: 'blow'|'print'|'rewin
     {editIdx !== null && profiles[editIdx] && (
       <EditModal
         p={profiles[editIdx]}
+        products={products}
         onChange={(k, v) => update(editIdx, k, v)}
+        onAutoFill={(patch) => updateMany(editIdx, patch)}
         onRemove={() => { remove(editIdx); setEditIdx(null) }}
         onClose={() => { handleSave(); setEditIdx(null) }}
       />
@@ -427,7 +570,7 @@ export default function MachineSettings({ dept }: { dept?: 'blow'|'print'|'rewin
         const blowProfiles   = profiles.filter(p => (p.section ?? 'blow') === 'blow')
         const printProfiles  = profiles.filter(p => p.section === 'print')
         const rewindProfiles = profiles.filter(p => p.section === 'rewind')
-        const rdy = (arr: typeof profiles) => arr.filter(p => p.machine_no && p.custName && p.productName && p.matCode && p.lotNo).length
+        const rdy = (arr: typeof profiles) => arr.filter(p => p.machine_no && p.custName && p.productName && (p.itemCode || p.matCode) && p.lotNo).length
         const blowReady   = rdy(blowProfiles)
         const printReady  = rdy(printProfiles)
         const rewindReady = rdy(rewindProfiles)

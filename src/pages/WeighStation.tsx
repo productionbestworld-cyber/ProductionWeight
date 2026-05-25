@@ -5,6 +5,7 @@ import QRCodeLib from 'qrcode'
 import { supabase } from '../lib/supabase'
 import { loadProfiles, saveProfiles, type MachineProfile } from './MachineSettings'
 import { loadLongLayout, type FieldConfig } from './LabelDesigner'
+import { fetchProducts, type Product } from './Products'
 
 function fmt(n: number | null | undefined, d: 1|2 = 2) {
   if (n === null || n === undefined || isNaN(n as number)) return (0).toFixed(d)
@@ -345,7 +346,7 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
     await supabase.from('machine_profiles').upsert({
       machine_no: machineNo,
       cust_code: snap.custCode, cust_name: snap.custName, cust_address: snap.custAddress,
-      decimal_places: snap.decimal, mat_code: snap.matCode, product_code: snap.productCode,
+      decimal_places: snap.decimal, item_code: snap.itemCode, mat_code: snap.matCode, product_code: snap.productCode,
       product_name: snap.productName, width_cm: snap.widthCm, thick_mc: snap.thickMc,
       lot_no: snap.lotNo, length: snap.length, pcs: snap.pcs, core_weight: snap.coreWeight,
       inspector: snap.inspector, locked: snap.locked, planned_qty: snap.plannedQty,
@@ -394,7 +395,7 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
   const sorted = [...profiles].sort((a,b) => (a.machine_no||'').localeCompare(b.machine_no||'', undefined, { numeric: true }))
 
   function isReady(p: MachineProfile) {
-    return !!(p.machine_no && p.custName && p.productName && p.matCode && p.lotNo)
+    return !!(p.machine_no && p.custName && p.productName && (p.itemCode || p.matCode) && p.lotNo)
   }
 
   return (
@@ -579,16 +580,86 @@ function saveAllSuggestions(p: MachineProfile) {
   fields.forEach(k => saveSuggestion(k, (p[k] as string) ?? ''))
 }
 
+// ── Item Code Picker (dropdown ดึงจาก products table) ────────────────────────
+function ItemCodePicker({ value, products, onChange, onPick }: {
+  value: string
+  products: Product[]
+  onChange: (v: string) => void
+  onPick: (s: Product) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [])
+
+  const filtered = (() => {
+    const v = value.trim().toLowerCase()
+    return products
+      .filter(s => s.item_code && (!v || s.item_code.toLowerCase().includes(v) ||
+        s.product_name?.toLowerCase().includes(v) ||
+        s.cust_name?.toLowerCase().includes(v)))
+      .slice(0, 10)
+  })()
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <input
+        value={value}
+        onChange={e => { onChange(e.target.value); setOpen(true) }}
+        onFocus={() => setOpen(true)}
+        onClick={() => setOpen(true)}
+        placeholder="คลิกเพื่อเลือก Item Code จากคลัง..."
+        className="w-full bg-slate-800 border-2 border-brand-500/40 hover:border-brand-500 focus:border-brand-500 rounded-lg px-2.5 py-2 text-white text-sm outline-none cursor-pointer"
+      />
+      {open && (
+        <div className="absolute z-20 mt-1 w-full bg-slate-800 border border-brand-500/40 rounded-lg shadow-2xl max-h-72 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-4 text-xs text-slate-400 text-center">
+              <p>ยังไม่มี Item Code</p>
+              <p className="text-brand-400 mt-1">ไปเพิ่มที่เมนู "คลัง Item Code"</p>
+            </div>
+          ) : filtered.map((s, i) => (
+            <button key={s.id ?? s.item_code + i} type="button"
+              onMouseDown={e => { e.preventDefault(); onPick(s); setOpen(false) }}
+              className="w-full text-left px-3 py-2 hover:bg-slate-700 border-b border-slate-700/50 last:border-0">
+              <div className="flex items-center gap-2">
+                <span className="text-brand-400 font-mono font-bold text-xs">{s.item_code}</span>
+                {s.width_cm && (
+                  <span className="text-[10px] bg-brand-500/15 text-brand-300 px-1.5 py-0.5 rounded">
+                    {s.width_cm}×{s.thick_mc}mc
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-slate-300 mt-0.5 truncate">{s.product_name || '—'}</div>
+              <div className="text-[10px] text-slate-500 truncate">👤 {s.cust_name || '—'}</div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Quick Edit Modal (กรอกข้อมูลงานใหม่) ─────────────────────────────────────
 function QuickEditModal({ profile, onClose, onSaved, onParked }: {
   profile: MachineProfile; onClose: () => void; onSaved: () => void; onParked?: () => void
 }) {
   const [p, setP]         = useState({ ...profile })
+  const [products, setProducts] = useState<Product[]>([])
   const [saving, setSaving]   = useState(false)
   const [parking, setParking] = useState(false)
   const [parkBy,  setParkBy]  = useState('')
   const [showPark, setShowPark] = useState(false)
   const set = (k: keyof MachineProfile, v: any) => setP(prev => ({ ...prev, [k]: v }))
+  const setMany = (patch: Partial<MachineProfile>) => setP(prev => ({ ...prev, ...patch }))
+
+  useEffect(() => { fetchProducts().then(setProducts) }, [])
 
   const hasJob = !!(profile.lotNo && profile.productName) // มีงานอยู่แล้ว
 
@@ -617,7 +688,7 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
     } finally { setParking(false) }
   }
 
-  const ok = p.machine_no && p.custName && p.productName && p.matCode && p.lotNo && p.plannedQty
+  const ok = p.machine_no && p.custName && p.productName && (p.itemCode || p.matCode) && p.lotNo && p.plannedQty
   // เตือนถ้า Lot ซ้ำกับงานเก่าที่จอดไว้
   const lotSameAsParked = hasJob && p.lotNo && profile.lotNo && p.lotNo === profile.lotNo
 
@@ -627,7 +698,7 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
         !p.machine_no  && 'หมายเลขเครื่อง',
         !p.custName    && 'ชื่อลูกค้า',
         !p.productName && 'ชื่อสินค้า',
-        !p.matCode     && 'Mat Code',
+        !p.itemCode && !p.matCode && 'Item Code หรือ Mat Code',
         !p.lotNo       && 'Lot No',
         !p.plannedQty  && 'ยอดสั่งผลิต',
       ].filter(Boolean).join(', ')
@@ -642,6 +713,7 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
         cust_name:     p.custName,
         cust_address:  p.custAddress,
         decimal_places: p.decimal,
+        item_code:     p.itemCode,
         mat_code:      p.matCode,
         product_code:  p.productCode,
         product_name:  p.productName,
@@ -707,10 +779,56 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
         </div>
 
         <div className="px-5 py-4 overflow-y-auto space-y-3">
-          <p className="text-brand-400 text-[10px] font-bold uppercase tracking-wider">ลูกค้า</p>
+          {/* ── งานครั้งนี้ — SO + Item Code อยู่แถวเดียวกัน ───── */}
+          <p className="text-brand-400 text-[10px] font-bold uppercase tracking-wider">
+            งานครั้งนี้ <span className="text-emerald-400 normal-case">(เลือก Item Code → เติมสินค้า+ลูกค้าให้อัตโนมัติ)</span>
+          </p>
           <div className="grid grid-cols-2 gap-2">
-            {inp('Sale Order (SO)', 'soNo', 'SO-2026-0001')}
-            {inp('รหัสลูกค้า', 'custCode', 'C-001', true)}
+            {inp('Sale Order (SO)', 'soNo', '', true)}
+            <div>
+              <label className="block text-[10px] text-slate-500 mb-1">Item Code *</label>
+              <ItemCodePicker
+                value={p.itemCode}
+                products={products}
+                onChange={v => {
+                  const match = products.find(x => x.item_code === v.trim())
+                  if (match) {
+                    setMany({
+                      itemCode:    match.item_code,
+                      productCode: match.product_code,
+                      productName: match.product_name,
+                      widthCm:     match.width_cm,
+                      thickMc:     match.thick_mc,
+                      custCode:    match.cust_code,
+                      custName:    match.cust_name ?? '',
+                      custAddress: match.cust_address ?? '',
+                    })
+                  } else {
+                    setMany({
+                      itemCode: v,
+                      productCode:'', productName:'',
+                      widthCm:'', thickMc:'',
+                      custCode:'', custName:'', custAddress:'',
+                    })
+                  }
+                }}
+                onPick={s => setMany({
+                  itemCode:    s.item_code,
+                  productCode: s.product_code,
+                  productName: s.product_name,
+                  widthCm:     s.width_cm,
+                  thickMc:     s.thick_mc,
+                  custCode:    s.cust_code,
+                  custName:    s.cust_name ?? '',
+                  custAddress: s.cust_address ?? '',
+                })}
+              />
+            </div>
+            {inp('Mat Code',     'matCode', '',      true)}
+            {inp('Lot No *',     'lotNo',   '', true)}
+            {inp('Length (M.)',  'length',  '',          true)}
+            {inp('Pcs.',         'pcs',     '',              true)}
+            {inp('ยอดสั่งผลิต (kg) *','plannedQty', '', true)}
             <div>
               <label className="block text-[10px] text-slate-500 mb-1">ทศนิยม</label>
               <div className="flex gap-1">
@@ -722,32 +840,35 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
                 ))}
               </div>
             </div>
-            {inp('ชื่อลูกค้า *', 'custName', 'บริษัท ...')}
-            {inp('ที่อยู่', 'custAddress', '')}
+          </div>
+          {lotSameAsParked && (
+            <div className="bg-red-900/20 border border-red-500/40 rounded-lg px-3 py-2 text-xs text-red-400">
+              ⚠️ Lot นี้เหมือนงานปัจจุบัน — ม้วนเก่าจะนับรวมด้วย กรุณาใช้ Lot ใหม่
+            </div>
+          )}
+
+          {/* ── สินค้า (auto-fill ได้) ────────────────────────── */}
+          <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider pt-2">รายละเอียดสินค้า</p>
+          <div className="grid grid-cols-2 gap-2">
+            {inp('Product Code',   'productCode', '',      true)}
+            {inp('ชื่อสินค้า *',  'productName', '')}
+            {inp('กว้าง (cm)',    'widthCm',     '',            true)}
+            {inp('หนา (mc)',      'thickMc',     '',            true)}
           </div>
 
-          <p className="text-brand-400 text-[10px] font-bold uppercase tracking-wider pt-2">สินค้า</p>
+          {/* ── ลูกค้า (auto-fill ได้) ────────────────────────── */}
+          <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider pt-2">ลูกค้า</p>
           <div className="grid grid-cols-2 gap-2">
-            {inp('Mat Code *',     'matCode',     '60004224',      true)}
-            {inp('Product Code',   'productCode', '60004224',      true)}
-            {inp('ชื่อสินค้า *',  'productName', 'PE Shrink Film')}
-            {inp('กว้าง (cm)',    'widthCm',     '45',            true)}
-            {inp('หนา (mc)',      'thickMc',     '25',            true)}
-            {inp('Lot No *',      'lotNo',       '69S0100010001', true)}
-            {lotSameAsParked && (
-              <div className="col-span-2 bg-red-900/20 border border-red-500/40 rounded-lg px-3 py-2 text-xs text-red-400">
-                ⚠️ Lot นี้เหมือนงานปัจจุบัน — ม้วนเก่าจะนับรวมด้วย กรุณาใช้ Lot ใหม่สำหรับงานด่วน
-              </div>
-            )}
-            {inp('Length (M.)',  'length',      '4800',          true)}
+            {inp('รหัสลูกค้า', 'custCode', '', true)}
+            {inp('ชื่อลูกค้า *', 'custName', '', true)}
+            {inp('ที่อยู่', 'custAddress', '')}
           </div>
 
           <p className="text-brand-400 text-[10px] font-bold uppercase tracking-wider pt-2">เครื่อง</p>
           <div className="grid grid-cols-2 gap-2">
-            {inp('Core Weight (kg)',   'coreWeight', '1.25', true)}
+            {inp('Core Weight (kg)',   'coreWeight', '', true)}
             {inp('ผู้ตรวจสอบ',        'inspector',  '',     true)}
-            {inp('ยอดสั่งผลิต (kg) *','plannedQty', '5000', true)}
-            <div>
+            <div className="col-span-2">
               <label className="block text-[10px] text-slate-500 mb-1">ใบปะหน้า</label>
               <div className="flex gap-1">
                 {(['long','short'] as const).map(s => (
@@ -1102,6 +1223,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         sale_order:     profile.soNo ?? '',
         product_name:   profile.productName,
         customer:       profile.custName,
+        item_code:      profile.itemCode,
         mat_code:       profile.matCode,
         planned_qty:    planned,
         good_kg:        parseFloat(goodKg.toFixed(2)),
@@ -1119,7 +1241,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       // เคลียร์ข้อมูลงาน (เก็บแต่ machine_no, core_weight, label_size, locked)
       await supabase.from('machine_profiles').update({
         cust_code: '', cust_name: '', cust_address: '',
-        mat_code: '', product_code: '', product_name: '',
+        item_code: '', mat_code: '', product_code: '', product_name: '',
         width_cm: '', thick_mc: '',
         lot_no: '', length: '', pcs: '',
         planned_qty: '',
@@ -1194,6 +1316,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       supabase.from('weigh_logs').insert({
         machine_no:   profile.machine_no,
         lot_no:       profile.lotNo,
+        item_code:    profile.itemCode,
         mat_code:     profile.matCode,
         product_name: profile.productName,
         customer:     profile.custName,
@@ -1913,6 +2036,7 @@ export default function WeighStation({ dept }: { dept?: 'blow' | 'print' | 'rewi
           custName:    r.cust_name    ?? '',
           custAddress: r.cust_address ?? '',
           decimal:    (r.decimal_places ?? 2) as 1|2,
+          itemCode:    r.item_code    ?? '',
           matCode:     r.mat_code     ?? '',
           productCode: r.product_code ?? '',
           productName: r.product_name ?? '',

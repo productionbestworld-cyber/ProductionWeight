@@ -152,40 +152,117 @@ export const DEFAULT_LAYOUT: LabelLayout = {
   ],
 }
 
-// ── Persistence — Supabase ────────────────────────────────────────────────────
-const LAYOUT_ID = 'long'
+// ── DEFAULT — ใบสั้น 76×76 mm ────────────────────────────────────────────────
+const SHORT_W = 76
+const SHORT_H = 76
+export const DEFAULT_LAYOUT_SHORT: LabelLayout = {
+  labelW: SHORT_W,
+  labelH: SHORT_H,
+  fields: [
+    { id:'header', label:'หัวกระดาษ (ชื่อบริษัท)',
+      sampleValue:'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด',
+      x:2, y:1.5, w:72, h:5,
+      fontSize:8, fontWeight:'800', align:'center',
+      visible:true, type:'text', border:true, italic:false },
+    { id:'mat', label:'Mat Code',
+      sampleValue:'Mat  P-001',
+      x:2, y:8, w:48, h:4,
+      fontSize:7.5, fontWeight:'700', align:'left',
+      visible:true, type:'text', border:false, italic:false },
+    { id:'rollno', label:'Roll No',
+      sampleValue:'Roll #5',
+      x:52, y:8, w:22, h:4,
+      fontSize:7.5, fontWeight:'700', align:'right',
+      visible:true, type:'text', border:false, italic:false },
+    { id:'prodname', label:'Product Name',
+      sampleValue:'LDPE ใส',
+      x:2, y:13, w:72, h:6,
+      fontSize:10, fontWeight:'800', align:'left',
+      visible:true, type:'text', border:false, italic:false },
+    { id:'size', label:'Size',
+      sampleValue:'120 cm × 40 mc',
+      x:2, y:20, w:72, h:4,
+      fontSize:8, fontWeight:'700', align:'left',
+      visible:true, type:'text', border:false, italic:false },
+    { id:'lotno', label:'Lot No',
+      sampleValue:'Lot L240519-01',
+      x:2, y:25, w:72, h:4,
+      fontSize:8, fontWeight:'700', align:'left',
+      visible:true, type:'text', border:false, italic:false },
+    { id:'length', label:'Length / Pcs',
+      sampleValue:'Length 500 M.',
+      x:2, y:30, w:72, h:4,
+      fontSize:8, fontWeight:'700', align:'left',
+      visible:true, type:'text', border:false, italic:false },
+    { id:'gross', label:'Gross Weight',
+      sampleValue:'Gross 27.00 Kgs.',
+      x:2, y:35, w:72, h:4,
+      fontSize:8, fontWeight:'700', align:'left',
+      visible:true, type:'text', border:true, italic:false },
+    { id:'net', label:'Net Weight',
+      sampleValue:'25.50',
+      x:2, y:40, w:50, h:9,
+      fontSize:18, fontWeight:'900', align:'left',
+      visible:true, type:'weight', border:false, italic:false },
+    { id:'machine', label:'เครื่อง',
+      sampleValue:'M-01',
+      x:2, y:53, w:36, h:4,
+      fontSize:7.5, fontWeight:'700', align:'left',
+      visible:true, type:'text', border:false, italic:false },
+    { id:'core', label:'Core Weight',
+      sampleValue:'Core 1.50',
+      x:40, y:53, w:34, h:4,
+      fontSize:7.5, fontWeight:'700', align:'left',
+      visible:true, type:'text', border:false, italic:false },
+    { id:'inspector', label:'ผู้ตรวจสอบ',
+      sampleValue:'ตรวจ: นาย ทดสอบ',
+      x:2, y:58, w:50, h:4,
+      fontSize:7.5, fontWeight:'700', align:'left',
+      visible:true, type:'text', border:false, italic:false },
+    { id:'qr', label:'QR Code',
+      sampleValue:'QR',
+      x:55, y:55, w:19, h:19,
+      fontSize:7, fontWeight:'400', align:'center',
+      visible:true, type:'qr', border:false, italic:false },
+  ],
+}
 
-export async function loadLongLayout(): Promise<LabelLayout> {
+// ── Persistence — Supabase ────────────────────────────────────────────────────
+type LabelSize = 'long' | 'short'
+const layoutId = (size: LabelSize) => size === 'short' ? 'short' : 'long'
+
+async function loadLayoutBySize(size: LabelSize): Promise<LabelLayout> {
+  const def = size === 'short' ? DEFAULT_LAYOUT_SHORT : DEFAULT_LAYOUT
   try {
     const { data, error } = await supabase
-      .from('label_layouts')
-      .select('layout')
-      .eq('id', LAYOUT_ID)
-      .maybeSingle()
-    if (error) { console.warn('[LabelDesigner] load error:', error.message); return DEFAULT_LAYOUT }
+      .from('label_layouts').select('layout').eq('id', layoutId(size)).maybeSingle()
+    if (error) { console.warn('[LabelDesigner]', error.message); return def }
     if (data?.layout) {
       const parsed = data.layout as LabelLayout
       const savedIds = new Set(parsed.fields.map((f: FieldConfig) => f.id))
-      const missing  = DEFAULT_LAYOUT.fields.filter(f => !savedIds.has(f.id))
+      const missing  = def.fields.filter(f => !savedIds.has(f.id))
       return { ...parsed, fields: [...parsed.fields, ...missing] }
     }
-    // ยังไม่มีข้อมูล → บันทึก default ลง DB เลย
-    await saveLayoutToDB(DEFAULT_LAYOUT)
-  } catch (e) { console.warn('[LabelDesigner] load exception:', e) }
-  return DEFAULT_LAYOUT
+    await saveLayoutToDB(def, size)
+  } catch (e) { console.warn('[LabelDesigner]', e) }
+  return def
 }
 
-async function saveLayoutToDB(layout: LabelLayout): Promise<boolean> {
+export const loadLongLayout  = () => loadLayoutBySize('long')
+export const loadShortLayout = () => loadLayoutBySize('short')
+
+async function saveLayoutToDB(layout: LabelLayout, size: LabelSize): Promise<boolean> {
   const { error } = await supabase
     .from('label_layouts')
-    .upsert({ id: LAYOUT_ID, layout, updated_at: new Date().toISOString() },
+    .upsert({ id: layoutId(size), layout, updated_at: new Date().toISOString() },
              { onConflict: 'id' })
-  if (error) { console.error('[LabelDesigner] save error:', error.message); return false }
+  if (error) { console.error('[LabelDesigner]', error.message); return false }
   return true
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function LabelDesigner() {
+  const [size, setSize]         = useState<LabelSize>('long')
   const [layout, setLayout]     = useState<LabelLayout>(DEFAULT_LAYOUT)
   const [loading, setLoading]   = useState(true)
   const [selected, setSelected] = useState<string | null>(null)
@@ -196,15 +273,16 @@ export default function LabelDesigner() {
   const fields        = layout.fields
   const selectedField = fields.find(f => f.id === selected) ?? null
 
-  // โหลด layout จาก Supabase ตอน mount
+  // โหลด layout ตามขนาดที่เลือก
   useEffect(() => {
-    loadLongLayout().then(l => { setLayout(l); setLoading(false) })
-  }, [])
+    setLoading(true); setSelected(null)
+    loadLayoutBySize(size).then(l => { setLayout(l); setLoading(false) })
+  }, [size])
 
   // ── save ──────────────────────────────────────────────────────────────────
   async function doSave() {
     setSavedFlash(true)
-    const ok = await saveLayoutToDB(layout)
+    const ok = await saveLayoutToDB(layout, size)
     if (!ok) {
       alert('❌ บันทึกไม่สำเร็จ — กรุณาตรวจสอบ Supabase RLS policy')
       setSavedFlash(false)
@@ -215,9 +293,10 @@ export default function LabelDesigner() {
 
   async function doReset() {
     if (!confirm('รีเซ็ตกลับค่าเริ่มต้น? (layout ที่บันทึกไว้จะหายไป)')) return
-    setLayout(DEFAULT_LAYOUT)
+    const def = size === 'short' ? DEFAULT_LAYOUT_SHORT : DEFAULT_LAYOUT
+    setLayout(def)
     setSelected(null)
-    const ok = await saveLayoutToDB(DEFAULT_LAYOUT)
+    const ok = await saveLayoutToDB(def, size)
     if (!ok) alert('❌ บันทึกไม่สำเร็จ — กรุณาตรวจสอบ Supabase RLS policy')
   }
 
@@ -448,7 +527,22 @@ export default function LabelDesigner() {
 
         {/* toolbar */}
         <div className="flex items-center gap-3 w-full max-w-max">
-          <span className="text-xs text-slate-500 mr-2">ใบยาว {LABEL_W}×{LABEL_H} mm · ลากเพื่อจัดตำแหน่ง</span>
+          {/* Size switcher */}
+          <div className="flex gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800">
+            <button onClick={() => setSize('long')}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
+                size === 'long' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'
+              }`}>
+              📄 ใบยาว 165×70
+            </button>
+            <button onClick={() => setSize('short')}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
+                size === 'short' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'
+              }`}>
+              🏷 ใบสั้น 76×76
+            </button>
+          </div>
+          <span className="text-xs text-slate-500 mr-2">· ลากเพื่อจัดตำแหน่ง</span>
           <button onClick={doSave}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
               savedFlash ? 'bg-green-600 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'
@@ -468,8 +562,8 @@ export default function LabelDesigner() {
             ref={canvasRef}
             className="relative bg-white shadow-2xl"
             style={{
-              width: LABEL_W * SCALE,
-              height: LABEL_H * SCALE,
+              width: layout.labelW * SCALE,
+              height: layout.labelH * SCALE,
               border: '2px solid #000',
               outline: '4px solid #1e293b',
               outlineOffset: '2px',
@@ -479,7 +573,7 @@ export default function LabelDesigner() {
             onClick={() => setSelected(null)}>
 
             {/* mm ruler guides แนวนอน ทุก 10mm */}
-            {Array.from({ length: Math.floor(LABEL_H / 10) }, (_, i) => (
+            {Array.from({ length: Math.floor(layout.labelH / 10) }, (_, i) => (
               <div key={i} style={{
                 position: 'absolute', left: 0, top: (i + 1) * 10 * SCALE,
                 width: '100%', height: 1, background: '#dbeafe', pointerEvents: 'none', zIndex: 0,
@@ -487,7 +581,7 @@ export default function LabelDesigner() {
             ))}
 
             {/* mm ruler guides แนวตั้ง ทุก 10mm */}
-            {Array.from({ length: Math.floor(LABEL_W / 10) }, (_, i) => (
+            {Array.from({ length: Math.floor(layout.labelW / 10) }, (_, i) => (
               <div key={i} style={{
                 position: 'absolute', top: 0, left: (i + 1) * 10 * SCALE,
                 height: '100%', width: 1, background: '#f1f5f9', pointerEvents: 'none', zIndex: 0,

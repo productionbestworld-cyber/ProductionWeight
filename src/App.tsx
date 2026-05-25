@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Scale, LayoutDashboard, Settings, Package, History, Warehouse as WarehouseIcon, ChevronDown, Wifi, WifiOff, AlertTriangle, FileEdit, Boxes } from 'lucide-react'
+import { Scale, LayoutDashboard, Settings, Package, History, Warehouse as WarehouseIcon, ChevronDown, Wifi, WifiOff, AlertTriangle, Lock } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import WeighStation from './pages/WeighStation'
 import Dashboard from './pages/Dashboard'
@@ -8,10 +8,9 @@ import RollDetail from './pages/RollDetail'
 import Transfer from './pages/Transfer'
 import HistoryPage from './pages/History'
 import Warehouse from './pages/Warehouse'
-import LabelDesigner from './pages/LabelDesigner'
-import Products from './pages/Products'
+import Admin, { PinGate, DeptPinGate, isAdminUnlocked, isDeptUnlocked, lockAllDepts } from './pages/Admin'
 
-type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings' | 'label-designer' | 'products'
+type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings' | 'admin'
 type Dept = 'blow' | 'print' | 'rewind'
 
 const DEPT_KEY = 'bwp_dept'
@@ -26,6 +25,13 @@ export default function App() {
   const [page, setPage]               = useState<Page>('weigh')
   const [weighKey, setWeighKey]       = useState(0)
   const [showDeptMenu, setShowDeptMenu] = useState(false)
+  const [showPinGate, setShowPinGate] = useState(false)
+  const [pendingDept, setPendingDept] = useState<Dept | null>(null)
+
+  // ── เข้าครั้งแรก: แสดงหน้าเลือกแผนก (profile select) ──────────────
+  const noDeptUnlocked = !isDeptUnlocked('blow') && !isDeptUnlocked('print') && !isDeptUnlocked('rewind')
+  const [showDeptSelect, setShowDeptSelect] = useState(noDeptUnlocked)
+  const [showDeptGate, setShowDeptGate] = useState(false) // จะเปิดหลังเลือกแผนก
   const deptRef = useRef<HTMLDivElement>(null)
 
   // ── Connection status ─────────────────────────────────────────────────
@@ -61,10 +67,15 @@ export default function App() {
   }, [checkConn])
 
   function switchDept(d: Dept) {
-    setDept(d)
-    localStorage.setItem(DEPT_KEY, d)
     setShowDeptMenu(false)
-    setPage('weigh') // reset to weigh when switching dept
+    if (d === dept) return
+    // ล็อกแผนกเก่าทั้งหมด แล้วบังคับ PIN ของแผนกใหม่
+    lockAllDepts()
+    if (isDeptUnlocked(d)) {
+      setDept(d); localStorage.setItem(DEPT_KEY, d); setPage('weigh')
+    } else {
+      setPendingDept(d)
+    }
   }
 
   useEffect(() => {
@@ -89,10 +100,73 @@ export default function App() {
     { key: 'warehouse', label: 'คลังสินค้า',    icon: WarehouseIcon },
     { key: 'dashboard', label: 'Dashboard',      icon: LayoutDashboard },
     { key: 'history',   label: 'ประวัติผลิต',    icon: History },
-    { key: 'products',       label: 'คลัง Item Code', icon: Boxes },
-    { key: 'settings',       label: 'ตั้งค่าเครื่อง',  icon: Settings },
-    { key: 'label-designer', label: 'ออกแบบใบปะหน้า', icon: FileEdit },
+    { key: 'settings',  label: 'ตั้งค่าเครื่อง', icon: Settings },
   ] as const
+
+  function gotoAdmin() {
+    if (isAdminUnlocked()) setPage('admin')
+    else setShowPinGate(true)
+  }
+
+  // ── หน้าเลือกแผนก (Profile Select) ─────────────────────────────────
+  if (showDeptSelect) {
+    return (
+      <div className="min-h-screen bg-[#0a0f1e] flex items-center justify-center p-4">
+        <div className="w-full max-w-lg">
+          {/* Logo */}
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 rounded-2xl bg-brand-600 flex items-center justify-center text-white font-black text-2xl mx-auto mb-4 shadow-lg shadow-brand-600/30">BWP</div>
+            <h1 className="text-white text-2xl font-bold">ระบบชั่งน้ำหนักม้วน</h1>
+            <p className="text-slate-500 text-sm mt-1">เลือกแผนกเพื่อเข้าสู่ระบบ</p>
+          </div>
+
+          {/* Department cards */}
+          <div className="space-y-3">
+            {(['blow','print','rewind'] as const).map(d => {
+              const c = deptConfig[d]
+              const borderColors = {
+                blow: 'border-blue-500/40 hover:border-blue-400 hover:shadow-blue-500/20',
+                print: 'border-purple-500/40 hover:border-purple-400 hover:shadow-purple-500/20',
+                rewind: 'border-green-500/40 hover:border-green-400 hover:shadow-green-500/20',
+              }
+              const bgColors = {
+                blow: 'bg-blue-500/5 hover:bg-blue-500/10',
+                print: 'bg-purple-500/5 hover:bg-purple-500/10',
+                rewind: 'bg-green-500/5 hover:bg-green-500/10',
+              }
+              return (
+                <button key={d}
+                  onClick={() => {
+                    setDept(d)
+                    localStorage.setItem(DEPT_KEY, d)
+                    setShowDeptGate(true) // ถามPINหลังเลือกแผนก (ยังไม่ปิดหน้าเลือก จนกว่าPINจะผ่าน)
+                  }}
+                  className={`w-full flex items-center gap-4 px-6 py-5 rounded-2xl border-2 ${borderColors[d]} ${bgColors[d]} transition-all duration-200 hover:shadow-lg group`}>
+                  <span className="text-4xl group-hover:scale-110 transition-transform">{c.emoji}</span>
+                  <div className="text-left flex-1">
+                    <p className="text-white font-bold text-lg">{c.label}</p>
+                    <p className="text-slate-500 text-xs">{c.sub}</p>
+                  </div>
+                  <span className="text-slate-600 group-hover:text-slate-400 text-sm transition-colors">เข้าสู่ระบบ →</span>
+                </button>
+              )
+            })}
+          </div>
+
+          <p className="text-center text-slate-600 text-xs mt-6">กรุณาเลือกแผนกที่ต้องการใช้งาน แล้วใส่ PIN เพื่อยืนยัน</p>
+        </div>
+
+        {/* PIN gate หลังเลือกแผนกแล้ว */}
+        {showDeptGate && (
+          <DeptPinGate
+            dept={dept}
+            onUnlock={() => { setShowDeptGate(false); setShowDeptSelect(false) }}
+            onClose={() => setShowDeptGate(false)} /* ปิดได้ → กลับไปเลือกแผนกใหม่ */
+          />
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#0a0f1e]">
@@ -150,6 +224,14 @@ export default function App() {
           </button>
         ))}
 
+        {/* Admin (lock-protected) */}
+        <button onClick={gotoAdmin}
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+            page === 'admin' ? 'bg-amber-600 text-white' : 'text-amber-400 hover:text-amber-300 hover:bg-amber-500/10'
+          }`}>
+          <Lock size={14}/> <span className="hidden md:block">Admin</span>
+        </button>
+
         {/* Connection status — ชิดขวา */}
         <div className="ml-auto flex-shrink-0">
           <button onClick={checkConn} title={latency ? `${latency}ms` : undefined}
@@ -173,10 +255,29 @@ export default function App() {
         {page === 'warehouse' && <Warehouse dept={dept} />}
         {page === 'dashboard' && <Dashboard dept={dept} />}
         {page === 'history'   && <HistoryPage dept={dept} />}
-        {page === 'settings'       && <MachineSettings dept={dept} />}
-        {page === 'products'       && <Products />}
-        {page === 'label-designer' && <LabelDesigner />}
+        {page === 'settings'  && <MachineSettings dept={dept} />}
+        {page === 'admin'     && <Admin dept={dept} />}
       </main>
+
+      {showPinGate && (
+        <PinGate
+          onUnlock={() => { setShowPinGate(false); setPage('admin') }}
+          onClose={() => setShowPinGate(false)}
+        />
+      )}
+
+      {/* PIN ตอนสลับแผนก */}
+      {pendingDept && (
+        <DeptPinGate
+          dept={pendingDept}
+          onUnlock={() => {
+            const d = pendingDept
+            setDept(d); localStorage.setItem(DEPT_KEY, d); setPage('weigh')
+            setPendingDept(null)
+          }}
+          onClose={() => setPendingDept(null)}
+        />
+      )}
     </div>
   )
 }

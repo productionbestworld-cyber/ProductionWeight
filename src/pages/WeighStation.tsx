@@ -1415,7 +1415,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
     if (!deleteReason.trim()) { alert('กรุณากรอกเหตุผล'); return }
     setDeleting(true)
     const r = deleteModal.roll
-    // บันทึก log ก่อนลบ
+    // บันทึก log ก่อนลบ (snapshot ข้อมูลครบเพื่อสืบย้อน)
     const { error: logErr } = await supabase.from('roll_deletion_logs').insert({
       deleted_by:   deleteBy.trim(),
       reason:       deleteReason.trim(),
@@ -1425,6 +1425,19 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       roll_type:    r.roll_type,
       weight:       r.weight,
       gross_weight: r.gross_weight,
+      core_weight:  r.core_weight,
+      length:       r.length,
+      pcs:          r.pcs,
+      product_name: profile.productName,
+      product_code: profile.productCode,
+      item_code:    profile.itemCode,
+      mat_code:     profile.matCode,
+      cust_code:    profile.custCode,
+      cust_name:    profile.custName,
+      width_cm:     profile.widthCm,
+      thick_mc:     profile.thickMc,
+      inspector:    r.inspector,
+      started_at:   r.started_at,
       original_id:  r.id,
       section:      profile.section ?? 'blow',
     })

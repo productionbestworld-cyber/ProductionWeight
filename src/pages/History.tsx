@@ -237,8 +237,8 @@ export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-slate-800 text-slate-500">
-                      {['วันที่ลบ','เครื่อง','ม้วน','ประเภท','นน.สุทธิ','Lot','ผู้ลบ','เหตุผล'].map(h=>(
-                        <th key={h} className="px-3 py-2 text-left font-semibold">{h}</th>
+                      {['วันที่ลบ','แผนก','เครื่อง','ม้วน','ประเภท','นน.สุทธิ','นน.รวม','Core','Length','ลูกค้า','สินค้า','Item Code','Mat Code','Size','Lot','ผู้ชั่ง','ผู้ลบ','เหตุผล'].map(h=>(
+                        <th key={h} className="px-3 py-2 text-left font-semibold whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -246,13 +246,23 @@ export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                     {deletedLogs.map(r => (
                       <tr key={r.id} className="hover:bg-slate-800/30">
                         <td className="px-3 py-2.5 text-slate-400 whitespace-nowrap">{fmtDateTime(r.deleted_at)}</td>
+                        <td className="px-3 py-2.5 text-slate-400">{r.section ?? '—'}</td>
                         <td className="px-3 py-2.5 font-bold text-white">{r.machine_no}</td>
                         <td className="px-3 py-2.5 font-mono text-white">{r.roll_no}</td>
                         <td className="px-3 py-2.5 text-slate-400">{r.roll_type}</td>
                         <td className="px-3 py-2.5 text-red-400 font-bold">{(r.weight??0).toFixed(2)}</td>
+                        <td className="px-3 py-2.5 text-slate-300">{r.gross_weight != null ? Number(r.gross_weight).toFixed(2) : '—'}</td>
+                        <td className="px-3 py-2.5 text-slate-400">{r.core_weight ?? '—'}</td>
+                        <td className="px-3 py-2.5 text-slate-400">{r.length ?? '—'}</td>
+                        <td className="px-3 py-2.5 text-slate-300 max-w-[140px] truncate" title={r.cust_name}>{r.cust_name ?? '—'}</td>
+                        <td className="px-3 py-2.5 text-slate-300 max-w-[160px] truncate" title={r.product_name}>{r.product_name ?? '—'}</td>
+                        <td className="px-3 py-2.5 text-slate-400 font-mono text-[10px]">{r.item_code ?? '—'}</td>
+                        <td className="px-3 py-2.5 text-slate-400 font-mono text-[10px]">{r.mat_code ?? '—'}</td>
+                        <td className="px-3 py-2.5 text-slate-400 whitespace-nowrap">{(r.width_cm || r.thick_mc) ? `${r.width_cm ?? '?'}×${r.thick_mc ?? '?'}` : '—'}</td>
                         <td className="px-3 py-2.5 text-slate-400 font-mono text-[10px]">{r.lot_no}</td>
+                        <td className="px-3 py-2.5 text-slate-300">{r.inspector ?? '—'}</td>
                         <td className="px-3 py-2.5 text-amber-300 font-semibold">{r.deleted_by}</td>
-                        <td className="px-3 py-2.5 text-slate-300">{r.reason}</td>
+                        <td className="px-3 py-2.5 text-slate-300 max-w-[200px]" title={r.reason}>{r.reason}</td>
                       </tr>
                     ))}
                   </tbody>

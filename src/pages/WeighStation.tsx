@@ -1577,18 +1577,9 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
           {/* Scrap reason */}
           {isScrap && (
             <input value={scrapReason} onChange={e => setScrapReason(e.target.value)}
-              placeholder="เหตุผลเศษเสีย (จำเป็น) เช่น ตัดต่อ, ขอบเสีย, สีไม่ตรง..."
-              list="scrap-reason-list"
+              placeholder="เหตุผลเศษเสีย (จำเป็น)..."
               className="w-full bg-slate-800 border border-red-500/40 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-red-500 placeholder-slate-500" />
           )}
-          <datalist id="scrap-reason-list">
-            <option value="ตัดต่อ"/>
-            <option value="ขอบเสีย"/>
-            <option value="สีไม่ตรง"/>
-            <option value="หนาไม่ได้"/>
-            <option value="ตั้งเครื่อง"/>
-            <option value="เครื่องเสีย"/>
-          </datalist>
 
           {/* Scale display */}
           <div className={`border-2 rounded-2xl px-5 py-6 text-center shadow-xl ${

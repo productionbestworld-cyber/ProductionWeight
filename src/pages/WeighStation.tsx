@@ -1411,6 +1411,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
   const [deleteReason, setDeleteReason] = useState('')
   const [deleteBy, setDeleteBy]   = useState('')
   const [deleting, setDeleting]   = useState(false)
+  const [renumberAfterDelete, setRenumberAfterDelete] = useState(true)
 
   async function confirmDelete() {
     if (!deleteModal) return
@@ -1447,8 +1448,30 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
     if (logErr) console.warn('log insert failed:', logErr.message)
     // ลบม้วน
     const { error } = await supabase.from('production_rolls').delete().eq('id', r.id)
+    if (error) { setDeleting(false); alert('ลบไม่สำเร็จ: ' + error.message); return }
+
+    // เลื่อนเลขม้วนที่มากกว่าลงมา 1 (เฉพาะ machine + lot + roll_type เดียวกัน)
+    if (renumberAfterDelete && r.roll_no && (r.roll_type === 'good' || r.roll_type === 'bad')) {
+      const { data: bigger } = await supabase.from('production_rolls')
+        .select('id, roll_no')
+        .eq('machine_no', r.machine_no)
+        .eq('lot_no', r.lot_no)
+        .eq('roll_type', r.roll_type)
+        .gt('roll_no', r.roll_no)
+        .order('roll_no', { ascending: true })
+      if (bigger && bigger.length > 0) {
+        for (const row of bigger) {
+          await supabase.from('production_rolls')
+            .update({ roll_no: (row.roll_no ?? 0) - 1 })
+            .eq('id', row.id)
+        }
+        // ลดตัวนับ rollNo ของฝั่ง UI ด้วย เพื่อให้ม้วนถัดไปต่อเลขถูก
+        if (r.roll_type === 'good') setRollNo(n => Math.max(1, n - 1))
+        if (r.roll_type === 'bad')  setBadRollNo(n => Math.max(1, n - 1))
+      }
+    }
+
     setDeleting(false)
-    if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return }
     setDeleteModal(null)
     setDeleteReason('')
     setDeleteBy('')
@@ -2082,6 +2105,20 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                   placeholder="เช่น ชั่งผิดงาน, กรอกข้อมูลผิด..."
                   className="bg-slate-800 text-white text-sm rounded-lg px-3 py-2 border border-slate-700 focus:border-red-500 focus:outline-none"/>
               </label>
+
+              {/* เลื่อนเลขม้วนหลังลบ */}
+              {deleteModal.roll.roll_no > 0 && (deleteModal.roll.roll_type === 'good' || deleteModal.roll.roll_type === 'bad') && (
+                <label className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5 cursor-pointer">
+                  <input type="checkbox" checked={renumberAfterDelete}
+                    onChange={e => setRenumberAfterDelete(e.target.checked)}
+                    className="mt-0.5 accent-amber-500"/>
+                  <span className="text-xs text-amber-200 leading-snug">
+                    <span className="font-bold">เลื่อนเลขม้วนหลังจากนี้ขึ้น 1</span><br/>
+                    <span className="text-amber-300/70">ม้วนที่ #{(deleteModal.roll.roll_no ?? 0) + 1} จะกลายเป็น #{deleteModal.roll.roll_no} → ไม่เกิดเลขแหว่ง<br/>
+                    ⚠ ฉลากที่พิมพ์ไปแล้วจะไม่ตรงกับระบบ — ควรพิมพ์ใหม่</span>
+                  </span>
+                </label>
+              )}
             </div>
 
             <div className="flex gap-2">

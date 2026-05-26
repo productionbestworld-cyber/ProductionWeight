@@ -47,8 +47,9 @@ export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   async function loadDeletedLogs() {
     setLoadingDel(true)
     let q = supabase.from('roll_deletion_logs').select('*').order('deleted_at', { ascending: false })
-    if (dept) q = q.eq('machine_no', dept)
-    const { data } = await q
+    if (dept) q = q.or(`section.eq.${dept},section.is.null`)
+    const { data, error } = await q
+    if (error) console.warn('loadDeletedLogs error:', error.message)
     setDeletedLogs(data ?? [])
     setLoadingDel(false)
   }

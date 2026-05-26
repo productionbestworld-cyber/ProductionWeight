@@ -1416,7 +1416,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
     setDeleting(true)
     const r = deleteModal.roll
     // บันทึก log ก่อนลบ
-    await supabase.from('roll_deletion_logs').insert({
+    const { error: logErr } = await supabase.from('roll_deletion_logs').insert({
       deleted_by:   deleteBy.trim(),
       reason:       deleteReason.trim(),
       machine_no:   r.machine_no,
@@ -1426,7 +1426,9 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       weight:       r.weight,
       gross_weight: r.gross_weight,
       original_id:  r.id,
+      section:      profile.section ?? 'blow',
     })
+    if (logErr) console.warn('log insert failed:', logErr.message)
     // ลบม้วน
     const { error } = await supabase.from('production_rolls').delete().eq('id', r.id)
     setDeleting(false)

@@ -881,7 +881,6 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
               />
             </div>
             {inp('Length (M.)',  'length',  '',          true)}
-            {inp('Pcs.',         'pcs',     '',              true)}
             {inp('ยอดสั่งผลิต (kg) *','plannedQty', '', true)}
             <div>
               <label className="block text-[10px] text-slate-500 mb-1">ทศนิยม</label>

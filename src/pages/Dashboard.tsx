@@ -31,6 +31,8 @@ type Roll = {
   thick_mc?: string
   created_at: string
   roll_no: number
+  remark?: string | null
+  section?: string | null
 }
 
 type Tab = 'overview' | 'daily' | 'compare' | 'table'
@@ -82,7 +84,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
     const to   = new Date(dateTo);   to.setHours(23,59,59,999)
     const { data } = await supabase
       .from('production_rolls')
-      .select('id,roll_type,weight,machine_no,lot_no,product_name,customer,width_cm,thick_mc,created_at,roll_no,section')
+      .select('id,roll_type,weight,machine_no,lot_no,product_name,customer,width_cm,thick_mc,created_at,roll_no,section,remark')
       .gte('created_at', from.toISOString())
       .lte('created_at', to.toISOString())
       .order('created_at', { ascending: true })
@@ -102,7 +104,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
       const to   = new Date(dateTo);   to.setHours(23,59,59,999)
       supabase
         .from('production_rolls')
-        .select('id,roll_type,weight,machine_no,lot_no,product_name,customer,width_cm,thick_mc,created_at,roll_no,section')
+        .select('id,roll_type,weight,machine_no,lot_no,product_name,customer,width_cm,thick_mc,created_at,roll_no,section,remark')
         .gte('created_at', from.toISOString())
         .lte('created_at', to.toISOString())
         .order('created_at', { ascending: true })
@@ -186,6 +188,26 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
     return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date))
       .map(d => ({ ...d, date: new Date(d.date).toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit' }) }))
   }, [filtered])
+
+  // ─── สาเหตุเศษเสีย / ม้วนกรอ — รวมตาม remark ───────────────────────
+  const reasonSummary = useMemo(() => {
+    const map = new Map<string, { reason: string; kind: 'scrap' | 'bad'; count: number; weight: number }>()
+    for (const r of filtered) {
+      const isScrap = r.roll_type?.startsWith?.('scrap')
+      const isBad   = r.roll_type === 'bad'
+      if (!isScrap && !isBad) continue
+      const reason = (r.remark ?? '').trim() || '(ไม่ระบุเหตุผล)'
+      const kind: 'scrap'|'bad' = isScrap ? 'scrap' : 'bad'
+      const key = `${kind}::${reason}`
+      const cur = map.get(key) ?? { reason, kind, count: 0, weight: 0 }
+      cur.count  += 1
+      cur.weight += r.weight ?? 0
+      map.set(key, cur)
+    }
+    return [...map.values()].sort((a, b) => b.weight - a.weight)
+  }, [filtered])
+  const scrapReasons = reasonSummary.filter(r => r.kind === 'scrap')
+  const badReasons   = reasonSummary.filter(r => r.kind === 'bad')
 
   // per-machine summary table
   const machineSummary = useMemo(() => {
@@ -438,6 +460,81 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                       label={{ position:'right', formatter:(v:any)=>fmtKg(Number(v)), fontSize: 10, fill:'#555' }}/>
                   </HBarChart>
                 </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+
+          {/* ── สาเหตุของเสีย (เศษ + ม้วนกรอ) ──────────────────────── */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* เศษเสีย */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+                <p className="font-bold text-gray-700 flex items-center gap-2"><span>🗑</span> สาเหตุเศษเสีย</p>
+                <span className="text-xs text-gray-400">{scrapReasons.length} สาเหตุ · {fmtKg(allScrapKg)} kg</span>
+              </div>
+              {scrapReasons.length === 0 ? (
+                <div className="py-10 text-center text-gray-400 text-sm">ไม่มีข้อมูล</div>
+              ) : (
+                <div className="max-h-72 overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 text-[11px] text-gray-500 uppercase tracking-wider sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-semibold">เหตุผล</th>
+                        <th className="px-3 py-2 text-right font-semibold">ครั้ง</th>
+                        <th className="px-3 py-2 text-right font-semibold">น้ำหนัก (kg)</th>
+                        <th className="px-3 py-2 text-right font-semibold">% ของเศษ</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {scrapReasons.map(r => (
+                        <tr key={r.reason} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 text-gray-700">{r.reason}</td>
+                          <td className="px-3 py-2 text-right text-gray-500">{r.count}</td>
+                          <td className="px-3 py-2 text-right font-bold text-red-500">{num(r.weight, 1)}</td>
+                          <td className="px-3 py-2 text-right text-gray-500 text-xs">
+                            {allScrapKg ? (r.weight / allScrapKg * 100).toFixed(1) : 0}%
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* ม้วนกรอ */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+                <p className="font-bold text-gray-700 flex items-center gap-2"><span>🔄</span> สาเหตุม้วนกรอ</p>
+                <span className="text-xs text-gray-400">{badReasons.length} สาเหตุ · {fmtKg(badKg)} kg</span>
+              </div>
+              {badReasons.length === 0 ? (
+                <div className="py-10 text-center text-gray-400 text-sm">ไม่มีข้อมูล</div>
+              ) : (
+                <div className="max-h-72 overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 text-[11px] text-gray-500 uppercase tracking-wider sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-semibold">เหตุผล</th>
+                        <th className="px-3 py-2 text-right font-semibold">ครั้ง</th>
+                        <th className="px-3 py-2 text-right font-semibold">น้ำหนัก (kg)</th>
+                        <th className="px-3 py-2 text-right font-semibold">% ของกรอ</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {badReasons.map(r => (
+                        <tr key={r.reason} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 text-gray-700">{r.reason}</td>
+                          <td className="px-3 py-2 text-right text-gray-500">{r.count}</td>
+                          <td className="px-3 py-2 text-right font-bold text-orange-500">{num(r.weight, 1)}</td>
+                          <td className="px-3 py-2 text-right text-gray-500 text-xs">
+                            {badKg ? (r.weight / badKg * 100).toFixed(1) : 0}%
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           </div>

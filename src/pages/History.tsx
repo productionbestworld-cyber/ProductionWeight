@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { History as HistoryIcon, Search, RefreshCw, X, FileText, Download, Trash2, Activity } from 'lucide-react'
+import { useEffect, useState, useMemo } from 'react'
+import { History as HistoryIcon, Search, RefreshCw, X, FileText, Download, Trash2, Activity, ChevronRight, ChevronDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 function fmt(n: number | null | undefined, d = 2) {
@@ -233,41 +233,7 @@ export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
             ) : deletedLogs.length === 0 ? (
               <div className="py-8 text-center text-slate-600 text-sm">ยังไม่มีประวัติการลบ</div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-800 text-slate-500">
-                      {['วันที่ลบ','แผนก','เครื่อง','ม้วน','ประเภท','นน.สุทธิ','นน.รวม','Core','Length','ลูกค้า','สินค้า','Item Code','Mat Code','Size','Lot','ผู้ชั่ง','ผู้ลบ','เหตุผล'].map(h=>(
-                        <th key={h} className="px-3 py-2 text-left font-semibold whitespace-nowrap">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/50">
-                    {deletedLogs.map(r => (
-                      <tr key={r.id} className="hover:bg-slate-800/30">
-                        <td className="px-3 py-2.5 text-slate-400 whitespace-nowrap">{fmtDateTime(r.deleted_at)}</td>
-                        <td className="px-3 py-2.5 text-slate-400">{r.section ?? '—'}</td>
-                        <td className="px-3 py-2.5 font-bold text-white">{r.machine_no}</td>
-                        <td className="px-3 py-2.5 font-mono text-white">{r.roll_no}</td>
-                        <td className="px-3 py-2.5 text-slate-400">{r.roll_type}</td>
-                        <td className="px-3 py-2.5 text-red-400 font-bold">{(r.weight??0).toFixed(2)}</td>
-                        <td className="px-3 py-2.5 text-slate-300">{r.gross_weight != null ? Number(r.gross_weight).toFixed(2) : '—'}</td>
-                        <td className="px-3 py-2.5 text-slate-400">{r.core_weight ?? '—'}</td>
-                        <td className="px-3 py-2.5 text-slate-400">{r.length ?? '—'}</td>
-                        <td className="px-3 py-2.5 text-slate-300 max-w-[140px] truncate" title={r.cust_name}>{r.cust_name ?? '—'}</td>
-                        <td className="px-3 py-2.5 text-slate-300 max-w-[160px] truncate" title={r.product_name}>{r.product_name ?? '—'}</td>
-                        <td className="px-3 py-2.5 text-slate-400 font-mono text-[10px]">{r.item_code ?? '—'}</td>
-                        <td className="px-3 py-2.5 text-slate-400 font-mono text-[10px]">{r.mat_code ?? '—'}</td>
-                        <td className="px-3 py-2.5 text-slate-400 whitespace-nowrap">{(r.width_cm || r.thick_mc) ? `${r.width_cm ?? '?'}×${r.thick_mc ?? '?'}` : '—'}</td>
-                        <td className="px-3 py-2.5 text-slate-400 font-mono text-[10px]">{r.lot_no}</td>
-                        <td className="px-3 py-2.5 text-slate-300">{r.inspector ?? '—'}</td>
-                        <td className="px-3 py-2.5 text-amber-300 font-semibold">{r.deleted_by}</td>
-                        <td className="px-3 py-2.5 text-slate-300 max-w-[200px]" title={r.reason}>{r.reason}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DeletedLogsByLot logs={deletedLogs}/>
             )}
           </div>
         )}
@@ -543,6 +509,97 @@ export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Deleted Logs grouped by Lot ──────────────────────────────────────────
+function DeletedLogsByLot({ logs }: { logs: any[] }) {
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+
+  const groups = useMemo(() => {
+    const m = new Map<string, any[]>()
+    for (const r of logs) {
+      const key = r.lot_no || '(ไม่มี Lot)'
+      if (!m.has(key)) m.set(key, [])
+      m.get(key)!.push(r)
+    }
+    return [...m.entries()].map(([lot, items]) => {
+      const totalWeight = items.reduce((s, x) => s + (x.weight ?? 0), 0)
+      const machines = [...new Set(items.map(x => x.machine_no))].join(', ')
+      const latestAt = items.reduce((max, x) => x.deleted_at > max ? x.deleted_at : max, items[0].deleted_at)
+      const cust  = items.find(x => x.cust_name)?.cust_name
+      const prod  = items.find(x => x.product_name)?.product_name
+      return { lot, items, totalWeight, machines, latestAt, cust, prod }
+    }).sort((a, b) => b.latestAt.localeCompare(a.latestAt))
+  }, [logs])
+
+  return (
+    <div className="divide-y divide-slate-800/50">
+      {groups.map(g => {
+        const isOpen = expanded[g.lot]
+        return (
+          <div key={g.lot} className="bg-slate-900">
+            {/* Header — Lot row */}
+            <button onClick={() => setExpanded(p => ({ ...p, [g.lot]: !p[g.lot] }))}
+              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-800/50 transition-colors text-left">
+              {isOpen ? <ChevronDown size={16} className="text-brand-400 shrink-0"/> : <ChevronRight size={16} className="text-slate-500 shrink-0"/>}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono font-bold text-white text-sm">{g.lot}</span>
+                  <span className="text-xs bg-red-500/20 text-red-400 px-2 py-0.5 rounded font-bold">ลบ {g.items.length} ม้วน</span>
+                  <span className="text-xs text-slate-500">รวม <span className="text-red-300 font-bold">{fmt(g.totalWeight)}</span> Kg.</span>
+                  <span className="text-xs text-slate-500">·</span>
+                  <span className="text-xs text-slate-400">{g.machines}</span>
+                </div>
+                {(g.cust || g.prod) && (
+                  <div className="text-[11px] text-slate-500 mt-0.5 truncate">
+                    {g.cust && <span className="text-slate-300">{g.cust}</span>}
+                    {g.cust && g.prod && <span> · </span>}
+                    {g.prod && <span>{g.prod}</span>}
+                  </div>
+                )}
+              </div>
+              <div className="text-[10px] text-slate-500 whitespace-nowrap">{fmtDateTime(g.latestAt)}</div>
+            </button>
+
+            {/* Detail rows */}
+            {isOpen && (
+              <div className="px-4 pb-3 overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-slate-500">
+                      {['วันที่ลบ','เครื่อง','ม้วน','ประเภท','นน.สุทธิ','นน.รวม','Core','Length','Item Code','Mat Code','Size','ผู้ชั่ง','ผู้ลบ','เหตุผล'].map(h => (
+                        <th key={h} className="px-2 py-1.5 text-left font-semibold whitespace-nowrap text-[10px]">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/50">
+                    {g.items.map(r => (
+                      <tr key={r.id} className="hover:bg-slate-800/30">
+                        <td className="px-2 py-1.5 text-slate-400 whitespace-nowrap">{fmtDateTime(r.deleted_at)}</td>
+                        <td className="px-2 py-1.5 font-bold text-white">{r.machine_no}</td>
+                        <td className="px-2 py-1.5 font-mono text-white">{r.roll_no}</td>
+                        <td className="px-2 py-1.5 text-slate-400">{r.roll_type}</td>
+                        <td className="px-2 py-1.5 text-red-400 font-bold">{(r.weight??0).toFixed(2)}</td>
+                        <td className="px-2 py-1.5 text-slate-300">{r.gross_weight != null ? Number(r.gross_weight).toFixed(2) : '—'}</td>
+                        <td className="px-2 py-1.5 text-slate-400">{r.core_weight ?? '—'}</td>
+                        <td className="px-2 py-1.5 text-slate-400">{r.length ?? '—'}</td>
+                        <td className="px-2 py-1.5 text-slate-400 font-mono text-[10px]">{r.item_code ?? '—'}</td>
+                        <td className="px-2 py-1.5 text-slate-400 font-mono text-[10px]">{r.mat_code ?? '—'}</td>
+                        <td className="px-2 py-1.5 text-slate-400 whitespace-nowrap">{(r.width_cm || r.thick_mc) ? `${r.width_cm ?? '?'}×${r.thick_mc ?? '?'}` : '—'}</td>
+                        <td className="px-2 py-1.5 text-slate-300">{r.inspector ?? '—'}</td>
+                        <td className="px-2 py-1.5 text-amber-300 font-semibold">{r.deleted_by}</td>
+                        <td className="px-2 py-1.5 text-slate-300 max-w-[200px]" title={r.reason}>{r.reason}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

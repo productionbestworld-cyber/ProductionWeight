@@ -433,17 +433,31 @@ export default function MachineSettings({ dept }: { dept?: 'blow'|'print'|'rewin
   // โหลด products (คลัง Item Code) สำหรับ autocomplete
   useEffect(() => { fetchProducts().then(setProducts) }, [])
 
-  // โหลดจาก Supabase เมื่อเปิดหน้า
+  // โหลดจาก Supabase เมื่อเปิดหน้า + sure ว่ามี BL01..BL11 ครบ
   useEffect(() => {
     supabase.from('machine_profiles').select('*').order('machine_no')
-      .then(({ data }) => {
-        if (data && data.length > 0) {
-          const loaded = data.map(dbToProfile)
-          setProfiles(loaded)
-          saveProfiles(loaded) // sync localStorage
-        } else {
-          setProfiles(loadProfiles()) // fallback
+      .then(async ({ data }) => {
+        const loaded: MachineProfile[] = (data && data.length > 0)
+          ? data.map(dbToProfile)
+          : loadProfiles()
+
+        // seed BL01..BL11 ถ้ายังไม่มี
+        const blowDefaults = Array.from({ length: 11 }, (_, i) => `BL${String(i + 1).padStart(2, '0')}`)
+        const have = new Set(loaded.map(p => p.machine_no.toUpperCase()))
+        const missing = blowDefaults.filter(name => !have.has(name))
+        if (missing.length > 0) {
+          const newProfiles = missing.map(name => ({ ...EMPTY_PROFILE, machine_no: name, section: 'blow' as const }))
+          loaded.push(...newProfiles)
+          // upsert ไป supabase ทันที (ไม่รอกด "บันทึกทั้งหมด")
+          for (const np of newProfiles) {
+            await supabase.from('machine_profiles').upsert(profileToDb(np), { onConflict: 'machine_no' })
+          }
         }
+
+        // เรียงตามชื่อ
+        loaded.sort((a, b) => a.machine_no.localeCompare(b.machine_no))
+        setProfiles(loaded)
+        saveProfiles(loaded)
         setLoading(false)
       })
   }, [])

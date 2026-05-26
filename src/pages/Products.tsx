@@ -646,6 +646,19 @@ function ImportModal({ customers, onClose }: { customers: Customer[]; onClose: (
 
   async function doImport() {
     if (preview.length === 0) return
+
+    // ตรวจสอบแถวที่ไม่มี cust_code (FK constraint จะ fail)
+    const orphans = preview.filter(p => !p.cust_code?.trim())
+    const valid   = preview.filter(p =>  p.cust_code?.trim())
+    if (orphans.length > 0) {
+      const msg = `⚠ พบ ${orphans.length} แถวที่ไม่มี "รหัสลูกค้า" (Item Code: ${orphans.slice(0,5).map(o => o.item_code).join(', ')}${orphans.length > 5 ? '...' : ''})\n\n` +
+                  `สาเหตุ: ใน Excel ของคุณ แถวสินค้าด้านบนยังไม่ได้กรอกรหัสลูกค้า\n` +
+                  `วิธีแก้: ใส่รหัสลูกค้าในแถวแรกของแต่ละกลุ่ม\n\n` +
+                  `ต้องการข้ามแถวเหล่านี้ แล้วนำเข้า ${valid.length} แถวที่เหลือหรือไม่?`
+      if (!confirm(msg)) return
+    }
+    if (valid.length === 0) { alert('ไม่มีข้อมูลที่นำเข้าได้'); return }
+
     setImporting(true)
 
     // 1) สร้าง/อัปเดต customers
@@ -654,7 +667,7 @@ function ImportModal({ customers, onClose }: { customers: Customer[]; onClose: (
       if (error) { alert('สร้างลูกค้าล้มเหลว: ' + error.message); setImporting(false); return }
     }
     // 2) อัปเดตข้อมูลลูกค้าที่มีอยู่แล้ว (ถ้าใน Excel มีชื่อ/ที่อยู่ใหม่)
-    const updates = [...new Map(preview
+    const updates = [...new Map(valid
       .filter(p => p.cust_code && p._cust_name)
       .map(p => [p.cust_code, { cust_code: p.cust_code, cust_name: p._cust_name!, cust_address: p._cust_address || '' }])
     ).values()]
@@ -662,14 +675,14 @@ function ImportModal({ customers, onClose }: { customers: Customer[]; onClose: (
       await supabase.from('customers').upsert(updates, { onConflict: 'cust_code' })
     }
 
-    // 3) Insert products (batch 100)
-    for (let i = 0; i < preview.length; i += 100) {
-      const batch = preview.slice(i, i + 100).map(({ _cust_name, _cust_address, cust_name, cust_address, id, ...p }) => p)
+    // 3) Insert products (batch 100) — เฉพาะแถวที่มี cust_code
+    for (let i = 0; i < valid.length; i += 100) {
+      const batch = valid.slice(i, i + 100).map(({ _cust_name, _cust_address, cust_name, cust_address, id, ...p }) => p)
       const { error } = await supabase.from('products').upsert(batch, { onConflict: 'item_code' })
       if (error) { alert(`Error at row ${i}: ${error.message}`); setImporting(false); return }
     }
     setImporting(false)
-    alert(`นำเข้า ${preview.length} item · ลูกค้าใหม่ ${newCustomers.length} ราย`)
+    alert(`✓ นำเข้า ${valid.length} item · ลูกค้าใหม่ ${newCustomers.length} ราย${orphans.length > 0 ? ` · ข้าม ${orphans.length} แถว` : ''}`)
     onClose()
   }
 

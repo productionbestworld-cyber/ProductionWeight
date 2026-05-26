@@ -15,6 +15,9 @@ type Dept = 'blow' | 'print' | 'rewind'
 
 const DEPT_KEY = 'bwp_dept'
 
+// ล็อกทุกแผนกตอนโหลดแอปครั้งแรก → บังคับใส่ PIN ทุกครั้งที่เปิด/รีโหลด
+lockAllDepts()
+
 export default function App() {
   if (new URLSearchParams(window.location.search).get('roll')) return <RollDetail />
 
@@ -29,8 +32,7 @@ export default function App() {
   const [pendingDept, setPendingDept] = useState<Dept | null>(null)
 
   // ── เข้าครั้งแรก: แสดงหน้าเลือกแผนก (profile select) ──────────────
-  const noDeptUnlocked = !isDeptUnlocked('blow') && !isDeptUnlocked('print') && !isDeptUnlocked('rewind')
-  const [showDeptSelect, setShowDeptSelect] = useState(noDeptUnlocked)
+  const [showDeptSelect, setShowDeptSelect] = useState(true)
   const [showDeptGate, setShowDeptGate] = useState(false) // จะเปิดหลังเลือกแผนก
   const deptRef = useRef<HTMLDivElement>(null)
 

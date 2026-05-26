@@ -661,6 +661,17 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
 
   useEffect(() => { fetchProducts().then(setProducts) }, [])
 
+  // ── Auto-gen Lot No เมื่อมี machine + custCode + lotNo ยังว่าง ──
+  useEffect(() => {
+    if (p.lotNo?.trim()) return // ผู้ใช้กรอกเองแล้ว/มีอยู่แล้ว — ไม่แตะ
+    const mc = (p.machine_no ?? '').toUpperCase()
+    const cc = (p.custCode ?? '').replace(/\D/g, '').padStart(4, '0').slice(-4)
+    if (!mc || !cc || cc === '0000') return
+    const yy = String((new Date().getFullYear() + 543) % 100).padStart(2, '0')
+    const mm = String(new Date().getMonth() + 1).padStart(2, '0')
+    setP(prev => ({ ...prev, lotNo: `${yy}${mc}${cc}${mm}` }))
+  }, [p.machine_no, p.custCode, p.lotNo])
+
   const hasJob = !!(profile.lotNo && profile.productName) // มีงานอยู่แล้ว
 
   async function parkJob() {

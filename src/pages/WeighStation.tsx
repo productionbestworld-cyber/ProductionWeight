@@ -661,16 +661,35 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
 
   useEffect(() => { fetchProducts().then(setProducts) }, [])
 
-  // ── Auto-gen Lot No เมื่อมี machine + custCode + lotNo ยังว่าง ──
-  useEffect(() => {
-    if (p.lotNo?.trim()) return // ผู้ใช้กรอกเองแล้ว/มีอยู่แล้ว — ไม่แตะ
-    const mc = (p.machine_no ?? '').toUpperCase()
-    const cc = (p.custCode ?? '').replace(/\D/g, '').padStart(4, '0').slice(-4)
-    if (!mc || !cc || cc === '0000') return
+  // ── helper สร้าง Lot No อัตโนมัติ ──
+  function genLotNo(machine: string, custCode: string): string {
     const yy = String((new Date().getFullYear() + 543) % 100).padStart(2, '0')
     const mm = String(new Date().getMonth() + 1).padStart(2, '0')
-    setP(prev => ({ ...prev, lotNo: `${yy}${mc}${cc}${mm}` }))
-  }, [p.machine_no, p.custCode, p.lotNo])
+    const mc = (machine ?? '').toUpperCase()
+    const cc = (custCode ?? '').replace(/\D/g, '').padStart(4, '0').slice(-4)
+    if (!mc || !cc || cc === '0000') return ''
+    return `${yy}${mc}${cc}${mm}`
+  }
+  // setMany ที่เติม lotNo ให้อัตโนมัติเมื่อ custCode มา (และไม่ทับของเดิม)
+  const setManyWithLot = (patch: Partial<MachineProfile>) => {
+    setP(prev => {
+      const next = { ...prev, ...patch }
+      if (!next.lotNo?.trim() && next.machine_no && next.custCode) {
+        const auto = genLotNo(next.machine_no, next.custCode)
+        if (auto) next.lotNo = auto
+      }
+      return next
+    })
+  }
+
+  // ตอน mount: ถ้าโปรไฟล์มี machine + custCode แต่ lot ว่าง → เติมให้เลย
+  useEffect(() => {
+    if (!p.lotNo?.trim() && p.machine_no && p.custCode) {
+      const auto = genLotNo(p.machine_no, p.custCode)
+      if (auto) setP(prev => ({ ...prev, lotNo: auto }))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const hasJob = !!(profile.lotNo && profile.productName) // มีงานอยู่แล้ว
 
@@ -804,7 +823,7 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
                 onChange={v => {
                   const match = products.find(x => x.item_code === v.trim())
                   if (match) {
-                    setMany({
+                    setManyWithLot({
                       itemCode:    match.item_code,
                       productCode: match.product_code,
                       productName: match.product_name,
@@ -823,7 +842,7 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
                     })
                   }
                 }}
-                onPick={s => setMany({
+                onPick={s => setManyWithLot({
                   itemCode:    s.item_code,
                   productCode: s.product_code,
                   productName: s.product_name,

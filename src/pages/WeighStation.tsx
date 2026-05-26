@@ -1113,6 +1113,7 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
   const [weighType,    setWeighType]    = useState<'good'|'bad'|'scrap'>('good')
   const [scrapSub,     setScrapSub]     = useState<'scrap_clear'|'scrap_color'|'scrap_lump'>('scrap_clear')
   const [badReason,    setBadReason]    = useState('')
+  const [scrapReason,  setScrapReason]  = useState('')
   const [badRollNo,    setBadRollNo]    = useState(1)  // ม้วนกรอเริ่มที่ 1 ของงานนี้
   const [stable,       setStable]       = useState(true)
   const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -1320,6 +1321,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
     if (saveWeight <= 0 || !stable) return
     if (!inspector.trim()) { setShowInspectorPrompt(true); return }
     if (isBad && !badReason.trim()) { alert('กรุณาระบุเหตุผลม้วนกรอ'); return }
+    if (isScrap && !scrapReason.trim()) { alert('กรุณาระบุเหตุผลเศษเสีย'); return }
     setSaving(true)
     try {
       const actualType = isScrap ? scrapSub : weighType
@@ -1332,7 +1334,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         weight:       parseFloat(saveWeight.toFixed(dec)),
         gross_weight: gross,
         core_weight:  isScrap ? 0 : core,
-        remark:       isBad ? badReason : null,
+        remark:       isBad ? badReason : isScrap ? scrapReason : null,
         inspector:    inspector || null,
         machine_no:   profile.machine_no,
         lot_no:       profile.lotNo,
@@ -1378,7 +1380,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         gross_weight: gross,
         core_weight:  isScrap ? 0 : core,
         net_weight:   parseFloat(saveWeight.toFixed(dec)),
-        remark:       isBad ? badReason : null,
+        remark:       isBad ? badReason : isScrap ? scrapReason : null,
         inspector:    inspector || null,
       }).then(({ error }) => { if (error) console.warn('log error:', error.message) })
 
@@ -1392,7 +1394,8 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         setBadReason('')
       } else {
         // เศษ — ไม่มี roll_no ไม่นับม้วน พิมพ์ label แยก
-        await printLabel({...profile, inspector}, 0, gross, gross, profile.labelSize ?? 'long', actualType, '', data.id)
+        await printLabel({...profile, inspector}, 0, gross, gross, profile.labelSize ?? 'long', actualType, scrapReason, data.id)
+        setScrapReason('')
       }
       setGross(0)
     } catch (e: any) {
@@ -1571,6 +1574,22 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
               className="w-full bg-slate-800 border border-orange-500/40 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-orange-500 placeholder-slate-500" />
           )}
 
+          {/* Scrap reason */}
+          {isScrap && (
+            <input value={scrapReason} onChange={e => setScrapReason(e.target.value)}
+              placeholder="เหตุผลเศษเสีย (จำเป็น) เช่น ตัดต่อ, ขอบเสีย, สีไม่ตรง..."
+              list="scrap-reason-list"
+              className="w-full bg-slate-800 border border-red-500/40 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-red-500 placeholder-slate-500" />
+          )}
+          <datalist id="scrap-reason-list">
+            <option value="ตัดต่อ"/>
+            <option value="ขอบเสีย"/>
+            <option value="สีไม่ตรง"/>
+            <option value="หนาไม่ได้"/>
+            <option value="ตั้งเครื่อง"/>
+            <option value="เครื่องเสีย"/>
+          </datalist>
+
           {/* Scale display */}
           <div className={`border-2 rounded-2xl px-5 py-6 text-center shadow-xl ${
             weighType==='good' ? 'bg-slate-900 border-slate-700' :
@@ -1658,7 +1677,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                 </span>
               </div>
             )}
-            <button onClick={handleSave} disabled={saving || saveWeight <= 0 || !stable || (isBad && !badReason.trim())}
+            <button onClick={handleSave} disabled={saving || saveWeight <= 0 || !stable || (isBad && !badReason.trim()) || (isScrap && !scrapReason.trim())}
               className={`flex-1 py-3 rounded-xl text-white font-black flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-40 ${
                 !stable ? 'bg-slate-700 cursor-not-allowed' :
                 isGood  ? 'bg-brand-600 hover:bg-brand-500' :
@@ -1674,11 +1693,12 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
           </div>
 
           {/* hint ทำไมกดไม่ได้ */}
-          {(saveWeight <= 0 || !stable || (isBad && !badReason.trim())) && (
+          {(saveWeight <= 0 || !stable || (isBad && !badReason.trim()) || (isScrap && !scrapReason.trim())) && (
             <p className="text-center text-slate-600 text-xs">
               {!stable ? '⟳ รอค่าชั่งนิ่งก่อน' :
                saveWeight <= 0 ? '▲ พิมพ์น้ำหนักหรือกดสุ่มค่าก่อน' :
-               isBad && !badReason.trim() ? '▲ กรอกเหตุผลม้วนกรอก่อน' : ''}
+               isBad && !badReason.trim() ? '▲ กรอกเหตุผลม้วนกรอก่อน' :
+               isScrap && !scrapReason.trim() ? '▲ กรอกเหตุผลเศษเสียก่อน' : ''}
             </p>
           )}
 

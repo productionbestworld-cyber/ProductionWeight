@@ -57,7 +57,7 @@ async function printLabel(p: MachineProfile, rollNo: number, gross: number, net:
     mfg:         `MFG Date&nbsp;&nbsp;<b style="font-size:1.15em">${mfgDate}</b>`,
     rollno:      `${rollLabel}&nbsp;&nbsp;<b style="font-size:1.15em">${rollNo === 0 ? '—' : rollNo}</b>`,
     // left column
-    prodcode:    `Product Code&nbsp;&nbsp;<b>${p.productCode || p.matCode}</b>`,
+    prodcode:    `Product Code&nbsp;&nbsp;<b>${p.productCode || '—'}</b>`,
     prodname:    p.productName,
     machine:     `เครื่อง&nbsp;&nbsp;<b>${p.machine_no}</b>`,
     core:        `Core Weight&nbsp;&nbsp;<b>${fmt(core, dec)}</b>`,
@@ -193,7 +193,7 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
 
   <!-- Row 4: Code + Length -->
   <div class="irow">
-    <span class="il">Code&nbsp;<b>${p.productCode||p.matCode}</b></span>
+    <span class="il">Code&nbsp;<b>${p.productCode || '—'}</b></span>
     <span class="ir">Length&nbsp;<b>${p.length||'—'} M.</b>${p.pcs ? `&nbsp;&nbsp;Pcs.&nbsp;<b>${p.pcs}</b>` : ''}</span>
   </div>
 
@@ -266,7 +266,7 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
 
   <div class="body">
     <div class="r"><span class="k">Product</span><span class="v xl">${p.productName}</span></div>
-    <div class="r"><span class="k">Code</span><span class="v">${p.productCode || p.matCode}</span></div>
+    <div class="r"><span class="k">Code</span><span class="v">${p.productCode || '—'}</span></div>
     <div class="r"><span class="k">Size</span><span class="v">${p.widthCm} cm × ${p.thickMc} mc</span></div>
     <div class="r"><span class="k">Lot No</span><span class="v">${p.lotNo}</span></div>
     <div class="r"><span class="k">Length</span><span class="v">${p.length || '—'} M.${p.pcs ? ' · '+p.pcs+' Pcs.' : ''}</span></div>

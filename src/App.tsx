@@ -8,15 +8,16 @@ import RollDetail from './pages/RollDetail'
 import Transfer from './pages/Transfer'
 import HistoryPage from './pages/History'
 import Warehouse from './pages/Warehouse'
-import Admin, { PinGate, DeptPinGate, isAdminUnlocked, isDeptUnlocked, lockAllDepts } from './pages/Admin'
+import Admin, { PinGate, DeptPinGate, isAdminUnlocked, isDeptUnlocked, lockAllDepts, lockAdmin } from './pages/Admin'
 
 type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings' | 'admin'
 type Dept = 'blow' | 'print' | 'rewind'
 
 const DEPT_KEY = 'bwp_dept'
 
-// ล็อกทุกแผนกตอนโหลดแอปครั้งแรก → บังคับใส่ PIN ทุกครั้งที่เปิด/รีโหลด
+// ล็อกทุกแผนก + Admin ตอนโหลดแอปครั้งแรก → บังคับใส่ PIN ทุกครั้งที่เปิด/รีโหลด
 lockAllDepts()
+lockAdmin()
 
 export default function App() {
   if (new URLSearchParams(window.location.search).get('roll')) return <RollDetail />

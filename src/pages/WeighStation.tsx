@@ -825,26 +825,24 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
               />
             </div>
             {inp('Mat Code',     'matCode', '',      true)}
-            {/* Lot No พร้อมปุ่มสร้างอัตโนมัติ (เฉพาะฝั่งเป่า) */}
+            {/* Lot No พร้อมปุ่มสร้างอัตโนมัติ */}
             <div>
-              <label className="block text-[10px] text-slate-500 mb-1 flex items-center justify-between">
-                <span>Lot No *</span>
-                {(p.section ?? 'blow') === 'blow' && (
-                  <button type="button"
-                    onClick={() => {
-                      const yy = String((new Date().getFullYear() + 543) % 100).padStart(2, '0')
-                      const mm = String(new Date().getMonth() + 1).padStart(2, '0')
-                      const mc = (p.machine_no ?? '').toUpperCase()
-                      const cc = (p.custCode ?? '').replace(/\D/g, '').padStart(4, '0').slice(-4)
-                      if (!mc) { alert('ใส่หมายเลขเครื่องก่อน'); return }
-                      if (!cc || cc === '0000') { alert('เลือก Item Code ที่มีรหัสลูกค้าก่อน'); return }
-                      setP(prev => ({ ...prev, lotNo: `${yy}${mc}${cc}${mm}` }))
-                    }}
-                    className="text-[10px] text-brand-400 hover:text-brand-300 font-bold">
-                    🎲 สร้างอัตโนมัติ
-                  </button>
-                )}
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[10px] text-slate-500">Lot No *</label>
+                <button type="button"
+                  onClick={() => {
+                    const yy = String((new Date().getFullYear() + 543) % 100).padStart(2, '0')
+                    const mm = String(new Date().getMonth() + 1).padStart(2, '0')
+                    const mc = (p.machine_no ?? '').toUpperCase()
+                    const cc = (p.custCode ?? '').replace(/\D/g, '').padStart(4, '0').slice(-4)
+                    if (!mc) { alert('ใส่หมายเลขเครื่องก่อน'); return }
+                    if (!cc || cc === '0000') { alert('เลือก Item Code ที่มีรหัสลูกค้าก่อน'); return }
+                    setP(prev => ({ ...prev, lotNo: `${yy}${mc}${cc}${mm}` }))
+                  }}
+                  className="text-[10px] bg-brand-600/20 hover:bg-brand-600/40 text-brand-300 px-2 py-0.5 rounded font-bold border border-brand-500/40">
+                  🎲 สร้างอัตโนมัติ
+                </button>
+              </div>
               <input
                 value={p.lotNo ?? ''}
                 onChange={e => setP(prev => ({ ...prev, lotNo: e.target.value }))}

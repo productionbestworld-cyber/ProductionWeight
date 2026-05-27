@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase'
 import { loadProfiles, saveProfiles, type MachineProfile } from './MachineSettings'
 import { loadLongLayout, type FieldConfig } from './LabelDesigner'
 import { fetchProducts, type Product } from './Products'
+import ReworkInbox from './ReworkInbox'
 
 function fmt(n: number | null | undefined, d: 1|2 = 2) {
   if (n === null || n === undefined || isNaN(n as number)) return (0).toFixed(d)
@@ -57,7 +58,7 @@ async function printLabel(p: MachineProfile, rollNo: number, gross: number, net:
     mfg:         `MFG Date&nbsp;&nbsp;<b style="font-size:1.15em">${mfgDate}</b>`,
     rollno:      `${rollLabel}&nbsp;&nbsp;<b style="font-size:1.15em">${rollNo === 0 ? '—' : rollNo}</b>`,
     // left column
-    prodcode:    `Product Code&nbsp;&nbsp;<b>${p.productCode || '—'}</b>`,
+    prodcode:    '', // Product Code removed
     prodname:    p.productName,
     machine:     `เครื่อง&nbsp;&nbsp;<b>${p.machine_no}</b>`,
     core:        `Core Weight&nbsp;&nbsp;<b>${fmt(core, dec)}</b>`,
@@ -193,7 +194,7 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
 
   <!-- Row 4: Code + Length -->
   <div class="irow">
-    <span class="il">Code&nbsp;<b>${p.productCode || '—'}</b></span>
+    <span class="il">Item&nbsp;<b>${p.itemCode || '—'}</b></span>
     <span class="ir">Length&nbsp;<b>${p.length||'—'} M.</b>${p.pcs ? `&nbsp;&nbsp;Pcs.&nbsp;<b>${p.pcs}</b>` : ''}</span>
   </div>
 
@@ -266,7 +267,7 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
 
   <div class="body">
     <div class="r"><span class="k">Product</span><span class="v xl">${p.productName}</span></div>
-    <div class="r"><span class="k">Code</span><span class="v">${p.productCode || '—'}</span></div>
+    <div class="r"><span class="k">Item Code</span><span class="v">${p.itemCode || '—'}</span></div>
     <div class="r"><span class="k">Size</span><span class="v">${p.widthCm} cm × ${p.thickMc} mc</span></div>
     <div class="r"><span class="k">Lot No</span><span class="v">${p.lotNo}</span></div>
     <div class="r"><span class="k">Length</span><span class="v">${p.length || '—'} M.${p.pcs ? ' · '+p.pcs+' Pcs.' : ''}</span></div>
@@ -399,7 +400,34 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
   }
 
   return (
-    <div className="h-[calc(100vh-48px)] bg-[#0a0f1e] p-3 flex flex-col overflow-hidden">
+    <div className="min-h-[calc(100vh-48px)] bg-[#0a0f1e] p-3 flex flex-col overflow-auto">
+      {/* ── ม้วนรอกรอ (เฉพาะแผนกกรอ) ──────────────────────── */}
+      {dept === 'rewind' && (
+        <div className="mb-3">
+          <ReworkInbox onJumpToMachine={async (machine) => {
+            // ดึง machine_profile แล้วเปิดหน้าชั่งของเครื่องนั้น
+            const { data } = await supabase.from('machine_profiles').select('*').eq('machine_no', machine).maybeSingle()
+            if (data) {
+              const prof: MachineProfile = {
+                machine_no: data.machine_no,
+                custCode: data.cust_code ?? '', custName: data.cust_name ?? '', custAddress: data.cust_address ?? '',
+                decimal: (data.decimal_places ?? 2) as 1|2,
+                itemCode: data.item_code ?? '', matCode: data.mat_code ?? '', productCode: data.product_code ?? '',
+                productName: data.product_name ?? '', widthCm: data.width_cm ?? '', thickMc: data.thick_mc ?? '',
+                lotNo: data.lot_no ?? '', length: data.length ?? '', pcs: data.pcs ?? '',
+                coreWeight: data.core_weight ?? '1.25', inspector: data.inspector ?? '', locked: data.locked ?? false,
+                plannedQty: data.planned_qty ?? '',
+                labelSize: (data.label_size ?? 'long') as 'long'|'short',
+                headerText: data.header_text ?? '', blankHeader: data.blank_header ?? false,
+                section: (data.section ?? 'blow') as 'blow'|'print'|'rewind',
+                soNo: data.sale_order ?? '', woNo: data.work_order ?? '', deliveryDate: data.delivery_date ?? '',
+              }
+              onSelect(prof)
+            }
+          }}/>
+        </div>
+      )}
+
       <div className="flex-1 flex flex-col min-h-0">
         <div className="mb-2">
           <h1 className="text-white font-bold text-xl flex items-center gap-2">
@@ -718,7 +746,10 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
     } finally { setParking(false) }
   }
 
-  const ok = p.machine_no && p.custName && p.productName && (p.itemCode || p.matCode) && p.lotNo && p.plannedQty
+  // แผนกกรอ (rewind): ไม่บังคับ WO / SO / ยอดสั่งผลิต — เพราะส่วนใหญ่ใช้ "ตั้งค่าชั่งเอง"
+  const isRewind = p.section === 'rewind'
+  const ok = p.machine_no && p.custName && p.productName && (p.itemCode || p.matCode) && p.lotNo
+    && (isRewind || (p.plannedQty && p.woNo))
   // เตือนถ้า Lot ซ้ำกับงานเก่าที่จอดไว้
   const lotSameAsParked = hasJob && p.lotNo && profile.lotNo && p.lotNo === profile.lotNo
 
@@ -726,11 +757,12 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
     if (!ok) {
       const missing = [
         !p.machine_no  && 'หมายเลขเครื่อง',
+        !isRewind && !p.woNo        && 'เลขใบคำสั่งผลิต (WO)',
         !p.custName    && 'ชื่อลูกค้า',
         !p.productName && 'ชื่อสินค้า',
         !p.itemCode && !p.matCode && 'Item Code หรือ Mat Code',
         !p.lotNo       && 'Lot No',
-        !p.plannedQty  && 'ยอดสั่งผลิต',
+        !isRewind && !p.plannedQty  && 'ยอดสั่งผลิต',
       ].filter(Boolean).join(', ')
       alert('กรอกข้อมูลให้ครบก่อน: ' + missing)
       return
@@ -761,6 +793,8 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
         blank_header:  p.blankHeader ?? false,
         section:       p.section ?? 'blow',
         sale_order:    p.soNo ?? '',
+        work_order:    p.woNo ?? '',
+        delivery_date: p.deliveryDate || null,
         updated_at:    new Date().toISOString(),
       }, { onConflict: 'machine_no' })
       if (error) throw new Error(error.message)
@@ -814,7 +848,18 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
             งานครั้งนี้ <span className="text-emerald-400 normal-case">(เลือก Item Code → เติมสินค้า+ลูกค้าให้อัตโนมัติ)</span>
           </p>
           <div className="grid grid-cols-2 gap-2">
-            {inp('Sale Order (SO)', 'soNo', '', true)}
+            {!isRewind && inp('เลขใบคำสั่งผลิต (WO) *', 'woNo', '', true)}
+            {!isRewind && inp('Sale Order (SO)', 'soNo', '', true)}
+            {/* วันที่ส่งของ — เฉพาะแผนกผลิต (เป่า/พิมพ์) */}
+            {!isRewind && (
+              <div>
+                <label className="block text-[10px] text-slate-500 mb-1">📅 วันที่ส่งของ</label>
+                <input type="date"
+                  value={p.deliveryDate ?? ''}
+                  onChange={e => setP(prev => ({ ...prev, deliveryDate: e.target.value }))}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-brand-500"/>
+              </div>
+            )}
             <div>
               <label className="block text-[10px] text-slate-500 mb-1">Item Code *</label>
               <ItemCodePicker
@@ -881,7 +926,7 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
               />
             </div>
             {inp('Length (M.)',  'length',  '',          true)}
-            {inp('ยอดสั่งผลิต (kg) *','plannedQty', '', true)}
+            {!isRewind && inp('ยอดสั่งผลิต (kg) *','plannedQty', '', true)}
             <div>
               <label className="block text-[10px] text-slate-500 mb-1">ทศนิยม</label>
               <div className="flex gap-1">
@@ -903,7 +948,7 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
           {/* ── สินค้า (auto-fill ได้) ────────────────────────── */}
           <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider pt-2">รายละเอียดสินค้า</p>
           <div className="grid grid-cols-2 gap-2">
-            {inp('Product Code',   'productCode', '',      true)}
+            {/* Product Code — removed */}
             {inp('ชื่อสินค้า *',  'productName', '')}
             {inp('กว้าง (cm)',    'widthCm',     '',            true)}
             {inp('หนา (mc)',      'thickMc',     '',            true)}
@@ -1008,6 +1053,8 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
   const [bridgeUrl,       setBridgeUrl]       = useState(() => localStorage.getItem('bwp_bridge_url') ?? 'ws://localhost:8080')
   const wsRef             = useRef<WebSocket | null>(null)
   const wsReconnectRef    = useRef<any>(null)
+  const simModeRef        = useRef(false)   // true = ใช้ค่าจำลอง ไม่รับค่าจาก Bridge
+  const [simMode, setSimMode] = useState(false)
 
   // ── เชื่อมต่อ Bridge (WebSocket) — auto-reconnect ────────────────
   function connectBridge() {
@@ -1026,6 +1073,10 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
           if (d.type !== 'weight') return
           // ถ้า bridge ยังไม่ได้ต่อเครื่องชั่ง → connected = false
           if (d.connected !== undefined) setSerialConnected(d.connected)
+          // ⚠ ถ้า bridge บอกว่าเครื่องชั่งไม่ต่อ → ไม่ override gross (ให้ผู้ใช้สุ่ม/พิมพ์เองได้)
+          if (d.connected === false) return
+          // ถ้ากำลังใช้โหมดจำลอง → ไม่ override ค่าจาก Bridge
+          if (simModeRef.current) return
           // throttle update ทุก 150ms
           const now = Date.now()
           if (now - lastUpdate < 150) return
@@ -1064,6 +1115,7 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
 
   const [rollNo,       setRollNo]       = useState(1)
   const [saving,       setSaving]       = useState(false)
+  const [reworkDone,   setReworkDone]   = useState(false)  // กรอครบแล้ว → ปิดการชั่ง
   const [lastRoll,     setLastRoll]     = useState<any>(null)
   const [weighedKg,    setWeighedKg]    = useState(0)
   const [weighedRolls, setWeighedRolls] = useState<any[]>([])
@@ -1111,6 +1163,10 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
   }, [])
 
   const [weighType,    setWeighType]    = useState<'good'|'bad'|'scrap'>('good')
+  // กันค้าง: ถ้าเข้า rewind แล้ว weighType='bad' (ม้วนกรอ) — บังคับกลับ 'good'
+  useEffect(() => {
+    if (profile.section === 'rewind' && weighType === 'bad') setWeighType('good')
+  }, [profile.section, weighType])
   const [scrapSub,     setScrapSub]     = useState<'scrap_clear'|'scrap_color'|'scrap_lump'>('scrap_clear')
   const [badReason,    setBadReason]    = useState('')
   const [scrapReason,  setScrapReason]  = useState('')
@@ -1126,6 +1182,14 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
   const pct       = planned > 0 ? Math.min(100, Math.round((weighedKg / planned) * 100)) : 0
   const done      = planned > 0 && weighedKg >= planned
 
+  // หาเลขม้วนที่หายไปเลขแรก (เช่น มี 1,2,3,5 → คืน 4) — ถ้าไม่มีช่องว่าง คืน max+1
+  function nextRollNo(rolls: any[]): number {
+    const taken = new Set(rolls.map(r => r.roll_no).filter(n => n && n > 0))
+    let i = 1
+    while (taken.has(i)) i++
+    return i
+  }
+
   // โหลดม้วนทั้งหมดของ machine+lot นี้
   function loadRollsForMachine() {
     supabase.from('production_rolls')
@@ -1135,16 +1199,17 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
       .order('created_at', { ascending: true })
       .then(({ data, error }) => {
         if (error) { console.warn('load rolls error:', error.message); return }
-        if (!data?.length) return
+        if (!data?.length) {
+          setRollNo(1); setBadRollNo(1); return
+        }
         const goodRolls = (data as any[]).filter(r => r.roll_type === 'good')
         const total = goodRolls.reduce((s: number, r: any) => s + (r.weight ?? 0), 0)
         setWeighedKg(parseFloat(total.toFixed(dec)))
         setWeighedRolls(data as any[])
-        const lastRollNo    = Math.max(0, ...goodRolls.map((r:any) => r.roll_no ?? 0))
-        const badRolls      = (data as any[]).filter(r => r.roll_type === 'bad')
-        const lastBadRollNo = Math.max(0, ...badRolls.map((r:any) => r.roll_no ?? 0))
-        setRollNo(lastRollNo + 1)
-        setBadRollNo(lastBadRollNo + 1)
+        const badRolls = (data as any[]).filter(r => r.roll_type === 'bad')
+        // ใช้เลขที่หายไปก่อน เพื่อทดแทนม้วนที่ถูกลบ
+        setRollNo(nextRollNo(goodRolls))
+        setBadRollNo(nextRollNo(badRolls))
       })
   }
 
@@ -1179,6 +1244,8 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
   }
 
   function readScale() {
+    simModeRef.current = true
+    setSimMode(true)
     if (timerRef.current) clearInterval(timerRef.current)
     const target = parseFloat((22 + Math.random() * 6).toFixed(dec))
     setGross(target)
@@ -1194,6 +1261,12 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
   const goodRolls = weighedRolls.filter((r:any)=>r?.roll_type==='good')
   const badRolls  = weighedRolls.filter((r:any)=>r?.roll_type==='bad')
   const scrapRolls= weighedRolls.filter((r:any)=>r?.roll_type?.startsWith?.('scrap'))
+
+  // ตรวจ "เลขแหว่ง" — ม้วนถัดไปจะทดแทนหรือต่อเลขปกติ
+  const goodMaxRoll = Math.max(0, ...goodRolls.map((r:any) => r.roll_no ?? 0))
+  const badMaxRoll  = Math.max(0, ...badRolls.map((r:any)  => r.roll_no ?? 0))
+  const isFillingGapGood = rollNo    < goodMaxRoll
+  const isFillingGapBad  = badRollNo < badMaxRoll
   const transferredKg = goodRolls.filter((r:any)=>r.transferred).reduce((s:number,r:any)=>s+(r.weight??0),0)
   const goodKg    = goodRolls.reduce((s:number,r:any)=>s+(r.weight??0),0)
   const badKg     = badRolls.reduce((s:number,r:any)=>s+(r.weight??0),0)
@@ -1232,9 +1305,13 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
 </div>
 <div class="box">
   <h3>ข้อมูลงาน</h3>
+  <div class="row"><span>เลขใบคำสั่งผลิต (WO)</span><b style="color:#d97706">${profile.woNo || '—'}</b></div>
+  <div class="row"><span>Sale Order (SO)</span><b style="color:#2563eb">${profile.soNo || '—'}</b></div>
+  <div class="row"><span>วันที่ส่งของ</span><b>${profile.deliveryDate ? new Date(profile.deliveryDate).toLocaleDateString('th-TH') : '—'}</b></div>
   <div class="row"><span>ลูกค้า</span><b>${profile.custName}</b></div>
   <div class="row"><span>สินค้า</span><b>${profile.productName}</b></div>
-  <div class="row"><span>Mat Code</span><b>${profile.matCode}</b></div>
+  <div class="row"><span>Item Code</span><b>${profile.itemCode || '—'}</b></div>
+  <div class="row"><span>Mat Code</span><b>${profile.matCode || '—'}</b></div>
   <div class="row"><span>Lot No</span><b>${profile.lotNo}</b></div>
   <div class="row"><span>เครื่อง</span><b>${profile.machine_no}</b></div>
   <div class="row"><span>ขนาด</span><b>${profile.widthCm} cm × ${profile.thickMc} mc</b></div>
@@ -1275,6 +1352,8 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         machine_no:     profile.machine_no,
         lot_no:         profile.lotNo,
         sale_order:     profile.soNo ?? '',
+        work_order:     profile.woNo ?? '',
+        delivery_date:  profile.deliveryDate || null,
         product_name:   profile.productName,
         customer:       profile.custName,
         item_code:      profile.itemCode,
@@ -1322,6 +1401,32 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
     if (!inspector.trim()) { setShowInspectorPrompt(true); return }
     if (isBad && !badReason.trim()) { alert('กรุณาระบุเหตุผลม้วนกรอ'); return }
     if (isScrap && !scrapReason.trim()) { alert('กรุณาระบุเหตุผลเศษเสีย'); return }
+
+    // ── กันชั่งซ้ำในแผนกกรอ: ตรวจเฉพาะกรณี "กรอจากเป่า" (มีม้วนต้นทาง tagged) ──
+    // ถ้าเป็น "ตั้งค่าชั่งเอง" (ไม่มีม้วน tagged เลย) → ปล่อยให้ชั่งอิสระ
+    if (isGood && profile.section === 'rewind' && profile.machine_no && profile.lotNo) {
+      const tag = `ส่งไปกรอที่ ${profile.machine_no} · Lot ${profile.lotNo}`
+      // เช็คว่าเคยมีม้วนต้นทาง tagged มาก่อนหรือไม่ (ทุกสถานะ)
+      const { count: anyTagged } = await supabase.from('production_rolls')
+        .select('*', { count: 'exact', head: true })
+        .eq('roll_type', 'bad')
+        .like('rework_remark', `%${tag}%`)
+      // ถ้าเคยมีต้นทาง — ตรวจว่ายังเหลือ reworking อยู่หรือไม่
+      if (anyTagged && anyTagged > 0) {
+        const { count: stillOpen } = await supabase.from('production_rolls')
+          .select('*', { count: 'exact', head: true })
+          .eq('roll_type', 'bad')
+          .eq('rework_status', 'reworking')
+          .like('rework_remark', `%${tag}%`)
+        if (!stillOpen || stillOpen === 0) {
+          alert(`⚠ กรอครบทุกม้วนแล้ว — เครื่อง ${profile.machine_no} ไม่มีม้วนต้นทางรอชั่งเพิ่ม\n\nหากต้องการชั่งม้วนใหม่ กรุณากลับหน้า "ม้วนรอกรอ" เพื่อรับงานใหม่`)
+          setReworkDone(true)
+          return
+        }
+      }
+      // ถ้าไม่เคยมีต้นทาง → "ตั้งค่าชั่งเอง" — ปล่อยชั่งได้อิสระ ไม่ผูกกับระบบผลิต
+    }
+
     setSaving(true)
     try {
       const actualType = isScrap ? scrapSub : weighType
@@ -1339,6 +1444,10 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         machine_no:   profile.machine_no,
         lot_no:       profile.lotNo,
         sale_order:   profile.soNo ?? '',
+        work_order:   profile.woNo ?? '',
+        item_code:    profile.itemCode    ?? '',
+        product_code: profile.productCode ?? '',
+        mat_code:     profile.matCode     ?? '',
         product_name: profile.productName,
         customer:     profile.custName,
         section:      profile.section ?? 'blow',
@@ -1371,6 +1480,8 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       supabase.from('weigh_logs').insert({
         machine_no:   profile.machine_no,
         lot_no:       profile.lotNo,
+        work_order:   profile.woNo ?? '',
+        sale_order:   profile.soNo ?? '',
         item_code:    profile.itemCode,
         mat_code:     profile.matCode,
         product_name: profile.productName,
@@ -1386,18 +1497,69 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
 
       if (isGood) {
         setWeighedKg(prev => parseFloat((prev + saveWeight).toFixed(dec)))
-        setRollNo(r => r + 1)
-        await printLabel({...profile, inspector}, rollNo, gross, saveWeight, profile.labelSize ?? 'long', 'good', '', data.id)
+        // หาเลขถัดไปจาก gap (ไม่ +1 ตรงๆ — กันกรณีลบม้วนกลางๆ)
+        const newList = [...weighedRolls, data]
+        setRollNo(nextRollNo(newList.filter((r:any) => r?.roll_type === 'good')))
+        // print fire-and-forget (ไม่ await — ไม่บล็อก save flow)
+        printLabel({...profile, inspector}, rollNo, gross, saveWeight, profile.labelSize ?? 'long', 'good', '', data.id)
+
+        // ── ถ้าเป็นแผนกกรอ "กรอจากเป่า" → ปิดม้วนต้นทาง 1 ม้วน + ถ้าหมดแล้ว เคลียร์เครื่อง ──
+        // (ถ้า "ตั้งค่าชั่งเอง" จะไม่มี source tagged → skip ทั้งหมด)
+        if (profile.section === 'rewind' && profile.machine_no && profile.lotNo) {
+          (async () => {
+            const tag = `ส่งไปกรอที่ ${profile.machine_no} · Lot ${profile.lotNo}`
+            // หาม้วนต้นทางที่ 'reworking' เก่าสุด — ปิด 1 ม้วน
+            const { data: src } = await supabase.from('production_rolls')
+              .select('id')
+              .eq('roll_type', 'bad')
+              .eq('rework_status', 'reworking')
+              .like('rework_remark', `%${tag}%`)
+              .order('rework_received_at', { ascending: true })
+              .limit(1)
+            // ไม่เจอ source → "ตั้งค่าชั่งเอง" → ไม่ต้องผูกกับระบบผลิต
+            if (!src || src.length === 0) return
+            await supabase.from('production_rolls')
+              .update({ rework_status: 'reworked', rework_dest_id: data.id })
+              .eq('id', src[0].id)
+            // นับที่เหลือ — ถ้าหมด → เคลียร์เครื่อง (ห้ามชั่งซ้ำ)
+            const { count } = await supabase.from('production_rolls')
+              .select('*', { count: 'exact', head: true })
+              .eq('roll_type', 'bad')
+              .eq('rework_status', 'reworking')
+              .like('rework_remark', `%${tag}%`)
+            if (!count || count === 0) {
+              // ล้างงานบนเครื่อง — กลายเป็นว่างทันที
+              await supabase.from('machine_profiles').update({
+                cust_code:'', cust_name:'', cust_address:'',
+                item_code:'', mat_code:'', product_code:'', product_name:'',
+                width_cm:'', thick_mc:'',
+                lot_no:'', length:'', pcs:'',
+                planned_qty:'', inspector:'',
+                work_order:'', sale_order:'',
+                updated_at: new Date().toISOString(),
+              }).eq('machine_no', profile.machine_no)
+              // ตั้ง flag → หน้า WeighPage จะแสดง banner + ปิดปุ่มชั่ง
+              setReworkDone(true)
+            }
+          })().catch(e => console.warn('auto-close err:', e))
+        }
       } else if (isBad) {
-        setBadRollNo(r => r + 1)
-        await printLabel({...profile, inspector}, badRollNo, gross, saveWeight, profile.labelSize ?? 'long', 'bad', badReason, data.id)
+        const newList = [...weighedRolls, data]
+        setBadRollNo(nextRollNo(newList.filter((r:any) => r?.roll_type === 'bad')))
+        printLabel({...profile, inspector}, badRollNo, gross, saveWeight, profile.labelSize ?? 'long', 'bad', badReason, data.id)
         setBadReason('')
       } else {
         // เศษ — ไม่มี roll_no ไม่นับม้วน พิมพ์ label แยก
-        await printLabel({...profile, inspector}, 0, gross, gross, profile.labelSize ?? 'long', actualType, scrapReason, data.id)
+        printLabel({...profile, inspector}, 0, gross, gross, profile.labelSize ?? 'long', actualType, scrapReason, data.id)
         setScrapReason('')
       }
-      setGross(0)
+      // หลัง save: ถ้า simMode อยู่ → สุ่มค่าใหม่ให้พร้อมม้วนถัดไป, ถ้าไม่ → reset
+      if (simModeRef.current) {
+        readScale() // สุ่มน้ำหนักใหม่อัตโนมัติ — ไม่ต้องกดปุ่มสุ่มซ้ำ
+      } else {
+        if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+        setGross(0)
+      }
     } catch (e: any) {
       alert('บันทึกไม่สำเร็จ: ' + (e?.message ?? JSON.stringify(e)))
     }
@@ -1406,12 +1568,20 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
 
   const progressColor = done ? 'bg-green-500' : pct >= 80 ? 'bg-amber-400' : 'bg-brand-500'
 
+  const goodListRef = useRef<HTMLDivElement>(null)
+
+  // เลื่อนตารางม้วนดีไปแถวล่าสุดทุกครั้งที่บันทึกม้วนใหม่
+  useEffect(() => {
+    if (!lastRoll) return
+    const el = goodListRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [lastRoll])
+
   const [selectedRoll, setSelectedRoll] = useState<any>(null)
   const [deleteModal, setDeleteModal] = useState<{ roll: any } | null>(null)
   const [deleteReason, setDeleteReason] = useState('')
   const [deleteBy, setDeleteBy]   = useState('')
   const [deleting, setDeleting]   = useState(false)
-  const [renumberAfterDelete, setRenumberAfterDelete] = useState(true)
 
   async function confirmDelete() {
     if (!deleteModal) return
@@ -1425,6 +1595,8 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       reason:       deleteReason.trim(),
       machine_no:   r.machine_no,
       lot_no:       r.lot_no,
+      work_order:   profile.woNo ?? '',
+      sale_order:   profile.soNo ?? '',
       roll_no:      r.roll_no,
       roll_type:    r.roll_type,
       weight:       r.weight,
@@ -1448,35 +1620,13 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
     if (logErr) console.warn('log insert failed:', logErr.message)
     // ลบม้วน
     const { error } = await supabase.from('production_rolls').delete().eq('id', r.id)
-    if (error) { setDeleting(false); alert('ลบไม่สำเร็จ: ' + error.message); return }
-
-    // เลื่อนเลขม้วนที่มากกว่าลงมา 1 (เฉพาะ machine + lot + roll_type เดียวกัน)
-    if (renumberAfterDelete && r.roll_no && (r.roll_type === 'good' || r.roll_type === 'bad')) {
-      const { data: bigger } = await supabase.from('production_rolls')
-        .select('id, roll_no')
-        .eq('machine_no', r.machine_no)
-        .eq('lot_no', r.lot_no)
-        .eq('roll_type', r.roll_type)
-        .gt('roll_no', r.roll_no)
-        .order('roll_no', { ascending: true })
-      if (bigger && bigger.length > 0) {
-        for (const row of bigger) {
-          await supabase.from('production_rolls')
-            .update({ roll_no: (row.roll_no ?? 0) - 1 })
-            .eq('id', row.id)
-        }
-        // ลดตัวนับ rollNo ของฝั่ง UI ด้วย เพื่อให้ม้วนถัดไปต่อเลขถูก
-        if (r.roll_type === 'good') setRollNo(n => Math.max(1, n - 1))
-        if (r.roll_type === 'bad')  setBadRollNo(n => Math.max(1, n - 1))
-      }
-    }
-
     setDeleting(false)
+    if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return }
     setDeleteModal(null)
     setDeleteReason('')
     setDeleteBy('')
     setSelectedRoll(null)
-    loadRollsForMachine()
+    loadRollsForMachine() // → จะคำนวณ rollNo ใหม่ ใช้ gap (#ที่ถูกลบ) ก่อน
   }
 
   // สร้าง URL สำหรับม้วนที่เลือก — ใช้ ID สั้นๆ เท่านั้น
@@ -1561,18 +1711,56 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
             <span className="text-slate-500 text-[10px]">เปลี่ยน ▸</span>
           </button>
 
-          <div className="grid grid-cols-3 gap-1.5">
+          {/* แผนกกรอ: เอาปุ่ม "ม้วนกรอ" ออก — เหลือแค่ ม้วนดี + เศษ */}
+          <div className={`grid ${profile.section === 'rewind' ? 'grid-cols-2' : 'grid-cols-3'} gap-1.5`}>
             {([
-              { key:'good',  label:'ม้วนดี',  color:'bg-brand-600 text-white',   inactive:'bg-slate-800 text-slate-400 hover:text-white' },
-              { key:'bad',   label:'ม้วนกรอ', color:'bg-orange-600 text-white',  inactive:'bg-slate-800 text-slate-400 hover:text-white' },
-              { key:'scrap', label:'เศษเสีย', color:'bg-amber-600 text-white',   inactive:'bg-slate-800 text-slate-400 hover:text-white' },
-            ] as const).map(t => (
+              { key:'good',  label:'ม้วนดี',  color:'bg-brand-600 text-white',   inactive:'bg-slate-800 text-slate-400 hover:text-white', show: true },
+              { key:'bad',   label:'ม้วนกรอ', color:'bg-orange-600 text-white',  inactive:'bg-slate-800 text-slate-400 hover:text-white', show: profile.section !== 'rewind' },
+              { key:'scrap', label:'เศษเสีย', color:'bg-amber-600 text-white',   inactive:'bg-slate-800 text-slate-400 hover:text-white', show: true },
+            ] as const).filter(t => t.show).map(t => (
               <button key={t.key} onClick={() => setWeighType(t.key)}
                 className={`py-2.5 rounded-xl text-sm font-bold transition-colors text-center ${weighType===t.key ? t.color : t.inactive}`}>
                 {t.label}
               </button>
             ))}
           </div>
+
+          {/* ── Banner: กรอครบแล้ว ─────────────── */}
+          {reworkDone && (
+            <div className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-xl px-4 py-3.5 flex items-center gap-3 shadow-lg">
+              <span className="text-3xl">✅</span>
+              <div className="flex-1">
+                <p className="text-white font-black text-base">กรอครบทุกม้วนแล้ว!</p>
+                <p className="text-green-100 text-xs">เครื่อง {profile.machine_no} ว่างแล้ว — กลับหน้าเลือกเครื่องเพื่อรับงานถัดไป</p>
+              </div>
+              <button onClick={onBack} className="bg-white/20 hover:bg-white/30 text-white text-sm px-4 py-2 rounded-lg font-bold">
+                ← กลับ
+              </button>
+            </div>
+          )}
+
+          {/* ── แจ้งเตือน: ม้วนถัดไปกำลังทดแทนเลขที่ลบ ─────────────── */}
+          {((isGood && isFillingGapGood) || (isBad && isFillingGapBad)) && (
+            <div className="relative bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 rounded-xl p-[2px] shadow-lg shadow-amber-500/40 animate-pulse">
+              <div className="bg-slate-900 rounded-[10px] px-4 py-3.5 flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/50 shrink-0">
+                  <span className="text-2xl">🔁</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-amber-300 text-[10px] font-black uppercase tracking-widest">⚠ ทดแทนเลขที่ถูกลบ</p>
+                  <p className="text-white font-black text-lg leading-tight">
+                    ม้วนถัดไป →{' '}
+                    <span className="text-amber-300 text-2xl">
+                      #{isGood ? rollNo : badRollNo}
+                    </span>
+                  </p>
+                  <p className="text-slate-400 text-xs mt-0.5">
+                    หลังจากนี้จะต่อหลังม้วน #{isGood ? goodMaxRoll : badMaxRoll}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* เศษ sub-select */}
           {isScrap && (
@@ -1644,7 +1832,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
               value={gross || ''}
               onChange={e => { setGross(parseFloat(e.target.value)||0); setStable(true) }}
               placeholder="0.00"
-              readOnly={serialConnected}
+              readOnly={serialConnected && !simMode}
               className="w-full font-mono text-[72px] font-black tracking-tight leading-none mb-1 text-white bg-transparent text-center outline-none placeholder-slate-700 focus:bg-slate-800/50 rounded-xl"
             />
             <p className="text-slate-500 text-xs font-semibold mb-2">Kgs.</p>
@@ -1676,8 +1864,12 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
             )}
 
             <button onClick={readScale}
-              className="w-full py-1.5 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-500 hover:text-white transition-colors">
-              <RefreshCw size={11}/> สุ่มค่าทดสอบ
+              className={`w-full py-1.5 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors ${
+                simMode
+                  ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-500 hover:text-white'
+              }`}>
+              <RefreshCw size={11}/> {simMode ? '🎲 จำลองอยู่ — กดสุ่มใหม่' : 'สุ่มค่าทดสอบ'}
             </button>
           </div>
 
@@ -1691,7 +1883,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                 </span>
               </div>
             )}
-            <button onClick={handleSave} disabled={saving || saveWeight <= 0 || !stable || (isBad && !badReason.trim()) || (isScrap && !scrapReason.trim())}
+            <button onClick={handleSave} disabled={saving || saveWeight <= 0 || !stable || (isBad && !badReason.trim()) || (isScrap && !scrapReason.trim()) || reworkDone}
               className={`flex-1 py-3 rounded-xl text-white font-black flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-40 ${
                 !stable ? 'bg-slate-700 cursor-not-allowed' :
                 isGood  ? 'bg-brand-600 hover:bg-brand-500' :
@@ -1804,30 +1996,42 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                   <div key={h} className="px-3 py-1.5 text-slate-500 text-[9px] font-semibold uppercase">{h}</div>
                 ))}
               </div>
-              <div className="flex-1 overflow-y-auto divide-y divide-slate-800/40">
-                {[...weighedRolls].filter((r:any)=>r.roll_type==='good').reverse().map((r:any) => {
+              <div ref={goodListRef} className="flex-1 overflow-y-auto divide-y divide-slate-800/40">
+                {(() => {
+                  const goods = weighedRolls.filter((r:any)=>r.roll_type==='good')
+                  // ม้วนทดแทน: roll นี้ถูกสร้างหลังจากม้วนเลขใหญ่กว่ามีอยู่แล้ว
+                  const isReplacement = (r:any) =>
+                    goods.some((x:any) => (x.roll_no ?? 0) > (r.roll_no ?? 0) && new Date(x.created_at) < new Date(r.created_at))
+                  return [...goods]
+                    .sort((a:any,b:any) => (a.roll_no ?? 0) - (b.roll_no ?? 0))
+                    .map((r:any) => {
                   const isNew  = lastRoll?.id === r.id
                   const isDone = r.transferred
+                  const isRep  = isReplacement(r)
                   const d      = new Date(r.created_at)
                   const dateShort = `${d.getDate()}/${d.getMonth()+1}`
                   const time   = d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})
                   return (
                     <div key={r.id} onClick={()=>setSelectedRoll(r)}
-                      className={`grid grid-cols-4 hover:bg-slate-800/40 cursor-pointer transition-colors ${isNew?'bg-green-500/5':''} ${isDone?'opacity-60':''}`}>
+                      className={`grid grid-cols-4 hover:bg-slate-800/40 cursor-pointer transition-colors ${
+                        isRep ? 'bg-amber-500/10 border-l-4 border-amber-500' : isNew ? 'bg-green-500/5' : ''
+                      } ${isDone?'opacity-60':''}`}>
                       <div className={`px-3 py-2.5 text-xs leading-tight ${isDone?'text-slate-600 line-through':'text-slate-500'}`}>
                         <div className="text-[9px] text-slate-600">{dateShort}</div>
                         <div>{time}</div>
                       </div>
                       <div className="px-3 py-2.5">
-                        <span className={`font-bold font-mono ${isDone?'text-slate-500 line-through':'text-white'}`}>{r.roll_no}</span>
-                        {isNew && <span className="ml-1 text-[9px] text-green-400">NEW</span>}
+                        <span className={`font-bold font-mono ${isRep ? 'text-amber-300' : isDone?'text-slate-500 line-through':'text-white'}`}>{r.roll_no}</span>
+                        {isRep && <span className="ml-1 text-[9px] text-amber-400 font-bold">🔁 ทดแทน</span>}
+                        {!isRep && isNew && <span className="ml-1 text-[9px] text-green-400">NEW</span>}
                         {isDone && <span className="ml-1 text-[9px] text-green-400">📦</span>}
                       </div>
                       <div className={`px-3 py-2.5 text-xs ${isDone?'text-slate-600 line-through':'text-slate-400'}`}>{fmt((r.weight??0)+(r.core_weight??0),dec)}</div>
-                      <div className={`px-3 py-2.5 font-black ${isDone?'text-slate-600 line-through':'text-brand-300'}`}>{fmt(r.weight??0,dec)}</div>
+                      <div className={`px-3 py-2.5 font-black ${isRep ? 'text-amber-300' : isDone?'text-slate-600 line-through':'text-brand-300'}`}>{fmt(r.weight??0,dec)}</div>
                     </div>
                   )
-                })}
+                    })
+                })()}
                 {weighedRolls.filter((r:any)=>r?.roll_type==='good').length===0 && (
                   <div className="py-8 text-center text-slate-600 text-xs">ยังไม่มีม้วนดี</div>
                 )}
@@ -1839,7 +2043,8 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
               </div>
             </div>
 
-            {/* ── ม้วนกรอ ────────────────────── */}
+            {/* ── ม้วนกรอ — ซ่อนในแผนกกรอ ────────────────── */}
+            {profile.section !== 'rewind' && (
             <div className="flex-1 flex flex-col min-w-0">
               <div className="px-3 py-2 bg-orange-500/10 border-b border-orange-500/20 shrink-0">
                 <span className="text-orange-300 text-xs font-bold">● ม้วนกรอ</span>
@@ -1850,27 +2055,38 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                 ))}
               </div>
               <div className="flex-1 overflow-y-auto divide-y divide-slate-800/40">
-                {[...weighedRolls].filter((r:any)=>r.roll_type==='bad').reverse().map((r:any) => {
+                {(() => {
+                  const bads = weighedRolls.filter((r:any)=>r.roll_type==='bad')
+                  const isReplacement = (r:any) =>
+                    bads.some((x:any) => (x.roll_no ?? 0) > (r.roll_no ?? 0) && new Date(x.created_at) < new Date(r.created_at))
+                  return [...bads]
+                    .sort((a:any,b:any) => (a.roll_no ?? 0) - (b.roll_no ?? 0))
+                    .map((r:any) => {
                   const isNew = lastRoll?.id === r.id
+                  const isRep = isReplacement(r)
                   const d2    = new Date(r.created_at)
                   const dateShort2 = `${d2.getDate()}/${d2.getMonth()+1}`
                   const time  = d2.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})
                   return (
                     <div key={r.id} onClick={()=>setSelectedRoll(r)}
-                      className={`grid grid-cols-4 hover:bg-slate-800/40 cursor-pointer transition-colors ${isNew?'bg-orange-500/5':''}`}>
+                      className={`grid grid-cols-4 hover:bg-slate-800/40 cursor-pointer transition-colors ${
+                        isRep ? 'bg-amber-500/10 border-l-4 border-amber-500' : isNew ? 'bg-orange-500/5' : ''
+                      }`}>
                       <div className="px-3 py-2.5 text-slate-500 text-xs leading-tight">
                         <div className="text-[9px] text-slate-600">{dateShort2}</div>
                         <div>{time}</div>
                       </div>
                       <div className="px-3 py-2.5">
-                        <span className="text-orange-200 font-bold font-mono">{r.roll_no}</span>
-                        {isNew && <span className="ml-1 text-[9px] text-orange-400">NEW</span>}
+                        <span className={`font-bold font-mono ${isRep ? 'text-amber-300' : 'text-orange-200'}`}>{r.roll_no}</span>
+                        {isRep && <span className="ml-1 text-[9px] text-amber-400 font-bold">🔁 ทดแทน</span>}
+                        {!isRep && isNew && <span className="ml-1 text-[9px] text-orange-400">NEW</span>}
                       </div>
-                      <div className="px-3 py-2.5 text-orange-300 font-black">{fmt(r.weight??0,dec)}</div>
+                      <div className={`px-3 py-2.5 font-black ${isRep ? 'text-amber-300' : 'text-orange-300'}`}>{fmt(r.weight??0,dec)}</div>
                       <div className="px-3 py-2.5 text-slate-400 text-xs truncate">{r.remark||'—'}</div>
                     </div>
                   )
-                })}
+                    })
+                })()}
                 {weighedRolls.filter((r:any)=>r?.roll_type==='bad').length===0 && (
                   <div className="py-8 text-center text-slate-600 text-xs">ยังไม่มีม้วนกรอ</div>
                 )}
@@ -1899,6 +2115,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                 </div>
               )}
             </div>
+            )}
 
           </div>
         </div>
@@ -2106,18 +2323,12 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                   className="bg-slate-800 text-white text-sm rounded-lg px-3 py-2 border border-slate-700 focus:border-red-500 focus:outline-none"/>
               </label>
 
-              {/* เลื่อนเลขม้วนหลังลบ */}
+              {/* แจ้งว่าม้วนถัดไปจะทดแทนเลขที่ถูกลบ */}
               {deleteModal.roll.roll_no > 0 && (deleteModal.roll.roll_type === 'good' || deleteModal.roll.roll_type === 'bad') && (
-                <label className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5 cursor-pointer">
-                  <input type="checkbox" checked={renumberAfterDelete}
-                    onChange={e => setRenumberAfterDelete(e.target.checked)}
-                    className="mt-0.5 accent-amber-500"/>
-                  <span className="text-xs text-amber-200 leading-snug">
-                    <span className="font-bold">เลื่อนเลขม้วนหลังจากนี้ขึ้น 1</span><br/>
-                    <span className="text-amber-300/70">ม้วนที่ #{(deleteModal.roll.roll_no ?? 0) + 1} จะกลายเป็น #{deleteModal.roll.roll_no} → ไม่เกิดเลขแหว่ง<br/>
-                    ⚠ ฉลากที่พิมพ์ไปแล้วจะไม่ตรงกับระบบ — ควรพิมพ์ใหม่</span>
-                  </span>
-                </label>
+                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-2.5 text-xs text-blue-200 leading-snug">
+                  <span className="font-bold">💡 ม้วนถัดไปจะเป็น #{deleteModal.roll.roll_no}</span><br/>
+                  <span className="text-blue-300/80">ระบบจะแจ้งให้ชั่งทดแทนเลขที่ถูกลบนี้ก่อน เพื่อไม่ให้เลขแหว่ง — ไม่ต้องเลื่อนเลขม้วนเก่า</span>
+                </div>
               )}
             </div>
 
@@ -2170,6 +2381,8 @@ export default function WeighStation({ dept }: { dept?: 'blow' | 'print' | 'rewi
           blankHeader: r.blank_header ?? false,
           section:    (r.section      ?? 'blow') as 'blow'|'print'|'rewind',
           soNo:        r.sale_order   ?? '',
+          woNo:        r.work_order   ?? '',
+          deliveryDate: r.delivery_date ?? '',
         }))
         setProfiles(list)
         saveProfiles(list)

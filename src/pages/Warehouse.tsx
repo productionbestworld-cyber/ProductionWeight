@@ -179,6 +179,13 @@ function SOModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => voi
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────
+const RETURN_TO_REWORK_TYPES = [
+  { key:'qc_reject',        no:'1.4', label:'ตรวจไม่ผ่านก่อนโหลด',     emoji:'🚫' },
+  { key:'warehouse_damage', no:'1.5', label:'เสียจากคลัง/เคลื่อนย้าย', emoji:'📦' },
+  { key:'return_no_cn',     no:'1.2', label:'ลูกค้าคืน (ไม่ลดหนี้)',   emoji:'↩️' },
+  { key:'return_with_cn',   no:'1.3', label:'ลูกค้าคืน (ลดหนี้/NC)',   emoji:'📋' },
+] as const
+
 export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   const [tab, setTab] = useState<Tab>('stock')
   const [rolls, setRolls] = useState<Roll[]>([])
@@ -187,7 +194,8 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   const [showSOModal, setShowSOModal] = useState(false)
 
   // stock filters
-  const [fSection, setFSection] = useState<''|'blow'|'print'|'rewind'>(dept ?? '')
+  // คลังเป็นข้อมูลร่วม — แสดง "ทั้งหมด" เป็นค่าเริ่มต้น (ไม่ filter ตาม dept)
+  const [fSection, setFSection] = useState<''|'blow'|'print'|'rewind'>('')
   const [fProduct, setFProduct] = useState('')
   const [fCustomer, setFCustomer] = useState('')
   const [fLot, setFLot] = useState('')
@@ -198,6 +206,7 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   // shipment state
   const [selectedSO, setSelectedSO] = useState<SO | null>(null)
   const [selectedRolls, setSelectedRolls] = useState<Set<string>>(new Set())
+  const [returnModal, setReturnModal] = useState<any | null>(null)
   const [shipStaff, setShipStaff] = useState('')
   const [shipping, setShipping] = useState(false)
 
@@ -421,7 +430,7 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
               <div>
                 <label className="block text-[10px] text-slate-500 mb-1">ฝั่งผลิต</label>
                 <div className="flex gap-1">
-                  {([{val:'',label:'ทั้งหมด'},{val:'blow',label:'🌬 เป่า'},{val:'print',label:'🖨 พิม'}] as const).map(s=>(
+                  {([{val:'',label:'📊 ทั้งหมด'},{val:'blow',label:'🌬 เป่า'},{val:'print',label:'🖨 พิมพ์'},{val:'rewind',label:'🔁 กรอ'}] as const).map(s=>(
                     <button key={s.val} onClick={() => setFSection(s.val)}
                       className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-colors ${fSection===s.val?'bg-brand-600 text-white border-brand-600':'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'}`}>
                       {s.label}
@@ -721,23 +730,29 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                       {availableForShip.map(r => {
                         const isSel = selectedRolls.has(r.id)
                         return (
-                          <div key={r.id} onClick={() => toggleRoll(r.id)}
-                            className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${isSel ? 'bg-brand-500/12' : 'hover:bg-slate-800/50'}`}>
-                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${isSel ? 'bg-brand-500 border-brand-500' : 'border-slate-600'}`}>
+                          <div key={r.id}
+                            className={`flex items-center gap-3 px-4 py-3 transition-colors ${isSel ? 'bg-brand-500/12' : 'hover:bg-slate-800/50'}`}>
+                            <div onClick={() => toggleRoll(r.id)} className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all cursor-pointer ${isSel ? 'bg-brand-500 border-brand-500' : 'border-slate-600'}`}>
                               {isSel && <span className="text-white text-[10px] font-black">✓</span>}
                             </div>
                             <span className="bg-brand-600 text-white font-black text-xs px-2 py-1 rounded-lg w-12 text-center flex-shrink-0">{r.machine_no||'?'}</span>
-                            <div className="flex-1 min-w-0">
+                            <div onClick={() => toggleRoll(r.id)} className="flex-1 min-w-0 cursor-pointer">
                               <div className="flex items-baseline gap-2">
                                 <span className="font-mono font-black text-white">ม้วน #{r.roll_no}</span>
                                 <span className="text-slate-500 text-xs font-mono">Lot {r.lot_no}</span>
                               </div>
                               <p className="text-slate-500 text-xs truncate">{r.product_name||'—'}</p>
                             </div>
-                            <div className="text-right flex-shrink-0">
+                            <div onClick={() => toggleRoll(r.id)} className="text-right flex-shrink-0 cursor-pointer">
                               <p className="font-black text-lg text-brand-300 leading-none">{fmt(r.weight)}</p>
                               <p className="text-slate-600 text-[10px]">Kgs. สุทธิ</p>
                             </div>
+                            {/* ส่งกลับกรอ */}
+                            <button onClick={(e) => { e.stopPropagation(); setReturnModal(r) }}
+                              title="ส่งกลับแผนกกรอ (ม้วนมีปัญหา)"
+                              className="flex-shrink-0 text-[10px] bg-amber-600/80 hover:bg-amber-500 text-white px-2 py-1.5 rounded font-bold whitespace-nowrap">
+                              🔧 ส่งกรอ
+                            </button>
                             <div className="text-right flex-shrink-0 w-14">
                               <p className="text-slate-400 text-xs">{fmtDT(r.created_at).slice(0,5)}</p>
                             </div>
@@ -752,6 +767,128 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
           </div>
         )}
 
+      </div>
+
+      {/* ── Modal: ส่งกลับแผนกกรอ ───────────────────────────────────── */}
+      {returnModal && (
+        <ReturnToReworkModal
+          roll={returnModal}
+          onClose={() => setReturnModal(null)}
+          onDone={async () => { setReturnModal(null); await loadAll() }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── ส่งม้วนดีจากคลังกลับไปกรอใหม่ ─────────────────────────────────
+function ReturnToReworkModal({ roll, onClose, onDone }:
+  { roll: any; onClose: () => void; onDone: () => void }) {
+  const [inboundType, setInboundType] = useState<string>('qc_reject')
+  const [reason, setReason] = useState('')
+  const [by, setBy] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  async function save() {
+    if (!reason.trim()) { alert('ระบุเหตุผลที่ส่งกลับกรอ'); return }
+    if (!by.trim())     { alert('กรอกชื่อผู้ส่ง'); return }
+    setSaving(true)
+
+    // 1) บันทึก log
+    await supabase.from('roll_deletion_logs').insert({
+      deleted_by:   by.trim(),
+      reason:       `[ส่งกลับกรอ] ${reason.trim()}`,
+      machine_no:   roll.machine_no,
+      lot_no:       roll.lot_no,
+      roll_no:      roll.roll_no,
+      roll_type:    'good',
+      weight:       roll.weight,
+      gross_weight: roll.gross_weight,
+      core_weight:  roll.core_weight,
+      length:       roll.length,
+      product_name: roll.product_name,
+      product_code: roll.product_code,
+      item_code:    roll.item_code,
+      mat_code:     roll.mat_code,
+      cust_code:    roll.cust_code,
+      cust_name:    roll.customer,
+      width_cm:     roll.width_cm,
+      thick_mc:     roll.thick_mc,
+      inspector:    roll.inspector,
+      started_at:   roll.created_at,
+      original_id:  roll.id,
+      section:      'rewind',
+    })
+
+    // 2) เปลี่ยน roll จาก good → bad + ตั้ง inbound_type
+    const { error } = await supabase.from('production_rolls').update({
+      roll_type:        'bad',
+      remark:           reason.trim(),
+      inbound_type:     inboundType,
+      rework_status:    null,
+      transferred:      true,
+      transferred_by:   by.trim(),
+      transferred_at:   new Date().toISOString(),
+      transfer_doc_id:  null,
+      section:          'rewind',
+    }).eq('id', roll.id)
+
+    setSaving(false)
+    if (error) { alert('บันทึกไม่สำเร็จ: ' + error.message); return }
+    const sel = RETURN_TO_REWORK_TYPES.find(t => t.key === inboundType)
+    alert(`✓ ส่งม้วน #${roll.roll_no} (${fmt(roll.weight)} Kg) กลับแผนกกรอแล้ว\nประเภท: ${sel?.no} ${sel?.label}\nเหตุผล: ${reason}`)
+    onDone()
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-slate-900 border border-amber-600 rounded-2xl w-full max-w-md p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-white font-bold text-base flex items-center gap-2"><span className="text-xl">🔧</span> ส่งม้วนกลับแผนกกรอ</p>
+          <button onClick={onClose} className="text-slate-500 hover:text-white"><X size={18}/></button>
+        </div>
+
+        <div className="bg-slate-800/50 rounded-lg p-3 mb-3 text-xs space-y-0.5">
+          <p className="text-slate-400">เครื่อง: <b className="text-white">{roll.machine_no}</b> · Lot: <b className="text-white font-mono">{roll.lot_no}</b></p>
+          <p className="text-slate-400">ม้วน <b className="text-white">#{roll.roll_no}</b> · นน. <b className="text-brand-300">{fmt(roll.weight)} Kg</b></p>
+          <p className="text-slate-400">สินค้า: <b className="text-white">{roll.product_name}</b></p>
+          <p className="text-slate-400">ลูกค้า: <b className="text-white">{roll.customer}</b></p>
+        </div>
+
+        <label className="block text-xs text-slate-400 mb-1.5">ประเภท (Phase 1) *</label>
+        <div className="grid grid-cols-2 gap-1.5 mb-3">
+          {RETURN_TO_REWORK_TYPES.map(t => (
+            <button key={t.key} onClick={() => setInboundType(t.key)}
+              className={`text-left px-3 py-2 rounded-lg border text-xs transition-colors ${
+                inboundType === t.key
+                  ? 'bg-amber-600 border-amber-500 text-white'
+                  : 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-600'
+              }`}>
+              <p className="font-bold">{t.emoji} {t.no} {t.label}</p>
+            </button>
+          ))}
+        </div>
+
+        <label className="block text-xs text-slate-400 mb-1">เหตุผลที่ส่งกลับ *</label>
+        <input value={reason} onChange={e => setReason(e.target.value)}
+          placeholder="เช่น แกนติด, ม้วนเป็นลอน, ลูกค้าตีคืน..."
+          autoFocus
+          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-amber-500 mb-3"/>
+
+        <label className="block text-xs text-slate-400 mb-1">ชื่อผู้ส่ง *</label>
+        <input value={by} onChange={e => setBy(e.target.value)}
+          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-amber-500"/>
+
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5 mt-3 text-xs text-amber-200">
+          💡 ม้วนนี้จะออกจากคลัง → ไปอยู่ใน <b>แผนกกรอ → คิวรอกรอ</b> ของประเภทที่เลือก → หลังกรอเสร็จจะชั่งใหม่และส่งกลับคลังตามปกติ
+        </div>
+
+        <div className="flex gap-2 mt-4">
+          <button onClick={onClose} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 py-2.5 rounded-lg text-sm">ยกเลิก</button>
+          <button onClick={save} disabled={saving} className="flex-1 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white py-2.5 rounded-lg text-sm font-bold">
+            {saving ? 'บันทึก...' : '🔧 ส่งกลับกรอ'}
+          </button>
+        </div>
       </div>
     </div>
   )

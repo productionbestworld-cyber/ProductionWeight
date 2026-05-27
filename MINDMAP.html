@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mind Map ระบบ BWP — Flow ครบวงจร</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Sarabun', 'Segoe UI', Tahoma, sans-serif;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    color: #1f2937;
+    line-height: 1.6;
+    padding: 30px 20px;
+  }
+  .container { max-width: 1200px; margin: 0 auto; }
+
+  /* Header */
+  header {
+    text-align: center;
+    padding: 30px;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    border-radius: 20px;
+    box-shadow: 0 10px 40px rgba(102,126,234,0.3);
+    margin-bottom: 30px;
+  }
+  header h1 { font-size: 32px; margin-bottom: 8px; }
+  header p { opacity: 0.9; font-size: 14px; }
+  header a { color: #ffd700; text-decoration: none; }
+
+  /* Sections */
+  section {
+    background: white;
+    border-radius: 16px;
+    padding: 28px;
+    margin-bottom: 24px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+  }
+  section h2 {
+    font-size: 24px;
+    color: #4c1d95;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 3px solid #ddd6fe;
+  }
+  section h3 { color: #5b21b6; font-size: 18px; margin: 20px 0 10px; }
+  section p { margin-bottom: 8px; }
+
+  /* Phase blocks */
+  .phase {
+    background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
+    border-left: 6px solid #6366f1;
+    padding: 16px 20px;
+    margin: 16px 0;
+    border-radius: 8px;
+  }
+  .phase.a { border-color: #3b82f6; background: linear-gradient(135deg, #dbeafe, #bfdbfe); }
+  .phase.b { border-color: #f59e0b; background: linear-gradient(135deg, #fef3c7, #fde68a); }
+  .phase.c { border-color: #10b981; background: linear-gradient(135deg, #d1fae5, #a7f3d0); }
+  .phase.d { border-color: #8b5cf6; background: linear-gradient(135deg, #ede9fe, #ddd6fe); }
+  .phase.e { border-color: #ec4899; background: linear-gradient(135deg, #fce7f3, #fbcfe8); }
+
+  /* Tree / Flow */
+  .tree {
+    background: #0a0f1e;
+    color: #e2e8f0;
+    padding: 20px;
+    border-radius: 12px;
+    font-family: 'Consolas', 'Menlo', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    white-space: pre;
+    overflow-x: auto;
+    margin: 12px 0;
+  }
+  .tree .y { color: #fbbf24; }
+  .tree .b { color: #60a5fa; }
+  .tree .g { color: #34d399; }
+  .tree .r { color: #f87171; }
+  .tree .p { color: #c4b5fd; }
+  .tree .m { color: #f472b6; }
+
+  /* Cards */
+  .grid { display: grid; gap: 16px; }
+  .grid.cols-2 { grid-template-columns: 1fr 1fr; }
+  .grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+  @media (max-width: 768px) {
+    .grid.cols-2, .grid.cols-3, .grid.cols-4 { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    background: white;
+    border-radius: 12px;
+    padding: 16px;
+    border-left: 4px solid #6366f1;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
+  .card h4 { color: #4c1d95; margin-bottom: 8px; font-size: 16px; }
+  .card.dept-blow   { border-color: #3b82f6; background: #eff6ff; }
+  .card.dept-print  { border-color: #a855f7; background: #faf5ff; }
+  .card.dept-rewind { border-color: #10b981; background: #ecfdf5; }
+  .card.warning     { border-color: #f59e0b; background: #fffbeb; }
+  .card.danger      { border-color: #ef4444; background: #fef2f2; }
+  .card.success     { border-color: #10b981; background: #ecfdf5; }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 14px;
+  }
+  table th, table td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  table th { background: #f9fafb; font-weight: 700; color: #4b5563; }
+  table tr:hover { background: #f9fafb; }
+
+  /* Pills */
+  .pill {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    margin: 2px;
+  }
+  .pill.wo  { background: linear-gradient(135deg, #f59e0b, #f97316); color: white; }
+  .pill.so  { background: #dbeafe; color: #1e40af; }
+  .pill.lot { background: #e5e7eb; color: #374151; }
+  .pill.good { background: #d1fae5; color: #065f46; }
+  .pill.bad  { background: #fed7aa; color: #9a3412; }
+  .pill.scrap { background: #fee2e2; color: #991b1b; }
+
+  /* Lists */
+  ul.fancy { list-style: none; padding-left: 0; }
+  ul.fancy li {
+    padding: 6px 0 6px 28px;
+    position: relative;
+  }
+  ul.fancy li::before {
+    content: "▸";
+    color: #8b5cf6;
+    font-weight: bold;
+    position: absolute;
+    left: 8px;
+  }
+
+  /* Step blocks */
+  .step {
+    background: white;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 16px;
+    margin: 12px 0;
+    position: relative;
+    padding-left: 60px;
+  }
+  .step::before {
+    content: attr(data-step);
+    position: absolute;
+    left: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    font-size: 14px;
+  }
+
+  /* Color legend */
+  .legend-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 0;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  .swatch {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    flex-shrink: 0;
+  }
+
+  /* Print */
+  @media print {
+    body { background: white; padding: 10px; }
+    section { box-shadow: none; page-break-inside: avoid; }
+    header { background: #4c1d95 !important; -webkit-print-color-adjust: exact; }
+    .tree { background: #1e293b !important; -webkit-print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>🧠 Mind Map ระบบ BWP</h1>
+  <p>ระบบชั่งน้ำหนักม้วน + Dashboard — Flow ครบวงจร</p>
+  <p style="margin-top:8px;font-size:12px"><a href="https://github.com/productionbestworld-cyber/ProductionWeight">github.com/productionbestworld-cyber/ProductionWeight</a></p>
+</header>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<section>
+  <h2>🎯 ภาพรวมระบบ</h2>
+  <div class="grid cols-3">
+    <div class="card dept-blow">
+      <h4>🌬 แผนกเป่า</h4>
+      <p style="font-size:13px">Production - ผลิตม้วน</p>
+      <p style="margin-top:8px"><span class="pill wo">BL01 - BL11</span></p>
+    </div>
+    <div class="card dept-print">
+      <h4>🖨 แผนกพิมพ์</h4>
+      <p style="font-size:13px">Production - พิมพ์ลาย</p>
+      <p style="margin-top:8px"><span class="pill so">PM01 - ...</span></p>
+    </div>
+    <div class="card dept-rewind">
+      <h4>🔁 แผนกกรอ</h4>
+      <p style="font-size:13px">Rework - แก้ไขม้วน</p>
+      <p style="margin-top:8px"><span class="pill lot">S01 - S04</span></p>
+    </div>
+  </div>
+
+  <div class="tree" style="margin-top:16px">
+                          <span class="p">👤 พนักงาน เข้าใช้งาน</span>
+                                       │
+                  ╔════════════════════╪════════════════════╗
+                  ║  <span class="y">1️⃣ เลือกแผนก</span>  ──→  <span class="y">2️⃣ ใส่ PIN</span>  ──→  เข้าระบบ ║
+                  ╚══════════════════════════════════════════╝
+                                       │
+       ┌───────────────────────────────┼───────────────────────────────┐
+       ▼                               ▼                               ▼
+  <span class="b">🌬 เป่า</span>                       <span class="p">🖨 พิมพ์</span>                      <span class="g">🔁 กรอ</span>
+  <span class="b">(Production)</span>                  <span class="p">(Production)</span>                  <span class="g">(Rework)</span>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<section>
+  <h2>📍 PHASE A: ผลิตม้วน (Weigh Station)</h2>
+
+  <div class="step" data-step="1">
+    <h4>เลือกเครื่อง</h4>
+    <p>จาก machine_profiles (BL01-BL11 สำหรับเป่า, S01-S04 สำหรับกรอ)</p>
+  </div>
+
+  <div class="step" data-step="2">
+    <h4>กรอกข้อมูลงาน (QuickEditModal)</h4>
+    <ul class="fancy">
+      <li>เลือก <b>Item Code</b> → auto-fill สินค้า/ลูกค้า/ขนาด</li>
+      <li><b>เลขใบคำสั่งผลิต (WO)</b> *จำเป็น</li>
+      <li><b>Sale Order (SO)</b></li>
+      <li><b>Lot No</b> → auto-gen: <code>69 + BL01 + 0001 + 05</code> (ปี+เครื่อง+CustCode+เดือน)</li>
+      <li><b>วันที่ส่งของ</b></li>
+      <li><b>ยอดสั่งผลิต</b> (kg)</li>
+      <li><b>ผู้ตรวจสอบ</b></li>
+    </ul>
+    <p style="margin-top:8px"><i>บันทึก → machine_profiles</i></p>
+  </div>
+
+  <div class="step" data-step="3">
+    <h4>ชั่งม้วน</h4>
+    <div class="grid cols-3">
+      <div class="card success">
+        <h4>✅ ม้วนดี (Good)</h4>
+        <p style="font-size:13px">บันทึก roll_type='good' + พิมพ์ฉลาก</p>
+      </div>
+      <div class="card warning">
+        <h4>🔄 ม้วนกรอ (Bad)</h4>
+        <p style="font-size:13px">⚠ บังคับเหตุผล (remark)</p>
+      </div>
+      <div class="card danger">
+        <h4>🗑 เศษเสีย (Scrap)</h4>
+        <p style="font-size:13px">3 ประเภท: ใส / สี / ก้อน</p>
+        <p style="font-size:13px">⚠ บังคับเหตุผล</p>
+      </div>
+    </div>
+    <p style="margin-top:12px"><b>บันทึก:</b> production_rolls + weigh_logs + พิมพ์ฉลาก</p>
+    <p><b>Roll No:</b> อุดเลขที่ลบไป (gap-fill) ไม่เกิด gap</p>
+  </div>
+
+  <div class="step" data-step="4">
+    <h4>ปิดงาน</h4>
+    <ul class="fancy">
+      <li>สร้าง <b>job_summaries</b></li>
+      <li>พิมพ์ <b>Production Report</b></li>
+      <li>เคลียร์ machine_profile (พร้อมรับงานใหม่)</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<section>
+  <h2>📍 PHASE B: ระบบกรอ (Rework — เฉพาะ S01-S04)</h2>
+
+  <h3>มี 2 ระบบ (System Toggle)</h3>
+  <div class="grid cols-2">
+    <div class="card dept-blow">
+      <h4>🏭 กรอจากเป่า</h4>
+      <p>ม้วนผลิตที่โอนมาจาก Transfer</p>
+      <p style="margin-top:8px"><code>is_legacy = false</code></p>
+    </div>
+    <div class="card dept-print">
+      <h4>📦 กรอนอกระบบ</h4>
+      <p>ม้วนเก่า/นอกระบบ กรอกข้อมูลเอง</p>
+      <p style="margin-top:8px"><code>is_legacy = true</code></p>
+    </div>
+  </div>
+
+  <h3 style="margin-top:24px">คิว 3 แท็บ</h3>
+  <div class="tree">
+  <span class="y">📥 รอกรอ</span>   ──→   <span class="b">⚙ กำลังกรอ</span>   ──→   <span class="g">✓ ปิดงาน</span>
+       │                  │                    │
+       ▼                  ▼                    ▼
+  <span class="b">🔧 เริ่มกรอ</span>      <span class="g">⚖ พร้อมชั่ง</span>         <span class="g">✓ สำเร็จ</span>
+  (เลือก S0X)      (อัปเดต Lot           หรือ
+  (ใส่ผู้รับ)      วันที่ใหม่)            <span class="r">🗑 ทำลาย</span>
+                       │                  (คืนเป่ากำจัด)
+                       ▼
+               ไปหน้าชั่งน้ำหนัก
+               (PHASE A สำหรับกรอ)
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<section>
+  <h2>📍 PHASE C: โอนเข้าคลัง (Transfer)</h2>
+
+  <h3>3 ประเภทใบโอน</h3>
+  <div class="grid cols-3">
+    <div class="card" style="border-color:#3b82f6;background:#eff6ff">
+      <h4>✅ FG (ม้วนดี)</h4>
+      <p>ใบโอนสีน้ำเงิน</p>
+      <p style="font-size:13px;margin-top:8px">"ใบโอนสินค้าเข้าคลัง"</p>
+    </div>
+    <div class="card warning">
+      <h4>🔄 ม้วนกรอ</h4>
+      <p>ใบโอนสีส้ม</p>
+      <p style="font-size:13px;margin-top:8px">"ใบโอนม้วนกรอเข้าคลัง"</p>
+    </div>
+    <div class="card danger">
+      <h4>🗑 เศษเสีย</h4>
+      <p>ใบโอนสีแดง</p>
+      <p style="font-size:13px;margin-top:8px">"ใบโอนเศษเสียเข้าคลัง"</p>
+    </div>
+  </div>
+
+  <h3 style="margin-top:24px">ขั้นตอน</h3>
+  <ul class="fancy">
+    <li>เลือกงาน (จัดกลุ่ม <span class="pill wo">WO</span> > <span class="pill so">SO</span> > <span class="pill lot">Lot</span>)</li>
+    <li>เลือกม้วน (checkbox)</li>
+    <li>กรอกผู้โอน</li>
+    <li>กดยืนยัน → สร้าง <b>transfer_documents</b> (TR-xxxxx)</li>
+    <li>อัปเดต <code>production_rolls.transferred = true</code></li>
+    <li>พิมพ์ใบโอน (HTML) + Export Excel</li>
+  </ul>
+</section>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<section>
+  <h2>📍 PHASE D: คลังสินค้า (Warehouse)</h2>
+
+  <div class="grid cols-3">
+    <div class="card">
+      <h4>📊 สต็อกคงเหลือ</h4>
+      <p>Filter: section / สินค้า / ลูกค้า / Lot / ขนาด</p>
+    </div>
+    <div class="card">
+      <h4>📋 Sales Orders</h4>
+      <p>จัดการใบสั่งขาย</p>
+    </div>
+    <div class="card">
+      <h4>🚚 จัดส่ง</h4>
+      <p>เลือกม้วนจัดส่งตาม SO</p>
+    </div>
+  </div>
+
+  <h3 style="margin-top:24px">การ Re-loop (พบม้วนปัญหาในคลัง)</h3>
+  <div class="card warning">
+    <p><b>🔧 ส่งกลับกรอ</b></p>
+    <ul class="fancy" style="margin-top:8px">
+      <li>เลือกประเภท (1.2 ลูกค้าคืน / 1.3 NC / 1.4 QC Reject / 1.5 เสียจากคลัง)</li>
+      <li>เหตุผล + ผู้ส่ง</li>
+      <li>เปลี่ยน <code>roll_type: good → bad</code></li>
+      <li>→ กลับไป <b>PHASE B (กรอ)</b></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<section>
+  <h2>📍 PHASE E: รายงาน + Dashboard</h2>
+
+  <h3>📊 Dashboard 10 แท็บ</h3>
+  <div class="grid cols-2">
+    <div class="card"><h4>📊 ภาพรวม</h4><p>KPI + Charts + Pareto สาเหตุของเสีย</p></div>
+    <div class="card"><h4>📋 รายงาน SO</h4><p>WO > SO > Lot grouped</p></div>
+    <div class="card"><h4>📦 รายงานโอนคลัง</h4><p>3 ประเภท + WO/SO column</p></div>
+    <div class="card"><h4>🏭 เครื่องจักร</h4><p>Status live + Parked jobs</p></div>
+    <div class="card"><h4>👥 ลูกค้า/สินค้า</h4><p>Top + Master list</p></div>
+    <div class="card"><h4>🔧 รายงานกรอ</h4><p>2 ระบบแยก + Pareto สาเหตุ</p></div>
+    <div class="card"><h4>📅 รายวัน</h4><p>Trend chart</p></div>
+    <div class="card"><h4>📈 เปรียบเทียบ</h4><p>10 มิติ × 7 ช่วงเวลา</p></div>
+    <div class="card"><h4>📄 ตารางข้อมูล</h4><p>Raw rolls table</p></div>
+    <div class="card"><h4>📋 Logs</h4><p>Weigh + Deletion logs</p></div>
+  </div>
+
+  <h3 style="margin-top:24px">📚 ประวัติผลิต (History)</h3>
+  <ul class="fancy">
+    <li>Production tab — WO > SO > Lot grouped + สถานะโอน pills</li>
+    <li>Machine Log — กิจกรรมเครื่อง</li>
+    <li>Deletion Log — กลุ่มตาม Lot</li>
+  </ul>
+</section>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<section>
+  <h2>🗄️ Database Schema (12 ตาราง)</h2>
+
+  <h3>📋 Master Data</h3>
+  <div class="grid cols-4">
+    <div class="card"><h4>customers</h4><p style="font-size:13px">ลูกค้า</p></div>
+    <div class="card"><h4>products</h4><p style="font-size:13px">สินค้า + Item Code</p></div>
+    <div class="card"><h4>machine_profiles</h4><p style="font-size:13px">เครื่อง + งานปัจจุบัน</p></div>
+    <div class="card"><h4>app_settings</h4><p style="font-size:13px">PIN + Config</p></div>
+  </div>
+
+  <h3>🏭 Operational Data</h3>
+  <div class="grid cols-2">
+    <div class="card warning">
+      <h4>production_rolls (Fact Table)</h4>
+      <p style="font-size:13px">ม้วนทุกใบ — เป็นหัวใจของระบบ</p>
+      <ul class="fancy" style="font-size:12px;margin-top:8px">
+        <li>roll_no, roll_type, weight</li>
+        <li>machine_no, lot_no, work_order, sale_order</li>
+        <li>item_code, product_code, mat_code</li>
+        <li>customer, product_name, width_cm, thick_mc</li>
+        <li>transferred, transfer_doc_id</li>
+        <li>rework_status, rework_source_id, rework_dest_id</li>
+        <li>inbound_type, is_legacy, remark</li>
+      </ul>
+    </div>
+    <div>
+      <div class="card"><h4>parked_jobs</h4><p style="font-size:13px">งานจอด (snapshot)</p></div>
+      <div class="card" style="margin-top:12px"><h4>transfer_documents</h4><p style="font-size:13px">ใบโอนเข้าคลัง</p></div>
+      <div class="card" style="margin-top:12px"><h4>sales_orders</h4><p style="font-size:13px">ใบสั่งขาย</p></div>
+    </div>
+  </div>
+
+  <h3>📊 Analytics</h3>
+  <div class="grid cols-3">
+    <div class="card"><h4>job_summaries</h4><p style="font-size:13px">สรุปงานปิด</p></div>
+    <div class="card"><h4>weigh_logs</h4><p style="font-size:13px">log ทุกการชั่ง</p></div>
+    <div class="card"><h4>roll_deletion_logs</h4><p style="font-size:13px">log การลบ + ส่งกลับกรอ</p></div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<section>
+  <h2>🔗 ความสัมพันธ์ข้อมูล</h2>
+  <div class="tree">
+<span class="y">production_rolls</span> (ม้วนหลัก)
+    │
+    ├─→ transfer_doc_id  ─→ <span class="g">transfer_documents</span>
+    │
+    ├─→ rework_source_id ─→ <span class="y">production_rolls</span> (ตัวเอง)
+    │   rework_dest_id ────┘  (ม้วนใหม่ที่กรอออกมา)
+    │
+    └─→ machine_no + lot_no ─→ จับคู่กับ:
+                                  • <span class="b">job_summaries</span>
+                                  • <span class="b">weigh_logs</span>
+                                  • <span class="r">roll_deletion_logs</span>
+
+<span class="m">ลำดับชั้น:</span>
+  <span class="y">WO (work_order)</span> → <span class="b">SO (sale_order)</span> → <span class="p">Lot</span> → <span class="g">ม้วน</span>
+        │                     │              │
+        ใหญ่ที่สุด          ใบสั่งขาย     กลุ่มย่อย
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<section>
+  <h2>🎨 Color Coding (ใช้ทั้งระบบ)</h2>
+
+  <div class="grid cols-2">
+    <div>
+      <h3>ลำดับชั้น</h3>
+      <div class="legend-row"><div class="swatch" style="background:linear-gradient(135deg,#f59e0b,#f97316)"></div> <b>WO</b> — กลุ่มงานใหญ่สุด</div>
+      <div class="legend-row"><div class="swatch" style="background:#3b82f6"></div> <b>SO</b> — ใบสั่งขาย</div>
+      <div class="legend-row"><div class="swatch" style="background:#9ca3af"></div> <b>Lot</b> — กลุ่มย่อย</div>
+    </div>
+    <div>
+      <h3>ประเภทม้วน</h3>
+      <div class="legend-row"><div class="swatch" style="background:#10b981"></div> <b>FG</b> — ม้วนดี (ขายได้)</div>
+      <div class="legend-row"><div class="swatch" style="background:#f97316"></div> <b>ม้วนกรอ</b> — ต้องแก้ไข</div>
+      <div class="legend-row"><div class="swatch" style="background:#ef4444"></div> <b>เศษเสีย</b> — ทำลาย/รีไซเคิล</div>
+    </div>
+  </div>
+
+  <h3 style="margin-top:24px">Yield</h3>
+  <div class="grid cols-3">
+    <div class="card success"><h4>≥ 90%</h4><p>ดีมาก</p></div>
+    <div class="card warning"><h4>80 - 89%</h4><p>ปานกลาง</p></div>
+    <div class="card danger"><h4>&lt; 80%</h4><p>ต้องปรับปรุง</p></div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<section>
+  <h2>🎯 Flow สรุป — ม้วน 1 ม้วน เดินทางอย่างไร</h2>
+
+  <div class="tree">
+1. <span class="b">🌬 เป่า:</span> ผลิต → ชั่ง → ฉลาก
+                ↓
+2. <span class="g">📦 โอน:</span> Transfer → คลัง
+                ↓
+       ┌────────┴────────┐
+       ▼                 ▼
+3a. <span class="g">✅ ขายให้</span>      3b. <span class="r">🚨 พบปัญหา</span>
+    ลูกค้า                ↓
+                  <span class="y">🔧 ส่งกลับกรอ</span>
+                          ↓
+                  4. <span class="m">🔁 กรอ:</span> เริ่มกรอ → ชั่งใหม่ (Lot ใหม่)
+                          ↓
+                  ┌───────┴───────┐
+                  ▼               ▼
+                <span class="g">✓ สำเร็จ</span>        <span class="r">🗑 แก้ไม่ได้</span>
+                  ↓               ↓
+              <span class="g">📦 โอนคลัง</span>     คืนเป่า → เศษ
+                  ↓
+                3a. ขายให้ลูกค้า ✓
+
+<span class="p">ทุก step → บันทึก log → แสดงใน Dashboard</span>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<section>
+  <h2>📍 กฎสำคัญ (Key Rules)</h2>
+
+  <table>
+    <tr><th width="5%">#</th><th>กฎ</th><th>รายละเอียด</th></tr>
+    <tr>
+      <td><b>1</b></td>
+      <td>🆔 <b>Lot No อัตโนมัติ</b></td>
+      <td><code>YY + Machine + CustCode(4) + MM</code> → ตัวอย่าง: <code>69BL01000105</code></td>
+    </tr>
+    <tr>
+      <td><b>2</b></td>
+      <td>📐 <b>WO > SO > Lot</b></td>
+      <td>ลำดับชั้นใช้ทั้งระบบ (Dashboard, History, Transfer, Rework)</td>
+    </tr>
+    <tr>
+      <td><b>3</b></td>
+      <td>⚠ <b>บังคับเหตุผล</b></td>
+      <td>ม้วนกรอ + เศษเสีย ต้องระบุ remark เพื่อ Pareto analysis</td>
+    </tr>
+    <tr>
+      <td><b>4</b></td>
+      <td>🔢 <b>Roll No อุดเลขที่ลบ</b></td>
+      <td>ม้วน 1,2,3,5 → ม้วนใหม่จะเป็น #4 (กัน gap)</td>
+    </tr>
+    <tr>
+      <td><b>5</b></td>
+      <td>🔧 <b>2 ระบบกรอ</b></td>
+      <td>จากเป่า (auto) vs นอกระบบ (manual) — แยกบันทึก แยกแสดงผล</td>
+    </tr>
+    <tr>
+      <td><b>6</b></td>
+      <td>📄 <b>3 ประเภทโอน</b></td>
+      <td>FG (น้ำเงิน) / กรอ (ส้ม) / เศษ (แดง) — ใบโอนแยกชัดเจน</td>
+    </tr>
+  </table>
+</section>
+
+<footer style="text-align:center;padding:30px;color:#6b7280;font-size:12px;margin-top:30px">
+  <p>📝 Mind Map ระบบ BWP — สร้าง <span id="date"></span></p>
+  <p style="margin-top:6px">© Best World Inter Plas Co., Ltd.</p>
+</footer>
+
+</div>
+
+<script>
+  document.getElementById('date').textContent = new Date().toLocaleDateString('th-TH', {
+    year: 'numeric', month: 'long', day: 'numeric'
+  })
+</script>
+
+</body>
+</html>

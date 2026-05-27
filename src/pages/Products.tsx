@@ -301,7 +301,6 @@ function CustomerDetailModal({ customer, products, customers, onClose }: {
                 <thead className="bg-slate-800 text-slate-400 text-[11px] uppercase">
                   <tr>
                     <th className="text-left px-3 py-2">Item Code</th>
-                    <th className="text-left px-3 py-2">Product Code</th>
                     <th className="text-left px-3 py-2">ชื่อสินค้า</th>
                     <th className="text-left px-3 py-2">ขนาด</th>
                     <th className="text-right px-3 py-2">จัดการ</th>
@@ -311,7 +310,6 @@ function CustomerDetailModal({ customer, products, customers, onClose }: {
                   {products.map(p => (
                     <tr key={p.id} className="border-t border-slate-700/50 hover:bg-slate-700/30">
                       <td className="px-3 py-2 font-mono text-brand-400 font-bold">{p.item_code}</td>
-                      <td className="px-3 py-2 text-slate-400 font-mono text-xs">{p.product_code || '—'}</td>
                       <td className="px-3 py-2 text-white">{p.product_name || '—'}</td>
                       <td className="px-3 py-2 text-slate-300">{p.width_cm ? `${p.width_cm}×${p.thick_mc}mc` : '—'}</td>
                       <td className="px-3 py-2 text-right">
@@ -368,7 +366,7 @@ function ProductsTab({ products, customers, loading, onChanged }: {
 
   function exportCSV() {
     // จัดกลุ่มตามลูกค้า — แถวแรกของแต่ละลูกค้าแสดงข้อมูลเต็ม, แถวถัดไปเว้นว่าง
-    const header = ['รหัสลูกค้า','ชื่อลูกค้า','ที่อยู่','Item Code','Product Code','ชื่อสินค้า','กว้าง','หนา']
+    const header = ['รหัสลูกค้า','ชื่อลูกค้า','ที่อยู่','Item Code','ชื่อสินค้า','กว้าง','หนา']
     const sorted = [...products].sort((a, b) => (a.cust_code || '').localeCompare(b.cust_code || ''))
     const lines: string[] = [header.join(',')]
     let prevCust = ''
@@ -378,7 +376,7 @@ function ProductsTab({ products, customers, loading, onChanged }: {
         isNewCust ? p.cust_code     : '',
         isNewCust ? (p.cust_name    ?? '') : '',
         isNewCust ? (p.cust_address ?? '') : '',
-        p.item_code, p.product_code, p.product_name, p.width_cm, p.thick_mc,
+        p.item_code, p.product_name, p.width_cm, p.thick_mc,
       ].map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')
       lines.push(row)
       prevCust = p.cust_code
@@ -482,7 +480,7 @@ function ProductEditModal({ product, customers, onClose }: { product: Product; c
         <div className="px-5 py-4 space-y-3 max-h-[70vh] overflow-y-auto">
           <div className="grid grid-cols-2 gap-2">
             <Field label="Item Code *"     value={p.item_code}     onChange={v => setP({ ...p, item_code: v })} ph="60004224"/>
-            <Field label="Product Code"   value={p.product_code} onChange={v => setP({ ...p, product_code: v })} ph="60004224"/>
+            {/* Product Code — removed */}
             <div className="col-span-2">
               <Field label="ชื่อสินค้า" value={p.product_name} onChange={v => setP({ ...p, product_name: v })} ph="PET 1.45L RED SHRINK"/>
             </div>
@@ -614,7 +612,7 @@ function ImportModal({ customers, onClose }: { customers: Customer[]; onClose: (
 
   function downloadTemplate() {
     const data = [
-      ['รหัสลูกค้า','ชื่อลูกค้า','ที่อยู่','Item Code','Product Code','ชื่อสินค้า','กว้าง','หนา'],
+      ['รหัสลูกค้า','ชื่อลูกค้า','ที่อยู่','Item Code','ชื่อสินค้า','กว้าง','หนา'],
       ['C-001','บริษัท ไทยน้ำทิพย์ จำกัด','123 ถนนรามคำแหง แขวงหัวหมาก เขตบางกะปิ กทม.','60001001','P001','PET 1.5L SHRINK FILM','57','80'],
       ['','','','60001002','P002','PET 600ml SHRINK FILM','45','60'],
       ['','','','60001003','P003','PET 330ml SHRINK FILM','38','55'],

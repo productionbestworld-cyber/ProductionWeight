@@ -35,6 +35,10 @@ export interface MachineProfile {
   section:     'blow' | 'print' | 'rewind'
   // Sale Order
   soNo:        string
+  // เลขใบคำสั่งผลิต (Work Order)
+  woNo:        string
+  // วันที่ส่งของ
+  deliveryDate: string  // YYYY-MM-DD
 }
 
 const EMPTY_PROFILE: MachineProfile = {
@@ -42,11 +46,11 @@ const EMPTY_PROFILE: MachineProfile = {
   itemCode:'', matCode:'', productCode:'', productName:'', widthCm:'', thickMc:'',
   lotNo:'', length:'', pcs:'', coreWeight:'1.25', inspector:'', locked:false,
   plannedQty:'', labelSize:'long', headerText:'', blankHeader:false, section:'blow',
-  soNo:'',
+  soNo:'', woNo:'', deliveryDate:'',
 }
 
 function nextMachineNo(profiles: MachineProfile[], section: string = 'blow'): string {
-  const prefix = section === 'print' ? 'PM' : section === 'rewind' ? 'RW' : 'BL'
+  const prefix = section === 'print' ? 'PM' : section === 'rewind' ? 'S' : 'BL'
   const re = new RegExp(`^${prefix}[-\\s]?(\\d+)$`, 'i')
   const nums = profiles
     .map(p => p.machine_no.match(re))
@@ -82,6 +86,8 @@ function dbToProfile(row: any): MachineProfile {
     blankHeader: row.blank_header ?? false,
     section:     (row.section     ?? 'blow') as 'blow'|'print'|'rewind',
     soNo:        row.sale_order   ?? '',
+    woNo:        row.work_order    ?? '',
+    deliveryDate: row.delivery_date ?? '',
   }
 }
 function profileToDb(p: MachineProfile) {
@@ -109,6 +115,8 @@ function profileToDb(p: MachineProfile) {
     blank_header:  p.blankHeader,
     section:       p.section,
     sale_order:    p.soNo ?? '',
+    work_order:    p.woNo ?? '',
+    delivery_date: p.deliveryDate || null,
     updated_at:    new Date().toISOString(),
   }
 }
@@ -274,7 +282,7 @@ function EditModal({ p, products, onChange, onAutoFill, onRemove, onClose }: {
             <div>
               <label className="block text-[10px] text-slate-500 mb-1">แผนก *</label>
               <div className="flex gap-1">
-                {([{key:'blow',label:'🌬 เป่า'},{key:'print',label:'🖨 พิม'},{key:'rewind',label:'🔁 กรอ'}] as const).map(s => (
+                {([{key:'blow',label:'🌬 เป่า'},{key:'print',label:'🖨 พิมพ์'},{key:'rewind',label:'🔁 กรอ'}] as const).map(s => (
                   <button key={s.key} onMouseDown={e => { e.preventDefault(); onChange('section', s.key) }}
                     className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors ${p.section===s.key?'bg-brand-600 text-white':'bg-slate-800 text-slate-400 hover:text-white'}`}>
                     {s.label}
@@ -441,14 +449,30 @@ export default function MachineSettings({ dept }: { dept?: 'blow'|'print'|'rewin
           ? data.map(dbToProfile)
           : loadProfiles()
 
-        // seed BL01..BL11 ถ้ายังไม่มี
-        const blowDefaults = Array.from({ length: 11 }, (_, i) => `BL${String(i + 1).padStart(2, '0')}`)
+        // ── ลบเครื่อง RW* เก่า (ถ้ามี) ก่อน seed S01-S04 ──
+        const legacyRW = loaded.filter(p => /^RW\d+$/i.test(p.machine_no))
+        if (legacyRW.length > 0) {
+          for (const rw of legacyRW) {
+            await supabase.from('machine_profiles').delete().eq('machine_no', rw.machine_no)
+          }
+          // เอาออกจาก list ในหน่วยความจำด้วย
+          for (const rw of legacyRW) {
+            const i = loaded.findIndex(p => p.machine_no === rw.machine_no)
+            if (i >= 0) loaded.splice(i, 1)
+          }
+        }
+
+        // seed BL01..BL11 + S01..S04 ถ้ายังไม่มี
+        const blowDefaults   = Array.from({ length: 11 }, (_, i) => `BL${String(i + 1).padStart(2, '0')}`)
+        const rewindDefaults = Array.from({ length: 4 },  (_, i) => `S${String(i + 1).padStart(2, '0')}`)
         const have = new Set(loaded.map(p => p.machine_no.toUpperCase()))
-        const missing = blowDefaults.filter(name => !have.has(name))
-        if (missing.length > 0) {
-          const newProfiles = missing.map(name => ({ ...EMPTY_PROFILE, machine_no: name, section: 'blow' as const }))
+        const toSeed: { name: string; section: 'blow' | 'rewind' }[] = [
+          ...blowDefaults.filter(n => !have.has(n)).map(n => ({ name: n, section: 'blow' as const })),
+          ...rewindDefaults.filter(n => !have.has(n)).map(n => ({ name: n, section: 'rewind' as const })),
+        ]
+        if (toSeed.length > 0) {
+          const newProfiles = toSeed.map(({ name, section }) => ({ ...EMPTY_PROFILE, machine_no: name, section }))
           loaded.push(...newProfiles)
-          // upsert ไป supabase ทันที (ไม่รอกด "บันทึกทั้งหมด")
           for (const np of newProfiles) {
             await supabase.from('machine_profiles').upsert(profileToDb(np), { onConflict: 'machine_no' })
           }
@@ -621,7 +645,7 @@ export default function MachineSettings({ dept }: { dept?: 'blow'|'print'|'rewin
           <div className="space-y-3">
             {secProfiles.length === 0 ? (
               <div className="bg-slate-900 border border-slate-800 rounded-2xl py-12 text-center">
-                <p className="text-slate-500 text-sm">ยังไม่มีเครื่อง{sec==='blow'?'เป่า':sec==='print'?'พิม':'กรอ'}</p>
+                <p className="text-slate-500 text-sm">ยังไม่มีเครื่อง{sec==='blow'?'เป่า':sec==='print'?'พิมพ์':'กรอ'}</p>
                 <button onClick={() => openAddModal(sec)} className="mt-3 text-brand-400 text-xs hover:text-brand-300">+ เพิ่มเครื่องแรก</button>
               </div>
             ) : (
@@ -634,7 +658,7 @@ export default function MachineSettings({ dept }: { dept?: 'blow'|'print'|'rewin
             )}
             <button onClick={() => openAddModal(sec)}
               className="w-full border-2 border-dashed border-slate-700 hover:border-brand-500 text-slate-500 hover:text-brand-400 py-3 rounded-2xl text-sm flex items-center justify-center gap-2 transition-colors">
-              <Plus size={15}/> เพิ่มเครื่อง{sec === 'blow' ? 'เป่า' : sec === 'print' ? 'พิม' : 'กรอ'}
+              <Plus size={15}/> เพิ่มเครื่อง{sec === 'blow' ? 'เป่า' : sec === 'print' ? 'พิมพ์' : 'กรอ'}
             </button>
           </div>
         </>)

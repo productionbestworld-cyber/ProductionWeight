@@ -28,6 +28,12 @@ export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   const [loadingDel,  setLoadingDel]  = useState(false)
   const [machineLog,  setMachineLog]  = useState<any[]>([])
   const [loadingLog,  setLoadingLog]  = useState(false)
+  // อัพ transfer status ต่อ (machine_no|lot_no) ดึงจาก production_rolls
+  const [xferStatus, setXferStatus] = useState<Record<string, {
+    good:  { total: number; done: number; kg: number; doneKg: number }
+    bad:   { total: number; done: number; kg: number; doneKg: number }
+    scrap: { total: number; done: number; kg: number; doneKg: number }
+  }>>({})
   const [machineProfiles, setMachineProfiles] = useState<Record<string,string>>({})
 
   async function loadMachineLog() {
@@ -63,6 +69,34 @@ export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
     const { data } = await q
     setSummaries(data ?? [])
     setLoading(false)
+
+    // ── โหลดสถานะการโอนของ rolls — รวมตาม (machine_no | lot_no) ──
+    if (data && data.length > 0) {
+      const lots = [...new Set(data.map(s => s.lot_no).filter(Boolean))] as string[]
+      if (lots.length > 0) {
+        const { data: rolls } = await supabase.from('production_rolls')
+          .select('machine_no,lot_no,roll_type,weight,transferred')
+          .in('lot_no', lots)
+        if (rolls) {
+          const map: typeof xferStatus = {}
+          const empty = () => ({ total: 0, done: 0, kg: 0, doneKg: 0 })
+          for (const r of rolls) {
+            const k = `${r.machine_no}|${r.lot_no}`
+            if (!map[k]) map[k] = { good: empty(), bad: empty(), scrap: empty() }
+            const kind: 'good'|'bad'|'scrap' =
+              r.roll_type === 'good' ? 'good' :
+              r.roll_type === 'bad'  ? 'bad'  : 'scrap'
+            map[k][kind].total  += 1
+            map[k][kind].kg     += r.weight ?? 0
+            if (r.transferred) {
+              map[k][kind].done   += 1
+              map[k][kind].doneKg += r.weight ?? 0
+            }
+          }
+          setXferStatus(map)
+        }
+      }
+    }
   }
   useEffect(() => { load() }, [dateFrom, dateTo, dept])
 
@@ -94,10 +128,10 @@ export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
 
   function exportCSV() {
     if (filtered.length === 0) return
-    const headers = ['วันที่ปิด','เครื่อง','ลูกค้า','รหัสสินค้า','สินค้า','Mat Code','Lot','สั่ง (kg)','ผลิตดี (kg)','ม้วนดี','กรอ (kg)','เศษ (kg)','โอน (kg)','Yield%','ผู้ปิด']
+    const headers = ['วันที่ปิด','เครื่อง','ลูกค้า','Item Code','สินค้า','Mat Code','Lot','สั่ง (kg)','ผลิตดี (kg)','ม้วนดี','กรอ (kg)','เศษ (kg)','โอน (kg)','Yield%','ผู้ปิด']
     const rows = filtered.map(s => [
       fmtDateTime(s.closed_at), s.machine_no, s.customer,
-      s.product_code ?? '', s.product_name,
+      s.item_code ?? '', s.product_name,
       s.mat_code, s.lot_no,
       s.planned_qty, s.good_kg, s.good_rolls, s.bad_kg, s.scrap_kg, s.transferred_kg,
       s.yield_pct + '%', s.closed_by
@@ -291,7 +325,7 @@ export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
           </div>
         </div>
 
-        {/* Table */}
+        {/* Production History — grouped WO > SO > Lot */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
           {loading ? (
             <div className="py-16 text-center text-slate-500">กำลังโหลด...</div>
@@ -301,39 +335,11 @@ export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
               <p className="text-slate-500">ไม่พบข้อมูล</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-800 bg-slate-800/30 text-[10px]">
-                    {['ปิดเมื่อ','เครื่อง','ลูกค้า','สินค้า','Lot','สั่ง','ผลิตดี','กรอ','เศษ','Yield','ผู้ปิด',''].map(h=>(
-                      <th key={h} className="px-3 py-2 text-left text-slate-500 font-semibold uppercase tracking-wider">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/50">
-                  {filtered.map(s => (
-                    <tr key={s.id} className="hover:bg-slate-800/40 cursor-pointer" onClick={() => openDetail(s)}>
-                      <td className="px-3 py-2.5 text-slate-300 text-xs">{fmtDate(s.closed_at)}</td>
-                      <td className="px-3 py-2.5"><span className="text-[10px] bg-brand-500/20 text-brand-300 font-bold px-1.5 py-0.5 rounded">{s.machine_no}</span></td>
-                      <td className="px-3 py-2.5 text-slate-300 text-xs truncate max-w-[120px]">{s.customer}</td>
-                      <td className="px-3 py-2.5 text-slate-400 text-xs truncate max-w-[140px]">{s.product_name}</td>
-                      <td className="px-3 py-2.5 text-slate-500 text-xs font-mono">{s.lot_no?.slice(-6) ?? '—'}</td>
-                      <td className="px-3 py-2.5 text-slate-300 text-xs">{fmt(s.planned_qty,0)}</td>
-                      <td className="px-3 py-2.5 text-green-300 font-black">{fmt(s.good_kg)}</td>
-                      <td className="px-3 py-2.5 text-orange-300 text-xs">{fmt(s.bad_kg)}</td>
-                      <td className="px-3 py-2.5 text-amber-300 text-xs">{fmt(s.scrap_kg)}</td>
-                      <td className="px-3 py-2.5">
-                        <span className={`text-xs font-bold ${(s.yield_pct??0)>=95?'text-green-300':(s.yield_pct??0)>=85?'text-amber-300':'text-red-300'}`}>{s.yield_pct ?? 0}%</span>
-                      </td>
-                      <td className="px-3 py-2.5 text-slate-400 text-xs">{s.closed_by}</td>
-                      <td className="px-3 py-2.5 text-right">
-                        <span className="text-slate-600 text-[10px]">ดูรายละเอียด →</span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ProductionGrouped
+              summaries={filtered}
+              xferStatus={xferStatus}
+              onOpenDetail={openDetail}
+            />
           )}
         </div>
       </>}
@@ -455,6 +461,42 @@ export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                 <div className="flex justify-between"><span className="text-slate-500">โอนเข้าคลัง</span><b className="text-green-300">{fmt(selected.transferred_kg)} Kgs.</b></div>
                 <div className="flex justify-between"><span className="text-slate-500">ผู้ปิดงาน</span><b className="text-white">{selected.closed_by}</b></div>
               </div>
+
+              {/* ── สถานะการโอนแยกประเภท ─────────────────────────── */}
+              {(() => {
+                const xs = xferStatus[`${selected.machine_no}|${selected.lot_no}`]
+                if (!xs) return null
+                const card = (kind: 'good'|'bad'|'scrap', label: string, unit: string, color: string) => {
+                  const st = xs[kind]
+                  if (!st || st.total === 0) return null
+                  const isFull = st.done === st.total
+                  const isNone = st.done === 0
+                  const bg     = isFull ? 'bg-green-500/10 border-green-500/30' : isNone ? 'bg-red-500/10 border-red-500/30' : 'bg-amber-500/10 border-amber-500/30'
+                  const status = isFull ? '✓ โอนครบแล้ว' : isNone ? '✗ ยังไม่โอน' : `◐ โอนแล้วบางส่วน`
+                  return (
+                    <div key={kind} className={`border rounded-xl p-3 ${bg}`}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className={`text-xs font-bold ${color}`}>{label}</span>
+                        <span className={`text-[10px] font-bold ${isFull ? 'text-green-300' : isNone ? 'text-red-300' : 'text-amber-300'}`}>{status}</span>
+                      </div>
+                      <div className="flex items-baseline justify-between">
+                        <span className="text-white text-base font-black">{st.done}<span className="text-slate-500 text-xs font-normal">/{st.total} {unit}</span></span>
+                        <span className="text-slate-400 text-xs">{fmt(st.doneKg)} / {fmt(st.kg)} Kg</span>
+                      </div>
+                    </div>
+                  )
+                }
+                return (
+                  <div>
+                    <p className="text-slate-400 text-xs font-semibold mb-2">📦 สถานะการโอนเข้าคลัง</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {card('good',  '✅ ม้วนดี (FG)', 'ม้วน', 'text-green-300')}
+                      {card('bad',   '🔄 ม้วนกรอ',     'ม้วน', 'text-orange-300')}
+                      {card('scrap', '🗑 เศษเสีย',     'ถุง',  'text-red-300')}
+                    </div>
+                  </div>
+                )
+              })()}
 
               {/* Rolls list */}
               {detailRolls.length > 0 && (
@@ -597,6 +639,184 @@ function DeletedLogsByLot({ logs }: { logs: any[] }) {
                 </table>
               </div>
             )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Production History grouped WO > SO > Lot ────────────────────────
+function ProductionGrouped({ summaries, xferStatus, onOpenDetail }: {
+  summaries: any[]
+  xferStatus: Record<string, any>
+  onOpenDetail: (s: any) => void
+}) {
+  const [open, setOpen] = useState<Record<string, boolean>>({})
+
+  const woList = useMemo(() => {
+    const woMap = new Map<string, Map<string, Map<string, any[]>>>()
+    for (const s of summaries) {
+      const wo  = (s.work_order ?? '').trim() || '(ไม่ระบุ WO)'
+      const so  = (s.sale_order ?? '').trim() || '(ไม่ระบุ SO)'
+      const lot = s.lot_no ?? '(ไม่ระบุ Lot)'
+      if (!woMap.has(wo)) woMap.set(wo, new Map())
+      if (!woMap.get(wo)!.has(so)) woMap.get(wo)!.set(so, new Map())
+      if (!woMap.get(wo)!.get(so)!.has(lot)) woMap.get(wo)!.get(so)!.set(lot, [])
+      woMap.get(wo)!.get(so)!.get(lot)!.push(s)
+    }
+    return [...woMap.entries()].map(([wo, soMap]) => {
+      const sos = [...soMap.entries()].map(([so, lotMap]) => {
+        const lots = [...lotMap.entries()].map(([lot, jobs]) => ({
+          lot, jobs,
+          goodKg: jobs.reduce((s, x) => s + (x.good_kg ?? 0), 0),
+          badKg:  jobs.reduce((s, x) => s + (x.bad_kg ?? 0), 0),
+          scrapKg: jobs.reduce((s, x) => s + (x.scrap_kg ?? 0), 0),
+        }))
+        return {
+          so, lots,
+          goodKg: lots.reduce((s, x) => s + x.goodKg, 0),
+          badKg:  lots.reduce((s, x) => s + x.badKg, 0),
+          scrapKg: lots.reduce((s, x) => s + x.scrapKg, 0),
+          jobs:   lots.reduce((s, x) => s + x.jobs.length, 0),
+        }
+      })
+      const all = sos.flatMap(s => s.lots.flatMap(l => l.jobs))
+      const goodKg = sos.reduce((s, x) => s + x.goodKg, 0)
+      const badKg  = sos.reduce((s, x) => s + x.badKg, 0)
+      const scrapKg = sos.reduce((s, x) => s + x.scrapKg, 0)
+      const total = goodKg + badKg + scrapKg
+      return {
+        wo, sos,
+        goodKg, badKg, scrapKg, total,
+        jobs: sos.reduce((s, x) => s + x.jobs, 0),
+        latest: all.reduce((mx, x) => x.closed_at > mx ? x.closed_at : mx, all[0]?.closed_at ?? ''),
+        customers: [...new Set(all.map(x => x.customer).filter(Boolean))] as string[],
+        machines:  [...new Set(all.map(x => x.machine_no).filter(Boolean))] as string[],
+        products:  [...new Set(all.map(x => x.product_name).filter(Boolean))] as string[],
+        yieldPct: total ? (goodKg / total * 100) : 0,
+      }
+    }).sort((a, b) => b.latest.localeCompare(a.latest))
+  }, [summaries])
+
+  const pill = (xs: any, kind: 'good'|'bad'|'scrap', label: string) => {
+    const st = xs?.[kind]
+    if (!st || st.total === 0) return null
+    const isFull = st.done === st.total
+    const isNone = st.done === 0
+    const cls = isFull ? 'bg-green-500/20 text-green-300 border-green-500/40'
+              : isNone ? 'bg-red-500/15 text-red-300 border-red-500/30'
+              : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+    return (
+      <span key={kind} className={`text-[9px] px-1.5 py-0.5 rounded border font-bold whitespace-nowrap ${cls}`}>
+        {label} {st.done}/{st.total} {isFull ? '✓' : isNone ? '✗' : '◐'}
+      </span>
+    )
+  }
+
+  return (
+    <div className="divide-y divide-slate-800/50">
+      {woList.map(wg => {
+        const woKey = `wo:${wg.wo}`
+        const woOpen = open[woKey] ?? true
+        return (
+          <div key={wg.wo}>
+            {/* WO LEVEL */}
+            <button onClick={() => setOpen(p => ({ ...p, [woKey]: !woOpen }))}
+              className="w-full text-left px-4 py-3 hover:bg-slate-800/40 transition-colors border-l-4 border-amber-500">
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <span className="text-amber-400 text-sm">{woOpen ? '▼' : '▶'}</span>
+                <span className="text-xs font-black px-3 py-1 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow">📋 WO {wg.wo}</span>
+                <span className="text-[10px] bg-slate-700 text-slate-200 px-2 py-0.5 rounded font-bold">{wg.sos.length} SO · {wg.jobs} งาน</span>
+                <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${wg.yieldPct >= 90 ? 'bg-green-500/20 text-green-300' : wg.yieldPct >= 80 ? 'bg-amber-500/20 text-amber-300' : 'bg-red-500/20 text-red-300'}`}>
+                  Yield {wg.yieldPct.toFixed(1)}%
+                </span>
+                <span className="ml-auto text-green-300 font-black text-sm">FG {fmt(wg.goodKg)} Kg</span>
+              </div>
+              <div className="text-xs text-slate-500 flex gap-3 flex-wrap">
+                {wg.customers.length > 0 && <span>👥 {wg.customers.join(', ')}</span>}
+                {wg.machines.length > 0 && <span>🏭 {wg.machines.join(', ')}</span>}
+                {wg.products[0] && <span className="truncate max-w-[260px]">📦 {wg.products.join(', ')}</span>}
+              </div>
+            </button>
+
+            {woOpen && wg.sos.map(sg => {
+              const soKey = `${woKey}|so:${sg.so}`
+              const soOpen = open[soKey] ?? true
+              return (
+                <div key={sg.so} className="ml-5 border-l-2 border-blue-500/30">
+                  <button onClick={() => setOpen(p => ({ ...p, [soKey]: !soOpen }))}
+                    className="w-full text-left px-4 py-2 bg-slate-900/40 hover:bg-slate-800/40 transition-colors">
+                    <div className="flex items-center gap-2">
+                      <span className="text-blue-400 text-xs">{soOpen ? '▼' : '▶'}</span>
+                      <span className="text-xs font-bold px-2 py-0.5 rounded bg-blue-500/30 text-blue-200">SO {sg.so}</span>
+                      <span className="text-[10px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded">{sg.lots.length} Lot · {sg.jobs} งาน</span>
+                      <span className="ml-auto text-slate-300 font-bold text-xs">FG {fmt(sg.goodKg)} Kg · กรอ {fmt(sg.badKg)} · เศษ {fmt(sg.scrapKg)}</span>
+                    </div>
+                  </button>
+
+                  {soOpen && sg.lots.map(lg => {
+                    const lotKey = `${soKey}|lot:${lg.lot}`
+                    const lotOpen = open[lotKey] ?? true
+                    return (
+                      <div key={lg.lot} className="ml-5 border-l-2 border-slate-700">
+                        <button onClick={() => setOpen(p => ({ ...p, [lotKey]: !lotOpen }))}
+                          className="w-full text-left px-4 py-1.5 hover:bg-slate-800/30 transition-colors">
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-500 text-xs">{lotOpen ? '▼' : '▶'}</span>
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-700 text-slate-200">Lot {lg.lot}</span>
+                            <span className="text-[10px] text-slate-500">{lg.jobs.length} งาน · {fmt(lg.goodKg)} Kg</span>
+                          </div>
+                        </button>
+
+                        {lotOpen && (
+                          <div className="px-3 pb-2 overflow-x-auto">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="text-[9px] text-slate-500 uppercase tracking-wider border-b border-slate-800">
+                                  {['ปิดเมื่อ','เครื่อง','ลูกค้า','สินค้า','สั่ง','FG','กรอ','เศษ','Yield','สถานะโอน','ผู้ปิด'].map(h => (
+                                    <th key={h} className="px-2 py-1 text-left font-semibold whitespace-nowrap">{h}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-800/40">
+                                {lg.jobs.map(s => {
+                                  const xs = xferStatus[`${s.machine_no}|${s.lot_no}`]
+                                  return (
+                                    <tr key={s.id} className="hover:bg-slate-800/40 cursor-pointer" onClick={() => onOpenDetail(s)}>
+                                      <td className="px-2 py-1.5 text-slate-300 text-xs whitespace-nowrap">{fmtDate(s.closed_at)}</td>
+                                      <td className="px-2 py-1.5"><span className="text-[10px] bg-brand-500/20 text-brand-300 font-bold px-1.5 py-0.5 rounded">{s.machine_no}</span></td>
+                                      <td className="px-2 py-1.5 text-slate-300 text-xs truncate max-w-[120px]">{s.customer}</td>
+                                      <td className="px-2 py-1.5 text-slate-400 text-xs truncate max-w-[140px]">{s.product_name}</td>
+                                      <td className="px-2 py-1.5 text-slate-300 text-xs">{fmt(s.planned_qty,0)}</td>
+                                      <td className="px-2 py-1.5 text-green-300 font-black">{fmt(s.good_kg)}</td>
+                                      <td className="px-2 py-1.5 text-orange-300 text-xs">{fmt(s.bad_kg)}</td>
+                                      <td className="px-2 py-1.5 text-amber-300 text-xs">{fmt(s.scrap_kg)}</td>
+                                      <td className="px-2 py-1.5">
+                                        <span className={`text-xs font-bold ${(s.yield_pct??0)>=95?'text-green-300':(s.yield_pct??0)>=85?'text-amber-300':'text-red-300'}`}>{s.yield_pct ?? 0}%</span>
+                                      </td>
+                                      <td className="px-2 py-1.5">
+                                        <div className="flex gap-1 flex-wrap">
+                                          {pill(xs, 'good',  'FG')}
+                                          {pill(xs, 'bad',   'กรอ')}
+                                          {pill(xs, 'scrap', 'เศษ')}
+                                          {!xs && <span className="text-slate-600 text-[10px]">—</span>}
+                                        </div>
+                                      </td>
+                                      <td className="px-2 py-1.5 text-slate-400 text-xs">{s.closed_by}</td>
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })}
           </div>
         )
       })}

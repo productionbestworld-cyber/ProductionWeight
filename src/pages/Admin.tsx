@@ -28,9 +28,17 @@ const adminSess     = 'bwp_admin_unlocked'
 const deptSess      = (d: Dept) => `bwp_dept_${d}_unlocked`
 
 export function isAdminUnlocked() { return sessionStorage.getItem(adminSess) === '1' }
+export function unlockAdmin()     {
+  sessionStorage.setItem(adminSess, '1')
+  // 🔑 Admin = master key — ปลดล็อกทุกแผนกอัตโนมัติ
+  ;(['blow','print','rewind'] as const).forEach(d => sessionStorage.setItem(deptSess(d), '1'))
+}
 export function lockAdmin()       { sessionStorage.removeItem(adminSess) }
 
-export function isDeptUnlocked(d: Dept) { return sessionStorage.getItem(deptSess(d)) === '1' }
+// Dept unlock: ถ้า admin ปลดแล้วถือว่า dept ปลดด้วย
+export function isDeptUnlocked(d: Dept) {
+  return sessionStorage.getItem(deptSess(d)) === '1' || isAdminUnlocked()
+}
 export function unlockDept(d: Dept)     { sessionStorage.setItem(deptSess(d), '1') }
 export function lockDept(d: Dept)       { sessionStorage.removeItem(deptSess(d)) }
 export function lockAllDepts() {
@@ -41,8 +49,8 @@ export function lockAllDepts() {
 function PinModal({ title, color, fetchReal, onSuccess, onClose }: {
   title: string
   color: 'amber' | 'blue'
-  fetchReal: () => Promise<string>
-  onSuccess: () => void
+  fetchReal: () => Promise<string>           // อาจคืน "p1|p2" — รับได้หลาย PIN
+  onSuccess: (enteredPin?: string) => void
   onClose: () => void
 }) {
   const [pin, setPin] = useState('')
@@ -55,7 +63,9 @@ function PinModal({ title, color, fetchReal, onSuccess, onClose }: {
     setLoading(true)
     const real = await fetchReal()
     setLoading(false)
-    if (pin === real) onSuccess()
+    // รองรับหลาย PIN (separated by |) — match ตัวใดตัวหนึ่งก็พอ
+    const valid = real.split('|').map(s => s.trim()).filter(Boolean)
+    if (valid.includes(pin)) onSuccess(pin)
     else { setErr('PIN ไม่ถูกต้อง'); setPin('') }
   }
 
@@ -93,13 +103,14 @@ export function PinGate({ onUnlock, onClose }: { onUnlock: () => void; onClose: 
       title="ใส่ PIN เพื่อเข้า Admin"
       color="amber"
       fetchReal={fetchAdminPin}
-      onSuccess={() => { sessionStorage.setItem(adminSess, '1'); onUnlock() }}
+      onSuccess={() => { unlockAdmin(); onUnlock() }}
       onClose={onClose}
     />
   )
 }
 
 // ─── Department PIN Gate ────────────────────────────────────────────────────
+// รองรับ admin PIN ด้วย — ถ้าใส่ admin PIN จะปลดทุกแผนกพร้อมกัน
 export function DeptPinGate({ dept, onUnlock, onClose }: {
   dept: Dept; onUnlock: () => void; onClose: () => void
 }) {
@@ -107,8 +118,21 @@ export function DeptPinGate({ dept, onUnlock, onClose }: {
     <PinModal
       title={`ใส่ PIN — ${DEPT_LABELS[dept]}`}
       color="blue"
-      fetchReal={() => fetchPin(DEPT_KEYS[dept])}
-      onSuccess={() => { unlockDept(dept); onUnlock() }}
+      fetchReal={async () => {
+        // คืน PIN ทั้งของแผนก และ admin (ใช้คั่นด้วย | เพื่อให้ PinModal match แบบ OR)
+        const [deptPin, adminPin] = await Promise.all([fetchPin(DEPT_KEYS[dept]), fetchAdminPin()])
+        return `${deptPin}|${adminPin}`
+      }}
+      onSuccess={(entered) => {
+        // ถ้าใส่ admin PIN → ปลดทุกแผนก
+        // ถ้าใส่ dept PIN → ปลดแค่แผนกนี้
+        // (ไม่รู้จากที่นี่ว่าใส่ตัวไหน — แต่ unlockAdmin จะปลดทุก dept อยู่แล้ว → safe)
+        fetchAdminPin().then(adminPin => {
+          if (entered === adminPin) unlockAdmin()
+          else unlockDept(dept)
+          onUnlock()
+        })
+      }}
       onClose={onClose}
     />
   )

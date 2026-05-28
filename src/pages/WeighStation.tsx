@@ -298,7 +298,12 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
   const W   = size === 'long' ? 165  : 76.2
   const H   = size === 'long' ? 70   : 76.2
   const win = window.open('', '_blank', `width=${Math.round(W*3.78)},height=${Math.round(H*3.78)},menubar=no,toolbar=no`)
-  if (!win) return
+  if (!win) {
+    // popup ถูก browser block — แจ้งผู้ใช้ + แนะนำให้ allow popup
+    console.warn('printLabel: popup blocked')
+    alert('⚠ Browser block popup — กรุณาอนุญาต popup ของเว็บนี้\n(ไอคอนล็อค/ขวาบนช่อง URL)\n\nม้วนถูกบันทึกแล้ว สามารถพิมพ์ใหม่ได้จากหน้า History')
+    return
+  }
 
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
   ${size === 'long' ? longHtmlFromLayout : shortHtml}
@@ -767,6 +772,21 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
       alert('กรอกข้อมูลให้ครบก่อน: ' + missing)
       return
     }
+    // ── M4: hard-check Lot ซ้ำกับงานที่มีม้วนชั่งไปแล้ว — ป้องกันยอดงานใหม่รวมกับงานเก่า ──
+    if (p.lotNo && p.machine_no) {
+      const { count } = await supabase.from('production_rolls')
+        .select('*', { count: 'exact', head: true })
+        .eq('machine_no', p.machine_no)
+        .eq('lot_no', p.lotNo)
+      if (count && count > 0) {
+        const proceed = confirm(
+          `⚠ Lot "${p.lotNo}" บนเครื่อง ${p.machine_no} มีม้วนชั่งไปแล้ว ${count} ม้วน\n\n` +
+          `ถ้ายืนยันต่อ ม้วนที่จะชั่งต่อไปจะถูกนับรวมกับ lot เดิม (เหมาะกับการรับงานต่อเท่านั้น)\n\n` +
+          `กด OK = รับช่วงต่อ lot เดิม / Cancel = แก้เป็น Lot ใหม่`
+        )
+        if (!proceed) return
+      }
+    }
     setSaving(true)
     try {
       const { error } = await supabase.from('machine_profiles').upsert({
@@ -1053,6 +1073,7 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
   const [bridgeUrl,       setBridgeUrl]       = useState(() => localStorage.getItem('bwp_bridge_url') ?? 'ws://localhost:8080')
   const wsRef             = useRef<WebSocket | null>(null)
   const wsReconnectRef    = useRef<any>(null)
+  const wsRetryCountRef   = useRef(0)
   const simModeRef        = useRef(false)   // true = ใช้ค่าจำลอง ไม่รับค่าจาก Bridge
   const [simMode, setSimMode] = useState(false)
 
@@ -1066,6 +1087,7 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
       ws.onopen = () => {
         console.log('[bridge] connected')
         localStorage.setItem('bwp_bridge_url', bridgeUrl)
+        wsRetryCountRef.current = 0  // reset backoff
       }
       ws.onmessage = (ev) => {
         try {
@@ -1090,7 +1112,10 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
       ws.onclose = () => {
         setSerialConnected(false)
         // auto-reconnect ทุก 3 วินาที
-        wsReconnectRef.current = setTimeout(connectBridge, 3000)
+        // exponential backoff: 3s, 6s, 12s, 24s, max 60s
+        const delay = Math.min(60000, 3000 * Math.pow(2, wsRetryCountRef.current))
+        wsRetryCountRef.current++
+        wsReconnectRef.current = setTimeout(connectBridge, delay)
       }
       ws.onerror = () => { setSerialConnected(false) }
     } catch (e) {
@@ -1140,6 +1165,40 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
   const [queue,      setQueue]      = useState<any[]>(loadQueue)
   const [syncing,    setSyncing]    = useState(false)
 
+  // ── เตือนถ้าผู้ใช้กำลังจะปิด tab/refresh ขณะ queue ยังค้าง ──
+  // ป้องกันข้อมูลม้วนหายเพราะ localStorage โดน clear / ใช้คอมเครื่องอื่น
+  useEffect(() => {
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      if (queue.length === 0) return
+      const msg = `⚠ ยังมีม้วน ${queue.length} ม้วนค้างใน offline queue — กดปุ่ม "💾 Export Queue" เพื่อสำรองก่อนปิด`
+      e.preventDefault()
+      e.returnValue = msg
+      return msg
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [queue.length])
+
+  // ── Export queue + failed log เป็น JSON file (กดจาก badge) ──
+  function exportQueue() {
+    const q = loadQueue()
+    const failed = (() => { try { return JSON.parse(localStorage.getItem('bwp_weigh_log_failed') || '[]') } catch { return [] } })()
+    if (!q.length && !failed.length) { alert('ไม่มีข้อมูลค้างให้ export'); return }
+    const blob = new Blob([JSON.stringify({
+      exported_at: new Date().toISOString(),
+      machine_no:  profile.machine_no,
+      lot_no:      profile.lotNo,
+      queue:       q,
+      failed_logs: failed,
+    }, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `bwp_offline_queue_${profile.machine_no}_${profile.lotNo}_${Date.now()}.json`
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   // sync queue เมื่อออนไลน์
   useEffect(() => {
     async function flushQueue() {
@@ -1149,7 +1208,19 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
       const remaining: any[] = []
       for (const item of q) {
         try {
-          const { error } = await supabase.from('production_rolls').insert(item)
+          let { error } = await supabase.from('production_rolls').insert(item)
+          // ถ้า roll_no ชน — gen ใหม่จาก DB แล้วลองอีกครั้ง
+          if (error && (error as any).code === '23505') {
+            const { data: existing } = await supabase.from('production_rolls')
+              .select('roll_no, roll_type')
+              .eq('machine_no', item.machine_no)
+              .eq('lot_no', item.lot_no)
+            const sameType = (existing ?? []).filter((x:any) => x.roll_type === item.roll_type)
+            const taken = new Set(sameType.map((x:any) => x.roll_no).filter(Boolean))
+            let n = 1; while (taken.has(n)) n++
+            const retry = await supabase.from('production_rolls').insert({ ...item, roll_no: n })
+            error = retry.error
+          }
           if (error) remaining.push(item)
         } catch { remaining.push(item) }
       }
@@ -1190,7 +1261,7 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
     return i
   }
 
-  // โหลดม้วนทั้งหมดของ machine+lot นี้
+  // โหลดม้วนทั้งหมดของ machine+lot นี้ — merge กับ offline queue เพื่อไม่ให้เลขม้วนชน
   function loadRollsForMachine() {
     supabase.from('production_rolls')
       .select('*')
@@ -1199,14 +1270,19 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
       .order('created_at', { ascending: true })
       .then(({ data, error }) => {
         if (error) { console.warn('load rolls error:', error.message); return }
-        if (!data?.length) {
-          setRollNo(1); setBadRollNo(1); return
+        // ── รวมม้วนที่ค้างใน offline queue (ของ machine+lot นี้เท่านั้น) ──
+        const offlineForThis = loadQueue()
+          .filter((q: any) => q.machine_no === profile.machine_no && q.lot_no === profile.lotNo)
+          .map((q: any) => ({ ...q, id: `offline_${q.created_at}_${q.roll_no}`, _offline: true }))
+        const merged = [...(data ?? []), ...offlineForThis]
+        if (!merged.length) {
+          setRollNo(1); setBadRollNo(1); setWeighedRolls([]); setWeighedKg(0); return
         }
-        const goodRolls = (data as any[]).filter(r => r.roll_type === 'good')
+        const goodRolls = merged.filter((r: any) => r.roll_type === 'good')
         const total = goodRolls.reduce((s: number, r: any) => s + (r.weight ?? 0), 0)
         setWeighedKg(parseFloat(total.toFixed(dec)))
-        setWeighedRolls(data as any[])
-        const badRolls = (data as any[]).filter(r => r.roll_type === 'bad')
+        setWeighedRolls(merged)
+        const badRolls = merged.filter((r: any) => r.roll_type === 'bad')
         // ใช้เลขที่หายไปก่อน เพื่อทดแทนม้วนที่ถูกลบ
         setRollNo(nextRollNo(goodRolls))
         setBadRollNo(nextRollNo(badRolls))
@@ -1348,6 +1424,32 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
   async function handleCloseJob() {
     setClosing(true)
     try {
+      // ── H6: ใช้ ground truth จาก DB ไม่ใช่ state ใน memory ──
+      const { data: dbRolls, error: loadErr } = await supabase.from('production_rolls')
+        .select('weight, roll_type, transferred')
+        .eq('machine_no', profile.machine_no)
+        .eq('lot_no', profile.lotNo)
+      if (loadErr) throw loadErr
+      const all = dbRolls ?? []
+      const dbGood  = all.filter((r:any) => r.roll_type === 'good')
+      const dbBad   = all.filter((r:any) => r.roll_type === 'bad')
+      const dbScrap = all.filter((r:any) => typeof r.roll_type === 'string' && r.roll_type.startsWith('scrap'))
+      const dbGoodKg  = dbGood.reduce((s:number,r:any)=>s+(r.weight??0), 0)
+      const dbBadKg   = dbBad.reduce((s:number,r:any)=>s+(r.weight??0), 0)
+      const dbScrapKg = dbScrap.reduce((s:number,r:any)=>s+(r.weight??0), 0)
+      const dbTransferredKg = dbGood.filter((r:any)=>r.transferred).reduce((s:number,r:any)=>s+(r.weight??0), 0)
+      const dbTotal = dbGoodKg + dbBadKg + dbScrapKg
+      const dbYield = dbTotal > 0 ? Math.round(dbGoodKg / dbTotal * 100) : 0
+
+      // ── เตือนถ้ายังมี offline queue ค้าง (ม้วนยังไม่ sync = สรุปยังไม่ครบ) ──
+      const pendingForLot = loadQueue().filter((q:any) => q.machine_no === profile.machine_no && q.lot_no === profile.lotNo)
+      if (pendingForLot.length > 0) {
+        if (!confirm(`⚠ ยังมีม้วน ${pendingForLot.length} ม้วนค้าง offline ของ lot นี้\nสรุปยอดอาจไม่ครบ — ปิดงานต่อหรือไม่?`)) {
+          setClosing(false); setShowCloseModal(false); return
+        }
+      }
+
+      // ── 1) บันทึก job_summaries ก่อน (ground truth จาก DB + snapshot profile) ──
       await supabase.from('job_summaries').insert({
         machine_no:     profile.machine_no,
         lot_no:         profile.lotNo,
@@ -1359,19 +1461,30 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         item_code:      profile.itemCode,
         mat_code:       profile.matCode,
         planned_qty:    planned,
-        good_kg:        parseFloat(goodKg.toFixed(2)),
-        good_rolls:     goodRolls.length,
-        bad_kg:         parseFloat(badKg.toFixed(2)),
-        bad_rolls:      badRolls.length,
-        scrap_kg:       parseFloat(scrapKg.toFixed(2)),
-        transferred_kg: parseFloat(transferredKg.toFixed(2)),
-        yield_pct:      yieldPct,
+        good_kg:        parseFloat(dbGoodKg.toFixed(2)),
+        good_rolls:     dbGood.length,
+        bad_kg:         parseFloat(dbBadKg.toFixed(2)),
+        bad_rolls:      dbBad.length,
+        scrap_kg:       parseFloat(dbScrapKg.toFixed(2)),
+        transferred_kg: parseFloat(dbTransferredKg.toFixed(2)),
+        yield_pct:      dbYield,
         closed_at:      new Date().toISOString(),
         closed_by:      inspector || null,
         inspector:      inspector || null,
       })
-      printJobSummary()
-      // เคลียร์ข้อมูลงาน (เก็บแต่ machine_no, core_weight, label_size, locked)
+
+      // ── 2) พิมพ์ใบสรุป — ตรวจว่า popup เปิดได้ก่อนเคลียร์ profile ──
+      const win = window.open('', '_blank', 'width=900,height=700')
+      if (!win) {
+        if (!confirm('⚠ Browser block popup ทำให้พิมพ์ใบสรุปไม่ได้\nงานถูกบันทึกใน job_summaries แล้ว — ดำเนินการเคลียร์เครื่องต่อหรือไม่?\n(กด Cancel เพื่อพิมพ์ใบสรุปก่อนจาก History)')) {
+          setClosing(false); setShowCloseModal(false); return
+        }
+      } else {
+        win.close()  // ปิด popup ทดสอบ — เปิดของจริงในฟังก์ชัน
+        printJobSummary()
+      }
+
+      // ── 3) เคลียร์ข้อมูลงาน (เก็บแต่ machine_no, core_weight, label_size, locked) ──
       await supabase.from('machine_profiles').update({
         cust_code: '', cust_name: '', cust_address: '',
         item_code: '', mat_code: '', product_code: '', product_name: '',
@@ -1457,18 +1570,33 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       }
 
       let data: any = null
-      const { data: inserted, error: insertErr } = await supabase
+      let { data: inserted, error: insertErr } = await supabase
         .from('production_rolls').insert(payload).select().single()
 
+      // ── ถ้า roll_no ชน (unique violation 23505) → reload + retry ครั้งเดียว ──
+      if (insertErr && (insertErr as any).code === '23505') {
+        console.warn('roll_no ชน — กำลังหาเลขใหม่...')
+        const { data: existing } = await supabase.from('production_rolls')
+          .select('roll_no, roll_type')
+          .eq('machine_no', profile.machine_no)
+          .eq('lot_no', profile.lotNo)
+        const sameTypeRolls = (existing ?? []).filter((x:any) => x.roll_type === actualType)
+        const newRollNo = nextRollNo(sameTypeRolls)
+        const retryPayload = { ...payload, roll_no: newRollNo }
+        const retry = await supabase.from('production_rolls').insert(retryPayload).select().single()
+        inserted = retry.data
+        insertErr = retry.error
+      }
+
       if (insertErr || !inserted) {
-        // ── ออฟไลน์ → บันทึกลง queue ────────────────────────────────
+        // ── ออฟไลน์ / error อื่น → บันทึกลง queue ────────────────────────
         const offlineId = `offline_${Date.now()}_${Math.random().toString(36).slice(2)}`
         const offlineRecord = { ...payload, id: offlineId, _offline: true }
         const q = [...loadQueue(), payload]
         saveQueue(q)
         setQueue(q)
         data = offlineRecord
-        console.warn('offline — queued:', offlineRecord)
+        console.warn('offline — queued:', offlineRecord, insertErr?.message)
       } else {
         data = inserted
       }
@@ -1476,8 +1604,8 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       setLastRoll({ ...data, weighType: actualType })
       setWeighedRolls(prev => [...prev, data].filter(Boolean))
 
-      // บันทึก log ทุกการชั่ง
-      supabase.from('weigh_logs').insert({
+      // บันทึก log ทุกการชั่ง (await + retry 2 ครั้ง — log สำคัญสำหรับ recovery)
+      const logPayload = {
         machine_no:   profile.machine_no,
         lot_no:       profile.lotNo,
         work_order:   profile.woNo ?? '',
@@ -1493,7 +1621,22 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         net_weight:   parseFloat(saveWeight.toFixed(dec)),
         remark:       isBad ? badReason : isScrap ? scrapReason : null,
         inspector:    inspector || null,
-      }).then(({ error }) => { if (error) console.warn('log error:', error.message) })
+      }
+      let logOk = false
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const { error: logErr } = await supabase.from('weigh_logs').insert(logPayload)
+        if (!logErr) { logOk = true; break }
+        console.warn(`weigh_logs insert attempt ${attempt+1} failed:`, logErr.message)
+        await new Promise(r => setTimeout(r, 300 * (attempt + 1)))
+      }
+      if (!logOk) {
+        // เก็บลง localStorage เป็น last resort — ผู้ใช้ export ได้จากหน้า Admin
+        try {
+          const failed = JSON.parse(localStorage.getItem('bwp_weigh_log_failed') || '[]')
+          failed.push({ ...logPayload, _failed_at: new Date().toISOString() })
+          localStorage.setItem('bwp_weigh_log_failed', JSON.stringify(failed))
+        } catch {}
+      }
 
       if (isGood) {
         setWeighedKg(prev => parseFloat((prev + saveWeight).toFixed(dec)))
@@ -1589,39 +1732,42 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
     if (!deleteReason.trim()) { alert('กรุณากรอกเหตุผล'); return }
     setDeleting(true)
     const r = deleteModal.roll
-    // บันทึก log ก่อนลบ (snapshot ข้อมูลครบเพื่อสืบย้อน)
-    const { error: logErr } = await supabase.from('roll_deletion_logs').insert({
-      deleted_by:   deleteBy.trim(),
-      reason:       deleteReason.trim(),
-      machine_no:   r.machine_no,
-      lot_no:       r.lot_no,
-      work_order:   profile.woNo ?? '',
-      sale_order:   profile.soNo ?? '',
-      roll_no:      r.roll_no,
-      roll_type:    r.roll_type,
-      weight:       r.weight,
-      gross_weight: r.gross_weight,
-      core_weight:  r.core_weight,
-      length:       r.length,
-      pcs:          r.pcs,
-      product_name: profile.productName,
-      product_code: profile.productCode,
-      item_code:    profile.itemCode,
-      mat_code:     profile.matCode,
-      cust_code:    profile.custCode,
-      cust_name:    profile.custName,
-      width_cm:     profile.widthCm,
-      thick_mc:     profile.thickMc,
-      inspector:    r.inspector,
-      started_at:   r.started_at,
-      original_id:  r.id,
-      section:      profile.section ?? 'blow',
+    // ── ใช้ RPC atomic: log + delete ใน transaction เดียว ──
+    // ถ้า log insert fail หรือ delete fail → DB rollback ทั้งคู่
+    // fallback: ถ้า RPC ยังไม่ถูก migrate (function not found) → ใช้ 2-step แบบเดิม
+    const { error } = await supabase.rpc('delete_roll_atomic', {
+      p_roll_id:    r.id,
+      p_deleted_by: deleteBy.trim(),
+      p_reason:     deleteReason.trim(),
+      p_work_order: profile.woNo ?? null,
+      p_sale_order: profile.soNo ?? null,
     })
-    if (logErr) console.warn('log insert failed:', logErr.message)
-    // ลบม้วน
-    const { error } = await supabase.from('production_rolls').delete().eq('id', r.id)
-    setDeleting(false)
-    if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return }
+    if (error && /function .* does not exist/i.test(error.message)) {
+      // ── Legacy fallback (จะแสดง warning ให้ admin migrate) ──
+      console.warn('RPC delete_roll_atomic ยังไม่ถูก deploy — รัน db/hardening.sql ใน Supabase')
+      const { error: logErr } = await supabase.from('roll_deletion_logs').insert({
+        deleted_by:   deleteBy.trim(),
+        reason:       deleteReason.trim(),
+        machine_no:   r.machine_no, lot_no: r.lot_no,
+        work_order:   profile.woNo ?? '', sale_order: profile.soNo ?? '',
+        roll_no:      r.roll_no, roll_type: r.roll_type,
+        weight:       r.weight, gross_weight: r.gross_weight, core_weight: r.core_weight,
+        length:       r.length, pcs: r.pcs,
+        product_name: profile.productName, product_code: profile.productCode,
+        item_code:    profile.itemCode, mat_code: profile.matCode,
+        cust_code:    profile.custCode, cust_name: profile.custName,
+        width_cm:     profile.widthCm, thick_mc: profile.thickMc,
+        inspector:    r.inspector, started_at: r.started_at,
+        original_id:  r.id, section: profile.section ?? 'blow',
+      })
+      if (logErr) { setDeleting(false); alert('ลบไม่สำเร็จ (log insert): ' + logErr.message); return }
+      const { error: delErr } = await supabase.from('production_rolls').delete().eq('id', r.id)
+      setDeleting(false)
+      if (delErr) { alert('ลบไม่สำเร็จ: ' + delErr.message); return }
+    } else {
+      setDeleting(false)
+      if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return }
+    }
     setDeleteModal(null)
     setDeleteReason('')
     setDeleteBy('')
@@ -1652,15 +1798,22 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {/* Offline queue badge */}
+          {/* Offline queue badge + Export */}
           {queue.length > 0 && (
-            <div className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border font-semibold ${
-              syncing ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
-            }`}>
-              {syncing
-                ? <><span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse inline-block"/> กำลัง sync {queue.length} รายการ...</>
-                : <><span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse inline-block"/> ค้างส่ง {queue.length} ม้วน (ออฟไลน์)</>
-              }
+            <div className="flex items-center gap-1.5">
+              <div className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border font-semibold ${
+                syncing ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+              }`}>
+                {syncing
+                  ? <><span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse inline-block"/> กำลัง sync {queue.length} รายการ...</>
+                  : <><span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse inline-block"/> ค้างส่ง {queue.length} ม้วน (ออฟไลน์)</>
+                }
+              </div>
+              <button onClick={exportQueue}
+                title="ดาวน์โหลด queue เป็นไฟล์ JSON — สำรองก่อน clear browser"
+                className="text-xs px-2 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold">
+                💾 Export
+              </button>
             </div>
           )}
           {/* Progress mini */}

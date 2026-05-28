@@ -488,8 +488,9 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
 
   async function undoTransfer(id: string) {
     if (!confirm('ยกเลิกการโอนรายการนี้?')) return
+    // เคลียร์ transfer_doc_id ด้วย — ป้องกัน reprint ใบเก่าแสดงม้วนที่ถูกยกเลิกแล้ว
     await supabase.from('production_rolls')
-      .update({ transferred: false, transferred_at: null, transferred_by: null })
+      .update({ transferred: false, transferred_at: null, transferred_by: null, transfer_doc_id: null })
       .eq('id', id)
     await loadRolls()
   }

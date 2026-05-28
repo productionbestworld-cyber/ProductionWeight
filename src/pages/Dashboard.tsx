@@ -274,9 +274,9 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
       const d = r.created_at.slice(0, 10)
       if (!map.has(d)) map.set(d, { date: d, FG: 0, ของเสีย: 0, ซ่อม: 0 })
       const entry = map.get(d)!
-      if (r.roll_type === 'good')   entry.FG      += r.weight
-      if (r.roll_type === 'scrap')  entry.ของเสีย += r.weight
-      if (r.roll_type === 'rework') entry.ซ่อม    += r.weight
+      if (r.roll_type === 'good')                                      entry.FG      += r.weight
+      if (typeof r.roll_type === 'string' && r.roll_type.startsWith('scrap')) entry.ของเสีย += r.weight
+      if (r.roll_type === 'bad')                                       entry.ซ่อม    += r.weight
     })
     return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date))
       .map(d => ({ ...d, date: new Date(d.date).toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit' }) }))

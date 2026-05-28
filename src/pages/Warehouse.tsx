@@ -235,7 +235,8 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   }
 
   const filteredStock = useMemo(() => stock.filter(r =>
-    (!fSection  || (r as any).section === fSection) &&
+    // section: รวมม้วนเก่าที่ section=null เข้ากับแผนกเป่า (default) เพื่อให้ History/Warehouse นับตรงกัน
+    (!fSection  || (r as any).section === fSection || ((r as any).section == null && fSection === 'blow')) &&
     (!fProduct  || r.product_name === fProduct) &&
     (!fCustomer || r.customer === fCustomer) &&
     (!fLot      || r.lot_no === fLot) &&
@@ -794,47 +795,42 @@ function ReturnToReworkModal({ roll, onClose, onDone }:
     if (!by.trim())     { alert('กรอกชื่อผู้ส่ง'); return }
     setSaving(true)
 
-    // 1) บันทึก log
-    await supabase.from('roll_deletion_logs').insert({
-      deleted_by:   by.trim(),
-      reason:       `[ส่งกลับกรอ] ${reason.trim()}`,
-      machine_no:   roll.machine_no,
-      lot_no:       roll.lot_no,
-      roll_no:      roll.roll_no,
-      roll_type:    'good',
-      weight:       roll.weight,
-      gross_weight: roll.gross_weight,
-      core_weight:  roll.core_weight,
-      length:       roll.length,
-      product_name: roll.product_name,
-      product_code: roll.product_code,
-      item_code:    roll.item_code,
-      mat_code:     roll.mat_code,
-      cust_code:    roll.cust_code,
-      cust_name:    roll.customer,
-      width_cm:     roll.width_cm,
-      thick_mc:     roll.thick_mc,
-      inspector:    roll.inspector,
-      started_at:   roll.created_at,
-      original_id:  roll.id,
-      section:      'rewind',
+    // ── ใช้ RPC atomic: log + update ใน transaction เดียว ──
+    const { error } = await supabase.rpc('return_to_rework_atomic', {
+      p_roll_id:      roll.id,
+      p_inbound_type: inboundType,
+      p_reason:       reason.trim(),
+      p_by:           by.trim(),
     })
 
-    // 2) เปลี่ยน roll จาก good → bad + ตั้ง inbound_type
-    const { error } = await supabase.from('production_rolls').update({
-      roll_type:        'bad',
-      remark:           reason.trim(),
-      inbound_type:     inboundType,
-      rework_status:    null,
-      transferred:      true,
-      transferred_by:   by.trim(),
-      transferred_at:   new Date().toISOString(),
-      transfer_doc_id:  null,
-      section:          'rewind',
-    }).eq('id', roll.id)
-
-    setSaving(false)
-    if (error) { alert('บันทึกไม่สำเร็จ: ' + error.message); return }
+    // Fallback: ถ้า RPC ยังไม่ deploy → ใช้ 2-step
+    if (error && /function .* does not exist/i.test(error.message)) {
+      console.warn('RPC return_to_rework_atomic ยังไม่ถูก deploy — รัน db/hardening.sql')
+      const { error: logErr } = await supabase.from('roll_deletion_logs').insert({
+        deleted_by:   by.trim(),
+        reason:       `[ส่งกลับกรอ] ${reason.trim()}`,
+        machine_no:   roll.machine_no, lot_no: roll.lot_no, roll_no: roll.roll_no,
+        roll_type:    'good', weight: roll.weight, gross_weight: roll.gross_weight,
+        core_weight:  roll.core_weight, length: roll.length,
+        product_name: roll.product_name, product_code: roll.product_code,
+        item_code:    roll.item_code, mat_code: roll.mat_code,
+        cust_code:    roll.cust_code, cust_name: roll.customer,
+        width_cm:     roll.width_cm, thick_mc: roll.thick_mc,
+        inspector:    roll.inspector, started_at: roll.created_at,
+        original_id:  roll.id, section: 'rewind',
+      })
+      if (logErr) { setSaving(false); alert('บันทึกไม่สำเร็จ (log): ' + logErr.message); return }
+      const { error: updErr } = await supabase.from('production_rolls').update({
+        roll_type: 'bad', remark: reason.trim(), inbound_type: inboundType,
+        rework_status: null, transferred: true, transferred_by: by.trim(),
+        transferred_at: new Date().toISOString(), transfer_doc_id: null, section: 'rewind',
+      }).eq('id', roll.id)
+      setSaving(false)
+      if (updErr) { alert('บันทึกไม่สำเร็จ: ' + updErr.message); return }
+    } else {
+      setSaving(false)
+      if (error) { alert('บันทึกไม่สำเร็จ: ' + error.message); return }
+    }
     const sel = RETURN_TO_REWORK_TYPES.find(t => t.key === inboundType)
     alert(`✓ ส่งม้วน #${roll.roll_no} (${fmt(roll.weight)} Kg) กลับแผนกกรอแล้ว\nประเภท: ${sel?.no} ${sel?.label}\nเหตุผล: ${reason}`)
     onDone()

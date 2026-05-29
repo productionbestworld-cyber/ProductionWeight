@@ -575,7 +575,16 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
               <div className="bg-white rounded-xl border-l-4 border-red-500 border border-gray-200 shadow-sm p-4">
                 <p className="text-xs text-gray-500">🗑 เศษรวม</p>
                 <p className="text-3xl font-black text-red-600 mt-1">{num(allScrapKg,1)}<span className="text-base text-gray-400 font-normal"> kg</span></p>
-                <p className="text-[11px] text-gray-400">🏭 ผลิต {num(scrapByProdKg,1)} · ⚖ ผจก {num(scrapByMgrKg,1)} kg</p>
+                <p className="text-[11px] text-gray-400 mb-1">{allScrap.length} ม้วน</p>
+                <div className="space-y-0.5 text-[11px]">
+                  <p className="text-[10px] text-gray-400 font-bold">— ตามต้นทาง —</p>
+                  <p className="flex justify-between"><span className="text-gray-500">🏭 ผลิตคัดทิ้ง</span><span className="font-bold text-gray-700">{num(scrapByProdKg,1)} kg · {scrapByProd.length}</span></p>
+                  <p className="flex justify-between"><span className="text-amber-600">⚖ ผจก สั่งทำลาย</span><span className="font-bold text-amber-700">{num(scrapByMgrKg,1)} kg · {scrapByMgr.length}</span></p>
+                  <p className="text-[10px] text-gray-400 font-bold pt-0.5">— ตามชนิดเศษ —</p>
+                  {scrapClearKg > 0 && <p className="flex justify-between"><span className="text-gray-500">เศษใส</span><span className="font-bold text-gray-700">{num(scrapClearKg,1)} kg · {scrapClear.length}</span></p>}
+                  {scrapColorKg > 0 && <p className="flex justify-between"><span className="text-purple-600">เศษสี</span><span className="font-bold text-purple-700">{num(scrapColorKg,1)} kg · {scrapColor.length}</span></p>}
+                  {scrapLumpKg > 0 && <p className="flex justify-between"><span className="text-orange-600">เศษก้อน/ตะกอน</span><span className="font-bold text-orange-700">{num(scrapLumpKg,1)} kg · {scrapLump.length}</span></p>}
+                </div>
               </div>
             </div>
 

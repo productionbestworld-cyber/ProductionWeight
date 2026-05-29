@@ -248,6 +248,11 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   const scrapLumpKg  = useMemo(() => kg(scrapLump),  [scrapLump])
   const allScrapKg   = useMemo(() => kg(allScrap),   [allScrap])
   const totalKg      = fgKg + badKg + allScrapKg
+  // แยกแหล่งที่มาของเศษ: เศษจากผลิต (ชั่งเป็นเศษเลย) vs เศษจาก ผจก ตัดสิน (กรอไม่ได้ → เศษ)
+  const scrapByMgr   = useMemo(() => allScrap.filter(r => (r as any).review_action === 'scrap'), [allScrap])
+  const scrapByProd  = useMemo(() => allScrap.filter(r => (r as any).review_action !== 'scrap'), [allScrap])
+  const scrapByMgrKg = useMemo(() => kg(scrapByMgr),  [scrapByMgr])
+  const scrapByProdKg= useMemo(() => kg(scrapByProd), [scrapByProd])
 
   // per-machine chart data
   const machineData = useMemo(() => {
@@ -586,6 +591,17 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
               <p className="text-red-500 text-xs mt-1">
                 {fgKg ? (allScrapKg/fgKg*100).toFixed(2) : '0.00'}% ของ FG
               </p>
+              {/* แจงแหล่งที่มาของเศษ */}
+              <div className="mt-2 pt-2 border-t border-gray-100 space-y-1 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">🏭 เศษจากผลิต</span>
+                  <span className="font-bold text-gray-700">{fmtKg(scrapByProdKg)} kg</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-amber-600">⚖ ผจก ตัดสิน (กรอไม่ได้)</span>
+                  <span className="font-bold text-amber-700">{fmtKg(scrapByMgrKg)} kg{scrapByMgr.length > 0 ? ` · ${scrapByMgr.length} ม้วน` : ''}</span>
+                </div>
+              </div>
             </div>
           </div>
 

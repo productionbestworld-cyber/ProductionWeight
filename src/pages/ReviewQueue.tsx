@@ -203,6 +203,14 @@ function DecideModal({ roll, onClose, onDone }: { roll: Roll; onClose: () => voi
       patch.roll_type = 'scrap_lump'
       patch.remark = `[ผจก: ${reason.trim()}] ` + (roll.remark || '')
     }
+    // ถ้าตัดสินเป็น "ส่งกรอ" → ส่งม้วนตกเข้าคิวแผนกกรอ (ReworkInbox กรองเฉพาะ transferred=true)
+    if (action === 'rework') {
+      patch.transferred     = true
+      patch.transferred_by  = by.trim()
+      patch.transferred_at  = new Date().toISOString()
+      patch.inbound_type    = (roll as any).inbound_type ?? 'internal'
+      patch.rework_status   = 'pending'
+    }
 
     const { error } = await supabase.from('production_rolls').update(patch).eq('id', roll.id)
     setSaving(false)

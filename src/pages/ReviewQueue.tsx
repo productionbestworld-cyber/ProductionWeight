@@ -165,30 +165,77 @@ export default function ReviewQueue() {
         </div>
 
         {/* List */}
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-          {loading ? (
-            <p className="text-center py-10 text-slate-400">กำลังโหลด...</p>
-          ) : shown.length === 0 ? (
-            <p className="text-center py-12 text-slate-400">
-              {tab === 'pending' ? '✓ ไม่มีม้วนรอพิจารณา' : 'ยังไม่มีม้วนที่ตัดสินแล้ว'}
-            </p>
-          ) : (
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-[11px] text-slate-500 uppercase tracking-wider">
-                <tr>
-                  <th className="px-3 py-2 text-left font-semibold">ต้นทาง</th>
-                  <th className="px-3 py-2 text-left font-semibold">เครื่อง · Lot · ม้วน</th>
-                  <th className="px-3 py-2 text-left font-semibold">สินค้า / ลูกค้า / ขนาด</th>
-                  <th className="px-3 py-2 text-right font-semibold">น้ำหนัก</th>
-                  <th className="px-3 py-2 text-left font-semibold">เหตุผล / ที่มา</th>
-                  <th className="px-3 py-2 text-left font-semibold">{tab==='pending' ? 'การกระทำ' : 'ผจก ตัดสิน'}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {shown.map(r => {
-                  const origin = rollOrigin(r)
-                  return (
-                  <tr key={r.id} className="hover:bg-slate-50">
+        {loading ? (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm"><p className="text-center py-10 text-slate-400">กำลังโหลด...</p></div>
+        ) : shown.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm"><p className="text-center py-12 text-slate-400">
+            {tab === 'pending' ? '✓ ไม่มีม้วนรอพิจารณา' : 'ยังไม่มีม้วนที่ตัดสินแล้ว'}
+          </p></div>
+        ) : originFilter === 'all' ? (
+          // ── แยกเป็น 2 กลุ่มชัดเจน: ผลิตรอพิจารณา (ผจก) vs NC จริง (คลัง/QC) ──
+          <div className="space-y-4">
+            <RollGroup
+              title="🏭 ผลิตรอพิจารณา (ผจก)"
+              subtitle="ผลิตประเมินเองว่ากรอไม่ได้ — รอ ผจก ตัดสิน"
+              headerCls="bg-sky-50 border-sky-200 text-sky-800"
+              rows={shown.filter(r => !isRealNC(r))}
+              tab={tab} onDecide={setDecideRoll} />
+            <RollGroup
+              title="⚠ NC จริง (คลัง / QC)"
+              subtitle="ของที่เคยผ่านออกไปแล้ว — เสียในคลัง / ตรวจไม่ผ่านก่อนโหลด"
+              headerCls="bg-purple-50 border-purple-200 text-purple-800"
+              rows={shown.filter(r => isRealNC(r))}
+              tab={tab} onDecide={setDecideRoll} />
+          </div>
+        ) : (
+          <RollGroup
+            title={originFilter === 'nc' ? '⚠ NC จริง (คลัง / QC)' : '🏭 ผลิตรอพิจารณา (ผจก)'}
+            subtitle={originFilter === 'nc' ? 'ของที่เคยผ่านออกไปแล้ว — เสียในคลัง / ตรวจไม่ผ่านก่อนโหลด' : 'ผลิตประเมินเองว่ากรอไม่ได้ — รอ ผจก ตัดสิน'}
+            headerCls={originFilter === 'nc' ? 'bg-purple-50 border-purple-200 text-purple-800' : 'bg-sky-50 border-sky-200 text-sky-800'}
+            rows={shown}
+            tab={tab} onDecide={setDecideRoll} />
+        )}
+      </div>
+
+      {decideRoll && <DecideModal roll={decideRoll} onClose={() => setDecideRoll(null)} onDone={() => { setDecideRoll(null); load() }} />}
+    </div>
+  )
+}
+
+// ─── กลุ่มม้วนตามต้นทาง (ตาราง 1 กลุ่ม) ───────────────────────────────────────
+function RollGroup({ title, subtitle, headerCls, rows, tab, onDecide }: {
+  title: string; subtitle: string; headerCls: string; rows: Roll[]
+  tab: 'pending'|'decided'; onDecide: (r: Roll) => void
+}) {
+  const groupKg = rows.reduce((s,r) => s + (r.weight ?? 0), 0)
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+      <div className={`flex items-center justify-between px-4 py-2.5 border-b ${headerCls}`}>
+        <div>
+          <p className="font-bold text-sm">{title}</p>
+          <p className="text-[11px] opacity-80">{subtitle}</p>
+        </div>
+        <p className="text-sm font-black">{rows.length} ม้วน · {fmt(groupKg,2)} Kgs.</p>
+      </div>
+      {rows.length === 0 ? (
+        <p className="text-center py-8 text-slate-400 text-sm">— ไม่มี —</p>
+      ) : (
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 text-[11px] text-slate-500 uppercase tracking-wider">
+            <tr>
+              <th className="px-3 py-2 text-left font-semibold">ต้นทาง</th>
+              <th className="px-3 py-2 text-left font-semibold">เครื่อง · Lot · ม้วน</th>
+              <th className="px-3 py-2 text-left font-semibold">สินค้า / ลูกค้า / ขนาด</th>
+              <th className="px-3 py-2 text-right font-semibold">น้ำหนัก</th>
+              <th className="px-3 py-2 text-left font-semibold">เหตุผล / ที่มา</th>
+              <th className="px-3 py-2 text-left font-semibold">{tab==='pending' ? 'การกระทำ' : 'ผจก ตัดสิน'}</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {rows.map(r => {
+              const origin = rollOrigin(r)
+              return (
+              <tr key={r.id} className="hover:bg-slate-50">
                     <td className="px-3 py-2.5">
                       <span className={`inline-block text-[11px] font-bold px-2 py-0.5 rounded-full border ${origin.cls}`}>{origin.label}</span>
                       <p className="text-[10px] text-slate-500 mt-1">{origin.sub}</p>
@@ -212,7 +259,7 @@ export default function ReviewQueue() {
                     </td>
                     <td className="px-3 py-2.5">
                       {tab === 'pending' ? (
-                        <button onClick={() => setDecideRoll(r)}
+                        <button onClick={() => onDecide(r)}
                           className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold">
                           ตัดสิน →
                         </button>
@@ -235,10 +282,6 @@ export default function ReviewQueue() {
               </tbody>
             </table>
           )}
-        </div>
-      </div>
-
-      {decideRoll && <DecideModal roll={decideRoll} onClose={() => setDecideRoll(null)} onDone={() => { setDecideRoll(null); load() }} />}
     </div>
   )
 }

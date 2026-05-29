@@ -24,7 +24,7 @@ type Roll = {
   machine_no: string; lot_no: string; product_name: string; customer: string
   inspector: string; created_at: string; transferred_at: string
   so_id: string | null; shipped: boolean; shipped_at: string | null; shipped_by: string | null
-  width_cm?: string; thick_mc?: string
+  width_cm?: string; thick_mc?: string; width_unit?: 'cm'|'mm'
 }
 
 // ── พิมพ์ใบจัดส่ง ─────────────────────────────────────────────────────────
@@ -228,9 +228,10 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   const shipped = useMemo(() => rolls.filter(r => r.shipped), [rolls])
 
   // filter stock
-  // helper: สร้าง size label จาก width_cm × thick_mc
+  // helper: สร้าง size label จาก width_cm × thick_mc (รองรับหน่วย mm)
   function sizeLabel(r: Roll) {
-    if (r.width_cm && r.thick_mc) return `${r.width_cm}cm×${r.thick_mc}mc`
+    const u = ((r as any).width_unit ?? 'cm') as 'cm'|'mm'
+    if (r.width_cm && r.thick_mc) return `${r.width_cm}${u}×${r.thick_mc}mc`
     return ''
   }
 
@@ -804,7 +805,7 @@ function ReturnToReworkModal({ roll, onClose, onDone }:
     })
 
     // Fallback: ถ้า RPC ยังไม่ deploy → ใช้ 2-step
-    if (error && /function .* does not exist/i.test(error.message)) {
+    if (error && (/function .* does not exist/i.test(error.message) || /could not find the function/i.test(error.message))) {
       console.warn('RPC return_to_rework_atomic ยังไม่ถูก deploy — รัน db/hardening.sql')
       const { error: logErr } = await supabase.from('roll_deletion_logs').insert({
         deleted_by:   by.trim(),

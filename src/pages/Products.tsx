@@ -18,6 +18,7 @@ export interface Product {
   product_code:  string
   product_name:  string
   width_cm:      string
+  width_unit?:   'cm' | 'mm'
   thick_mc:      string
   cust_code:     string
   // join-ed (จาก view products_with_customer)
@@ -26,7 +27,7 @@ export interface Product {
 }
 
 const EMPTY_CUST: Customer = { cust_code:'', cust_name:'', cust_address:'', note:'' }
-const EMPTY_PROD: Product  = { item_code:'', product_code:'', product_name:'', width_cm:'', thick_mc:'', cust_code:'' }
+const EMPTY_PROD: Product  = { item_code:'', product_code:'', product_name:'', width_cm:'', width_unit:'cm', thick_mc:'', cust_code:'' }
 
 // ─── Exports สำหรับใช้ที่อื่น (autocomplete) ─────────────────────────────────
 export async function fetchProducts(): Promise<Product[]> {
@@ -170,9 +171,6 @@ function CustomersTab({ customers, countByCust, loading, onSelect, onChanged }: 
                   </div>
                   <ChevronRight size={16} className="text-slate-600 group-hover:text-brand-400 mt-0.5"/>
                 </div>
-                {c.cust_address && (
-                  <p className="text-[11px] text-slate-400 line-clamp-2 mb-2">{c.cust_address}</p>
-                )}
                 <div className="flex items-center gap-1.5 text-xs">
                   <span className="bg-brand-500/15 text-brand-300 px-2 py-0.5 rounded-full font-bold">
                     📦 {count} item{count !== 1 ? 's' : ''}
@@ -226,7 +224,6 @@ function CustomerEditModal({ customer, onClose }: { customer: Customer; onClose:
         <div className="px-5 py-4 space-y-3">
           <Field label="รหัสลูกค้า *" value={c.cust_code} onChange={v => setC({ ...c, cust_code: v })} ph="C-001"/>
           <Field label="ชื่อลูกค้า *"  value={c.cust_name} onChange={v => setC({ ...c, cust_name: v })} ph="บริษัท ไทยน้ำทิพย์ จำกัด"/>
-          <Field label="ที่อยู่"        value={c.cust_address ?? ''} onChange={v => setC({ ...c, cust_address: v })} ph="ที่อยู่..." textarea/>
           <Field label="หมายเหตุ"      value={c.note ?? ''} onChange={v => setC({ ...c, note: v })} ph=""/>
         </div>
         <div className="px-5 py-3 border-t border-slate-800 flex gap-2">
@@ -270,9 +267,6 @@ function CustomerDetailModal({ customer, products, customers, onClose }: {
             <div className="flex-1 min-w-0">
               <p className="text-brand-400 text-xs font-mono font-bold">{customer.cust_code}</p>
               <p className="text-white font-bold text-lg">{customer.cust_name}</p>
-              {customer.cust_address && (
-                <p className="text-slate-400 text-xs mt-1">{customer.cust_address}</p>
-              )}
             </div>
             <div className="flex items-center gap-2 ml-3">
               <button onClick={() => setEditCust(true)} className="text-slate-400 hover:text-brand-400 p-2">
@@ -311,7 +305,7 @@ function CustomerDetailModal({ customer, products, customers, onClose }: {
                     <tr key={p.id} className="border-t border-slate-700/50 hover:bg-slate-700/30">
                       <td className="px-3 py-2 font-mono text-brand-400 font-bold">{p.item_code}</td>
                       <td className="px-3 py-2 text-white">{p.product_name || '—'}</td>
-                      <td className="px-3 py-2 text-slate-300">{p.width_cm ? `${p.width_cm}×${p.thick_mc}mc` : '—'}</td>
+                      <td className="px-3 py-2 text-slate-300">{p.width_cm ? `${p.width_cm}${p.width_unit ?? 'cm'}×${p.thick_mc}mc` : '—'}</td>
                       <td className="px-3 py-2 text-right">
                         <button onClick={() => setEditProd(p)} className="text-slate-400 hover:text-brand-400 p-1.5">
                           <Edit3 size={13}/>
@@ -430,7 +424,7 @@ function ProductsTab({ products, customers, loading, onChanged }: {
               <tr key={p.id} className="border-t border-slate-800 hover:bg-slate-800/30">
                 <td className="px-3 py-2 font-mono text-brand-400 font-bold">{p.item_code}</td>
                 <td className="px-3 py-2 text-white">{p.product_name || '—'}</td>
-                <td className="px-3 py-2 text-slate-300">{p.width_cm ? `${p.width_cm}×${p.thick_mc}mc` : '—'}</td>
+                <td className="px-3 py-2 text-slate-300">{p.width_cm ? `${p.width_cm}${p.width_unit ?? 'cm'}×${p.thick_mc}mc` : '—'}</td>
                 <td className="px-3 py-2 text-slate-300">
                   <span className="text-slate-500 text-xs">{p.cust_code} </span>
                   {p.cust_name || '—'}
@@ -484,7 +478,28 @@ function ProductEditModal({ product, customers, onClose }: { product: Product; c
             <div className="col-span-2">
               <Field label="ชื่อสินค้า" value={p.product_name} onChange={v => setP({ ...p, product_name: v })} ph="PET 1.45L RED SHRINK"/>
             </div>
-            <Field label="กว้าง (cm)"     value={p.width_cm}     onChange={v => setP({ ...p, width_cm: v })} ph="57"/>
+            <div>
+              <label className="block text-[10px] text-slate-500 mb-1">กว้าง</label>
+              <div className="flex gap-1">
+                <input value={p.width_cm} onChange={e => setP({ ...p, width_cm: e.target.value })}
+                  placeholder="57"
+                  className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-brand-500" />
+                {(['cm','mm'] as const).map(u => (
+                  <button key={u} type="button"
+                    onClick={() => {
+                      const cur = p.width_unit ?? 'cm'
+                      if (cur === u) { setP({ ...p, width_unit: u }); return }
+                      const n = parseFloat(p.width_cm)
+                      if (!Number.isFinite(n)) { setP({ ...p, width_unit: u }); return }
+                      const v = cur === 'cm' && u === 'mm' ? n * 10 : cur === 'mm' && u === 'cm' ? n / 10 : n
+                      setP({ ...p, width_cm: v.toString(), width_unit: u })
+                    }}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold ${
+                      (p.width_unit ?? 'cm') === u ? 'bg-brand-600 text-white' : 'bg-slate-800 text-slate-400'
+                    }`}>{u}</button>
+                ))}
+              </div>
+            </div>
             <Field label="หนา (mc)"       value={p.thick_mc}     onChange={v => setP({ ...p, thick_mc: v })} ph="80"/>
           </div>
           <div>
@@ -798,7 +813,7 @@ function ImportModal({ customers, onClose }: { customers: Customer[]; onClose: (
                         <td className="px-2 py-1 text-slate-300 truncate max-w-[120px]">{p._cust_name || p.cust_code || '—'}</td>
                         <td className="px-2 py-1 font-mono text-brand-400">{p.item_code}</td>
                         <td className="px-2 py-1 text-white truncate max-w-[200px]">{p.product_name}</td>
-                        <td className="px-2 py-1 text-slate-400">{p.width_cm && `${p.width_cm}×${p.thick_mc}`}</td>
+                        <td className="px-2 py-1 text-slate-400">{p.width_cm && `${p.width_cm}${p.width_unit ?? 'cm'}×${p.thick_mc}mc`}</td>
                       </tr>
                     ))}
                   </tbody>

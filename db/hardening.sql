@@ -22,24 +22,65 @@ CREATE UNIQUE INDEX IF NOT EXISTS uniq_production_rolls_lot_rollno
   ON production_rolls (machine_no, lot_no, roll_no, roll_type)
   WHERE roll_type IN ('good','bad') AND roll_no > 0;
 
+-- ─── 1.4) ตรวจให้แน่ใจว่า production_rolls มี column ครบ ────────────────
+-- (กันกรณีตารางถูกสร้างไว้เก่า ยังไม่มี column ที่ RPC / VIEW ใช้)
+ALTER TABLE production_rolls ADD COLUMN IF NOT EXISTS length          TEXT;
+ALTER TABLE production_rolls ADD COLUMN IF NOT EXISTS pcs             TEXT;
+ALTER TABLE production_rolls ADD COLUMN IF NOT EXISTS remark          TEXT;
+ALTER TABLE production_rolls ADD COLUMN IF NOT EXISTS work_order      TEXT;
+ALTER TABLE production_rolls ADD COLUMN IF NOT EXISTS sale_order      TEXT;
+ALTER TABLE production_rolls ADD COLUMN IF NOT EXISTS section         TEXT DEFAULT 'blow';
+ALTER TABLE production_rolls ADD COLUMN IF NOT EXISTS transferred     BOOLEAN DEFAULT FALSE;
+ALTER TABLE production_rolls ADD COLUMN IF NOT EXISTS transferred_at  TIMESTAMPTZ;
+ALTER TABLE production_rolls ADD COLUMN IF NOT EXISTS transferred_by  TEXT;
+ALTER TABLE production_rolls ADD COLUMN IF NOT EXISTS transfer_doc_id TEXT;
+ALTER TABLE production_rolls ADD COLUMN IF NOT EXISTS rework_status   TEXT;
+ALTER TABLE production_rolls ADD COLUMN IF NOT EXISTS rework_dest_id  UUID;
+ALTER TABLE production_rolls ADD COLUMN IF NOT EXISTS rework_remark   TEXT;
+ALTER TABLE production_rolls ADD COLUMN IF NOT EXISTS inbound_type    TEXT;
+ALTER TABLE production_rolls ADD COLUMN IF NOT EXISTS customer        TEXT;
+
+-- ─── 1.5) ตรวจให้แน่ใจว่า roll_deletion_logs มี column ครบ ───────────────
+-- (กันกรณีตารางถูกสร้างไว้เก่า ยังไม่มี column ที่ RPC ใช้)
+ALTER TABLE roll_deletion_logs ADD COLUMN IF NOT EXISTS length        TEXT;
+ALTER TABLE roll_deletion_logs ADD COLUMN IF NOT EXISTS pcs           TEXT;
+ALTER TABLE roll_deletion_logs ADD COLUMN IF NOT EXISTS work_order    TEXT;
+ALTER TABLE roll_deletion_logs ADD COLUMN IF NOT EXISTS sale_order    TEXT;
+ALTER TABLE roll_deletion_logs ADD COLUMN IF NOT EXISTS product_name  TEXT;
+ALTER TABLE roll_deletion_logs ADD COLUMN IF NOT EXISTS product_code  TEXT;
+ALTER TABLE roll_deletion_logs ADD COLUMN IF NOT EXISTS item_code     TEXT;
+ALTER TABLE roll_deletion_logs ADD COLUMN IF NOT EXISTS mat_code      TEXT;
+ALTER TABLE roll_deletion_logs ADD COLUMN IF NOT EXISTS cust_code     TEXT;
+ALTER TABLE roll_deletion_logs ADD COLUMN IF NOT EXISTS cust_name     TEXT;
+ALTER TABLE roll_deletion_logs ADD COLUMN IF NOT EXISTS width_cm      TEXT;
+ALTER TABLE roll_deletion_logs ADD COLUMN IF NOT EXISTS thick_mc      TEXT;
+ALTER TABLE roll_deletion_logs ADD COLUMN IF NOT EXISTS inspector     TEXT;
+ALTER TABLE roll_deletion_logs ADD COLUMN IF NOT EXISTS started_at    TIMESTAMPTZ;
+ALTER TABLE roll_deletion_logs ADD COLUMN IF NOT EXISTS original_id   UUID;
+ALTER TABLE roll_deletion_logs ADD COLUMN IF NOT EXISTS section       TEXT;
+ALTER TABLE roll_deletion_logs ADD COLUMN IF NOT EXISTS gross_weight  NUMERIC;
+ALTER TABLE roll_deletion_logs ADD COLUMN IF NOT EXISTS core_weight   NUMERIC;
+ALTER TABLE roll_deletion_logs ADD COLUMN IF NOT EXISTS weight        NUMERIC;
+
 -- ─── 2) RPC: delete_roll_atomic ─────────────────────────────────────
 -- ลบม้วน + insert log ใน transaction เดียว
 -- ถ้า log insert fail หรือ delete fail → rollback ทั้งคู่
 DROP FUNCTION IF EXISTS delete_roll_atomic(BIGINT, TEXT, TEXT, TEXT, TEXT);
+DROP FUNCTION IF EXISTS delete_roll_atomic(UUID, TEXT, TEXT, TEXT, TEXT);
 CREATE OR REPLACE FUNCTION delete_roll_atomic(
-  p_roll_id     BIGINT,
+  p_roll_id     UUID,
   p_deleted_by  TEXT,
   p_reason      TEXT,
   p_work_order  TEXT DEFAULT NULL,
   p_sale_order  TEXT DEFAULT NULL
-) RETURNS BIGINT
+) RETURNS UUID
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
   v_roll  production_rolls%ROWTYPE;
-  v_logid BIGINT;
+  v_logid UUID;
 BEGIN
   IF p_deleted_by IS NULL OR length(trim(p_deleted_by)) = 0 THEN
     RAISE EXCEPTION 'deleted_by required';
@@ -59,7 +100,7 @@ BEGIN
     weight, gross_weight, core_weight, length, pcs,
     product_name, product_code, item_code, mat_code,
     cust_code, cust_name, width_cm, thick_mc,
-    inspector, started_at, original_id, section
+    inspector, started_at, section
   ) VALUES (
     trim(p_deleted_by), trim(p_reason), v_roll.machine_no, v_roll.lot_no,
     COALESCE(p_work_order, v_roll.work_order, ''),
@@ -68,30 +109,31 @@ BEGIN
     v_roll.weight, v_roll.gross_weight, v_roll.core_weight, v_roll.length, v_roll.pcs,
     v_roll.product_name, v_roll.product_code, v_roll.item_code, v_roll.mat_code,
     v_roll.cust_code, v_roll.customer, v_roll.width_cm, v_roll.thick_mc,
-    v_roll.inspector, v_roll.created_at, v_roll.id, COALESCE(v_roll.section, 'blow')
+    v_roll.inspector, v_roll.created_at, COALESCE(v_roll.section, 'blow')
   ) RETURNING id INTO v_logid;
 
   DELETE FROM production_rolls WHERE id = p_roll_id;
   RETURN v_logid;
 END $$;
 
-GRANT EXECUTE ON FUNCTION delete_roll_atomic(BIGINT, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION delete_roll_atomic(UUID, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated;
 
 -- ─── 3) RPC: return_to_rework_atomic ────────────────────────────────
 DROP FUNCTION IF EXISTS return_to_rework_atomic(BIGINT, TEXT, TEXT, TEXT);
+DROP FUNCTION IF EXISTS return_to_rework_atomic(UUID, TEXT, TEXT, TEXT);
 CREATE OR REPLACE FUNCTION return_to_rework_atomic(
-  p_roll_id      BIGINT,
+  p_roll_id      UUID,
   p_inbound_type TEXT,
   p_reason       TEXT,
   p_by           TEXT
-) RETURNS BIGINT
+) RETURNS UUID
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
   v_roll  production_rolls%ROWTYPE;
-  v_logid BIGINT;
+  v_logid UUID;
 BEGIN
   IF p_by IS NULL OR length(trim(p_by)) = 0 THEN
     RAISE EXCEPTION 'by required';
@@ -113,14 +155,14 @@ BEGIN
     weight, gross_weight, core_weight, length,
     product_name, product_code, item_code, mat_code,
     cust_code, cust_name, width_cm, thick_mc,
-    inspector, started_at, original_id, section
+    inspector, started_at, section
   ) VALUES (
     trim(p_by), '[ส่งกลับกรอ] ' || trim(p_reason),
     v_roll.machine_no, v_roll.lot_no, v_roll.roll_no, 'good',
     v_roll.weight, v_roll.gross_weight, v_roll.core_weight, v_roll.length,
     v_roll.product_name, v_roll.product_code, v_roll.item_code, v_roll.mat_code,
     v_roll.cust_code, v_roll.customer, v_roll.width_cm, v_roll.thick_mc,
-    v_roll.inspector, v_roll.created_at, v_roll.id, 'rewind'
+    v_roll.inspector, v_roll.created_at, 'rewind'
   ) RETURNING id INTO v_logid;
 
   UPDATE production_rolls SET
@@ -138,7 +180,7 @@ BEGIN
   RETURN v_logid;
 END $$;
 
-GRANT EXECUTE ON FUNCTION return_to_rework_atomic(BIGINT, TEXT, TEXT, TEXT) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION return_to_rework_atomic(UUID, TEXT, TEXT, TEXT) TO anon, authenticated;
 
 -- ─── 4) RPC: next_roll_no (gap-fill, atomic) ────────────────────────
 -- คืนเลขม้วนถัดไป (เติม gap ก่อน) — เรียกแทนการคำนวณฝั่ง client

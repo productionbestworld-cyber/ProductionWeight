@@ -629,7 +629,7 @@ function DeletedLogsByLot({ logs }: { logs: any[] }) {
                         <td className="px-2 py-1.5 text-slate-400">{r.length ?? '—'}</td>
                         <td className="px-2 py-1.5 text-slate-400 font-mono text-[10px]">{r.item_code ?? '—'}</td>
                         <td className="px-2 py-1.5 text-slate-400 font-mono text-[10px]">{r.mat_code ?? '—'}</td>
-                        <td className="px-2 py-1.5 text-slate-400 whitespace-nowrap">{(r.width_cm || r.thick_mc) ? `${r.width_cm ?? '?'}×${r.thick_mc ?? '?'}` : '—'}</td>
+                        <td className="px-2 py-1.5 text-slate-400 whitespace-nowrap">{(r.width_cm || r.thick_mc) ? `${r.width_cm ?? '?'}${(r as any).width_unit ?? 'cm'}×${r.thick_mc ?? '?'}mc` : '—'}</td>
                         <td className="px-2 py-1.5 text-slate-300">{r.inspector ?? '—'}</td>
                         <td className="px-2 py-1.5 text-amber-300 font-semibold">{r.deleted_by}</td>
                         <td className="px-2 py-1.5 text-slate-300 max-w-[200px]" title={r.reason}>{r.reason}</td>

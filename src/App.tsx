@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Scale, LayoutDashboard, Settings, Package, History, Warehouse as WarehouseIcon, ChevronDown, Wifi, WifiOff, AlertTriangle, Lock, Wrench } from 'lucide-react'
+import { Scale, LayoutDashboard, Settings, Package, History, Warehouse as WarehouseIcon, ChevronDown, Wifi, WifiOff, AlertTriangle, Lock, Search } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import WeighStation from './pages/WeighStation'
 import Dashboard from './pages/Dashboard'
@@ -9,9 +9,9 @@ import Transfer from './pages/Transfer'
 import HistoryPage from './pages/History'
 import Warehouse from './pages/Warehouse'
 import Admin, { PinGate, DeptPinGate, isAdminUnlocked, isDeptUnlocked, lockAllDepts, lockAdmin } from './pages/Admin'
-import ReworkInbox from './pages/ReworkInbox'
+import ReviewQueue from './pages/ReviewQueue'
 
-type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings' | 'admin' | 'rework'
+type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings' | 'admin' | 'review'
 type Dept = 'blow' | 'print' | 'rewind'
 
 const DEPT_KEY = 'bwp_dept'
@@ -99,11 +99,12 @@ export default function App() {
   const dc = deptConfig[dept]
 
   const NAV = ([
-    { key: 'weigh',     label: 'ชั่งน้ำหนัก',   icon: Scale,           depts: ['blow','print','rewind'] },
+    { key: 'weigh',         label: 'ชั่งน้ำหนัก', icon: Scale,           depts: ['blow','print','rewind'] },
     { key: 'transfer',  label: 'โอนเข้าคลัง',   icon: Package,         depts: ['blow','print','rewind'] },
     { key: 'warehouse', label: 'คลังสินค้า',    icon: WarehouseIcon,   depts: ['blow','print','rewind'] },
     { key: 'dashboard', label: 'Dashboard',      icon: LayoutDashboard, depts: ['blow','print','rewind'] },
     { key: 'history',   label: 'ประวัติผลิต',    icon: History,         depts: ['blow','print','rewind'] },
+    { key: 'review',    label: 'พิจารณาม้วน',    icon: Search,          depts: ['blow','print','rewind'] },
     { key: 'settings',  label: 'ตั้งค่าเครื่อง', icon: Settings,        depts: ['blow','print','rewind'] },
   ] as const).filter(n => (n.depts as readonly string[]).includes(dept))
 
@@ -255,11 +256,11 @@ export default function App() {
 
       <main className="flex-1 overflow-auto">
         {page === 'weigh'     && <WeighStation key={weighKey} dept={dept} />}
-        {page === 'rework'    && <ReworkInbox />}
         {page === 'transfer'  && <Transfer dept={dept} />}
         {page === 'warehouse' && <Warehouse dept={dept} />}
         {page === 'dashboard' && <Dashboard dept={dept} />}
         {page === 'history'   && <HistoryPage dept={dept} />}
+        {page === 'review'    && <ReviewQueue />}
         {page === 'settings'  && <MachineSettings dept={dept} />}
         {page === 'admin'     && <Admin dept={dept} />}
       </main>

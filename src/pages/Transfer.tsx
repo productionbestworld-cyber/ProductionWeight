@@ -4,8 +4,18 @@ import { supabase } from '../lib/supabase'
 import * as XLSX from 'xlsx'
 
 // ── พิมพ์ใบโอนเข้าคลัง ─────────────────────────────────────────────────────────
-function printTransferDoc(rolls: any[], staff: string, docNoIn?: string, dateIn?: Date) {
-  if (!rolls.length) return
+// เรียงม้วนน้อย→มาก (ม้วน #1 อยู่บนสุด); เศษ/ไม่มีเลข ใช้เวลาเป็นตัวรอง
+function sortRollsAsc(arr: any[]): any[] {
+  return [...arr].sort((a, b) => {
+    const ra = a.roll_no ?? 0, rb = b.roll_no ?? 0
+    if (ra !== rb) return ra - rb
+    return new Date(a.created_at ?? 0).getTime() - new Date(b.created_at ?? 0).getTime()
+  })
+}
+
+function printTransferDoc(rollsIn: any[], staff: string, docNoIn?: string, dateIn?: Date) {
+  if (!rollsIn.length) return
+  const rolls = sortRollsAsc(rollsIn)
   const docNo = docNoIn ?? `TR-${Date.now().toString().slice(-8)}`
   const date  = dateIn ?? new Date()
   const dateStr = `${String(date.getDate()).padStart(2,'0')}/${String(date.getMonth()+1).padStart(2,'0')}/${date.getFullYear()+543}`
@@ -15,7 +25,7 @@ function printTransferDoc(rolls: any[], staff: string, docNoIn?: string, dateIn?
   const firstType = rolls[0]?.roll_type ?? 'good'
   const isBad     = firstType === 'bad'
   const isScrap   = String(firstType).startsWith('scrap')
-  const docTitle  = isScrap ? 'ใบโอนเศษเสียเข้าคลัง' : isBad ? 'ใบโอนม้วนกรอเข้าคลัง' : 'ใบโอนสินค้าเข้าคลัง'
+  const docTitle  = isScrap ? 'ใบโอนเศษเสียเข้าคลัง' : isBad ? 'ใบโอนม้วนไปแผนกกรอ' : 'ใบโอนสินค้าเข้าคลัง'
   const docSub    = isScrap ? 'BWP SCRAP TRANSFER NOTE' : isBad ? 'BWP REWORK TRANSFER NOTE' : 'BWP TRANSFER NOTE'
   const headColor = isScrap ? '#c62828' : isBad ? '#ef6c00' : '#003087' // แดง/ส้ม/น้ำเงิน
   const unit      = isScrap ? 'ถุง' : 'ม้วน'
@@ -163,9 +173,10 @@ ${Object.entries(groups).map(([key, items]) => {
 
 // ── Excel helper ─────────────────────────────────────────────────────────────
 function buildTransferSheet(
-  rolls: any[],
+  rollsIn: any[],
   opts: { docNo: string; date: Date; staff: string; sheetName?: string }
 ) {
+  const rolls = sortRollsAsc(rollsIn)
   const { docNo, date, staff, sheetName = 'Transfer' } = opts
   const totalKg  = rolls.reduce((s, r) => s + (r.weight ?? 0), 0)
   const machines  = Array.from(new Set(rolls.map(r => r.machine_no).filter(Boolean))).join(', ')
@@ -184,7 +195,7 @@ function buildTransferSheet(
   const firstType = rolls[0]?.roll_type ?? 'good'
   const isBad     = firstType === 'bad'
   const isScrap   = String(firstType).startsWith('scrap')
-  const docTitle  = isScrap ? 'ใบโอนเศษเสียเข้าคลัง' : isBad ? 'ใบโอนม้วนกรอเข้าคลัง' : 'ใบโอนสินค้าเข้าคลัง'
+  const docTitle  = isScrap ? 'ใบโอนเศษเสียเข้าคลัง' : isBad ? 'ใบโอนม้วนไปแผนกกรอ' : 'ใบโอนสินค้าเข้าคลัง'
   const docSub    = isScrap ? 'BWP SCRAP TRANSFER NOTE' : isBad ? 'BWP REWORK TRANSFER NOTE' : 'BWP TRANSFER NOTE'
   const typeBanner= isScrap ? '⚠ ประเภท: เศษเสีย (SCRAP) — โอนออกเพื่อทำลาย/รีไซเคิล'
                   : isBad   ? '⚠ ประเภท: ม้วนกรอ (REWORK) — โอนออกเพื่อกรอใหม่'
@@ -296,8 +307,10 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   const [pendingCounts, setPendingCounts] = useState<{ good: number; bad: number; scrap: number }>({ good: 0, bad: 0, scrap: 0 })
 
   // โหลดจำนวนม้วนคงค้างทุกประเภท
+  // ⚠ ไม่นับม้วน review_status='pending_review' (รอ ผจก พิจารณา — ยังโอนไม่ได้)
   async function loadPendingCounts() {
     let q = supabase.from('production_rolls').select('roll_type').eq('transferred', false)
+      .or('review_status.is.null,review_status.eq.approved_rework')
     if (dept) q = q.or(`section.eq.${dept},section.is.null`)
     const { data } = await q
     const c = { good: 0, bad: 0, scrap: 0 }
@@ -315,6 +328,8 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
     let q = supabase.from('production_rolls')
       .select('*')
       .order('created_at',{ ascending: false })
+      // ⚠ ไม่แสดงม้วน review_status='pending_review' (รอ ผจก พิจารณา)
+      .or('review_status.is.null,review_status.eq.approved_rework')
     // กรองตาม type ที่เลือก
     if (typeFilter === 'good')      q = q.eq('roll_type', 'good')
     else if (typeFilter === 'bad')  q = q.eq('roll_type', 'bad')
@@ -369,6 +384,11 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
       if (!String(r.roll_no).includes(q) && !(r.remark??'').toLowerCase().includes(q)) return false
     }
     return true
+  }).sort((a, b) => {
+    // เรียงม้วนน้อย→มาก (ม้วน #1 บนสุด); ตัวรอง = เวลาชั่ง
+    const ra = a.roll_no ?? 0, rb = b.roll_no ?? 0
+    if (ra !== rb) return ra - rb
+    return new Date(a.created_at ?? 0).getTime() - new Date(b.created_at ?? 0).getTime()
   })
 
   function toggleOne(id: string) {
@@ -395,7 +415,8 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
     if (selected.size === 0) return
     const unit = typeFilter === 'scrap' ? 'ถุง' : 'ม้วน'
     const typeLabel = typeFilter === 'good' ? 'ม้วนดี (FG)' : typeFilter === 'bad' ? 'ม้วนกรอ' : 'เศษเสีย'
-    if (!confirm(`โอน ${typeLabel} ${selected.size} ${unit} รวม ${fmt(totalKg)} Kgs. เข้าคลัง?\n\n(จะพิมพ์ใบโอนให้อัตโนมัติ)`)) return
+    const destLabel = typeFilter === 'bad' ? 'ไปแผนกกรอ' : 'เข้าคลัง'
+    if (!confirm(`โอน ${typeLabel} ${selected.size} ${unit} รวม ${fmt(totalKg)} Kgs. ${destLabel}?\n\n(จะพิมพ์ใบโอนให้อัตโนมัติ)`)) return
     setSaving(true)
     try {
       const transferTime = new Date().toISOString()
@@ -466,6 +487,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
     setDocLoading(true)
     const { data } = await supabase.from('production_rolls')
       .select('*').eq('transfer_doc_id', doc.id)
+      .order('roll_no', { ascending: true })
       .order('created_at', { ascending: true })
     setDocRolls(data ?? [])
     setDocLoading(false)
@@ -506,9 +528,9 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-white font-bold text-xl flex items-center gap-2">
-              <Package size={22} className="text-brand-400" /> {typeFilter==='scrap'?'โอนเศษเสียเข้าคลัง':typeFilter==='bad'?'โอนม้วนกรอเข้าคลัง':'โอนม้วนเข้าคลัง'}
+              <Package size={22} className="text-brand-400" /> {typeFilter==='scrap'?'โอนเศษเสียเข้าคลัง':typeFilter==='bad'?'โอนม้วนกรอไปแผนกกรอ':'โอนม้วนเข้าคลัง'}
             </h1>
-            <p className="text-slate-400 text-xs mt-0.5">เจ้าหน้าที่เลือก{typeFilter==='scrap'?'ถุงเศษ':'ม้วน'}ที่ผลิตเสร็จแล้วโอนเข้าคลัง</p>
+            <p className="text-slate-400 text-xs mt-0.5">{typeFilter==='bad'?'เจ้าหน้าที่เลือกม้วนกรอที่ผลิตเสร็จแล้ว โอนไปแผนกกรอ':`เจ้าหน้าที่เลือก${typeFilter==='scrap'?'ถุงเศษ':'ม้วน'}ที่ผลิตเสร็จแล้วโอนเข้าคลัง`}</p>
           </div>
           <button onClick={() => { loadRolls(); loadDocs() }} className="flex items-center gap-1.5 text-slate-400 hover:text-white text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg">
             <RefreshCw size={12}/> รีเฟรช
@@ -919,7 +941,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                   <button onClick={handleTransfer} disabled={saving || !staff.trim()}
                     className="flex items-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm px-5 py-2 rounded-xl font-bold transition-colors">
                     <ArrowRightFromLine size={14}/>
-                    {saving ? 'กำลังโอน...' : 'ยืนยันโอนเข้าคลัง'}
+                    {saving ? 'กำลังโอน...' : typeFilter==='bad' ? 'ยืนยันโอนไปกรอ' : 'ยืนยันโอนเข้าคลัง'}
                   </button>
                 </div>
               </div>

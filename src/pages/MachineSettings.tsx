@@ -3,12 +3,39 @@ import { Plus, Trash2, Save, ChevronDown, ChevronUp, RefreshCw, X, Search } from
 import { supabase } from '../lib/supabase'
 import { fetchProducts, type Product } from './Products'
 
+// ── Display helpers ───────────────────────────────────────────────────────────
+// แสดงขนาดให้ตรงกับหน่วยที่ผู้ใช้เลือก — ใช้ทุกหน้าทั่วระบบ
+export function fmtSize(
+  widthCm?: string | null,
+  thickMc?: string | null,
+  widthUnit?: 'cm' | 'mm' | null,
+  opts?: { sep?: string; noUnit?: boolean }
+): string {
+  const w = (widthCm ?? '').toString().trim()
+  const t = (thickMc ?? '').toString().trim()
+  if (!w && !t) return ''
+  const u = (widthUnit ?? 'cm') as 'cm' | 'mm'
+  const sep = opts?.sep ?? '×'
+  if (opts?.noUnit) return `${w}${sep}${t}`
+  return `${w}${u}${sep}${t}mc`
+}
+// แปลงค่าเมื่อสลับหน่วย: cm↔mm
+export function convertWidth(value: string, from: 'cm'|'mm', to: 'cm'|'mm'): string {
+  if (from === to) return value
+  const n = parseFloat(value)
+  if (!Number.isFinite(n)) return value
+  const converted = from === 'cm' ? n * 10 : n / 10
+  // ตัดทศนิยมท้าย .0
+  return converted.toString()
+}
+
 // ── Full Machine Profile ──────────────────────────────────────────────────────
 export interface MachineProfile {
   machine_no:  string
   // ลูกค้า
   custCode:    string
   custName:    string
+  custBranch:  string
   custAddress: string
   decimal:     1 | 2
   // สินค้า
@@ -17,6 +44,7 @@ export interface MachineProfile {
   productCode: string
   productName: string
   widthCm:     string
+  widthUnit:   'cm' | 'mm'   // หน่วยกว้าง (ส่วนใหญ่ cm; บางงานสั่ง mm)
   thickMc:     string
   lotNo:       string
   length:      string
@@ -42,8 +70,8 @@ export interface MachineProfile {
 }
 
 const EMPTY_PROFILE: MachineProfile = {
-  machine_no:'', custCode:'', custName:'', custAddress:'', decimal:2,
-  itemCode:'', matCode:'', productCode:'', productName:'', widthCm:'', thickMc:'',
+  machine_no:'', custCode:'', custName:'', custBranch:'', custAddress:'', decimal:2,
+  itemCode:'', matCode:'', productCode:'', productName:'', widthCm:'', widthUnit:'cm', thickMc:'',
   lotNo:'', length:'', pcs:'', coreWeight:'1.25', inspector:'', locked:false,
   plannedQty:'', labelSize:'long', headerText:'', blankHeader:false, section:'blow',
   soNo:'', woNo:'', deliveryDate:'',
@@ -66,6 +94,7 @@ function dbToProfile(row: any): MachineProfile {
     machine_no:  row.machine_no,
     custCode:    row.cust_code    ?? '',
     custName:    row.cust_name    ?? '',
+    custBranch:  row.cust_branch  ?? '',
     custAddress: row.cust_address ?? '',
     decimal:     (row.decimal_places ?? 2) as 1|2,
     itemCode:    row.item_code    ?? '',
@@ -73,6 +102,7 @@ function dbToProfile(row: any): MachineProfile {
     productCode: row.product_code ?? '',
     productName: row.product_name ?? '',
     widthCm:     row.width_cm     ?? '',
+    widthUnit:   (row.width_unit  ?? 'cm') as 'cm'|'mm',
     thickMc:     row.thick_mc     ?? '',
     lotNo:       row.lot_no       ?? '',
     length:      row.length       ?? '',
@@ -95,6 +125,7 @@ function profileToDb(p: MachineProfile) {
     machine_no:    p.machine_no,
     cust_code:     p.custCode,
     cust_name:     p.custName,
+    cust_branch:   p.custBranch,
     cust_address:  p.custAddress,
     decimal_places: p.decimal,
     item_code:     p.itemCode,
@@ -102,6 +133,7 @@ function profileToDb(p: MachineProfile) {
     product_code:  p.productCode,
     product_name:  p.productName,
     width_cm:      p.widthCm,
+    width_unit:    p.widthUnit ?? 'cm',
     thick_mc:      p.thickMc,
     lot_no:        p.lotNo,
     length:        p.length,
@@ -197,11 +229,19 @@ function ItemCodeAutocomplete({ value, products, onChange, onPick }: {
 
   const filtered = (() => {
     const v = value.trim().toLowerCase()
-    return products
-      .filter(s => s.item_code && (!v || s.item_code.toLowerCase().includes(v) ||
+    if (!v) return products.filter(s => s.item_code)  // โชว์ทั้งหมด
+    return products.filter(s => {
+      if (!s.item_code) return false
+      const sizeStr = `${s.width_cm ?? ''}x${s.thick_mc ?? ''}`.toLowerCase()
+      return (
+        s.item_code.toLowerCase().includes(v) ||
         s.product_name?.toLowerCase().includes(v) ||
-        s.cust_name?.toLowerCase().includes(v)))
-      .slice(0, 10)
+        s.cust_name?.toLowerCase().includes(v) ||
+        (s.width_cm ?? '').toLowerCase().includes(v) ||
+        (s.thick_mc ?? '').toLowerCase().includes(v) ||
+        sizeStr.includes(v)
+      )
+    })
   })()
 
   return (
@@ -213,17 +253,21 @@ function ItemCodeAutocomplete({ value, products, onChange, onPick }: {
           onChange={e => { onChange(e.target.value); setOpen(true) }}
           onFocus={() => setOpen(true)}
           onClick={() => setOpen(true)}
-          placeholder="คลิกเพื่อเลือก Item Code จากคลัง..."
+          placeholder="พิมพ์ค้นหา (item code / size / ลูกค้า) หรือคลิกเลือก..."
           className="w-full bg-slate-800 border-2 border-brand-500/40 hover:border-brand-500 focus:border-brand-500 rounded-lg pl-8 pr-8 py-2 text-white text-sm outline-none cursor-pointer"
         />
         <ChevronDown size={14} className={`absolute right-2.5 top-1/2 -translate-y-1/2 text-brand-400 pointer-events-none transition-transform ${open?'rotate-180':''}`}/>
       </div>
       {open && (
-        <div className="absolute z-10 mt-1 w-[200%] max-w-md bg-slate-800 border border-brand-500/40 rounded-lg shadow-2xl max-h-72 overflow-y-auto">
+        <div className="absolute z-10 mt-1 w-[200%] max-w-md bg-slate-800 border border-brand-500/40 rounded-lg shadow-2xl max-h-80 overflow-y-auto">
+          <div className="sticky top-0 bg-slate-900 border-b border-slate-700 px-3 py-1.5 text-[10px] text-slate-400 flex justify-between">
+            <span>พบ {filtered.length} รายการ {value.trim() && `(กรอง: "${value.trim()}")`}</span>
+            <span className="text-brand-400">พิมพ์เพื่อกรอง / Enter เพื่อใช้ค่าที่พิมพ์</span>
+          </div>
           {filtered.length === 0 ? (
             <div className="px-3 py-4 text-xs text-slate-400 text-center">
-              <p className="mb-1">ยังไม่มี Item Code ในระบบ</p>
-              <p className="text-brand-400">→ ไปเพิ่มที่เมนู "คลัง Item Code" ก่อน</p>
+              <p>ไม่พบ Item Code ที่ตรงกัน</p>
+              <p className="text-brand-400 mt-1">กด Enter เพื่อใช้ค่าที่พิมพ์ หรือเพิ่มที่เมนู "คลัง Item Code"</p>
             </div>
           ) : filtered.map((s, i) => (
             <button
@@ -342,7 +386,24 @@ function EditModal({ p, products, onChange, onAutoFill, onRemove, onClose }: {
               />
             </div>
             {f('Mat Code','matCode','',true)}
-            {f('Lot No *','lotNo','',true)}
+            {/* Lot No — กดปุ๊ป auto-gen ทันที (ถ้าว่าง), แก้ได้ */}
+            <div>
+              <label className="block text-[10px] text-slate-500 mb-1">Lot No * <span className="text-emerald-400 normal-case">(คลิก → สร้างให้)</span></label>
+              <input
+                value={(p.lotNo as string) ?? ''}
+                onChange={e => onChange('lotNo', e.target.value)}
+                onFocus={() => {
+                  if ((p.lotNo ?? '').trim()) return
+                  const yy = String((new Date().getFullYear() + 543) % 100).padStart(2, '0')
+                  const mm = String(new Date().getMonth() + 1).padStart(2, '0')
+                  const mc = (p.machine_no ?? '').toUpperCase()
+                  const cc = (p.custCode ?? '').replace(/\D/g, '').padStart(4, '0').slice(-4)
+                  if (!mc || !cc || cc === '0000') return
+                  onChange('lotNo', `${yy}${mc}${cc}${mm}`)
+                }}
+                placeholder="คลิกเพื่อสร้างอัตโนมัติ หรือพิมพ์เอง..."
+                className="w-full bg-slate-800 border-2 border-brand-500/40 hover:border-brand-500 focus:border-brand-500 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none font-mono cursor-pointer" />
+            </div>
             {f('Length (Ms.)','length','',true)}
             {f('Pcs.','pcs','',true)}
             {f('ยอดสั่งผลิต (kg) *','plannedQty','',true)}
@@ -364,16 +425,67 @@ function EditModal({ p, products, onChange, onAutoFill, onRemove, onClose }: {
           <div className="grid grid-cols-2 gap-2">
             {f('Product Code','productCode','',true)}
             {f('ชื่อสินค้า *','productName','')}
-            {f('กว้าง (cm)','widthCm','',true)}
+            {/* กว้าง + หน่วย cm/mm */}
+            <div>
+              <label className="block text-[10px] text-slate-500 mb-1">กว้าง *</label>
+              <div className="flex gap-1">
+                <input value={(p.widthCm as string) ?? ''} onChange={e => onChange('widthCm', e.target.value)}
+                  className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-brand-500" />
+                {(['cm','mm'] as const).map(u => (
+                  <button key={u} type="button"
+                    onMouseDown={e => {
+                      e.preventDefault()
+                      const cur = (p.widthUnit ?? 'cm') as 'cm'|'mm'
+                      if (cur !== u) {
+                        // แปลงค่าเมื่อสลับหน่วย
+                        onChange('widthCm', convertWidth((p.widthCm as string) ?? '', cur, u))
+                      }
+                      onChange('widthUnit', u)
+                    }}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold ${
+                      (p.widthUnit ?? 'cm') === u ? 'bg-brand-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
+                    }`}>{u}</button>
+                ))}
+              </div>
+            </div>
             {f('หนา (mc)','thickMc','',true)}
           </div>
 
           {/* ── 4) ลูกค้า (auto-fill ได้) ──────────────────────── */}
           <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">ลูกค้า</p>
-          <div className="grid grid-cols-2 gap-2">
-            {f('รหัสลูกค้า','custCode','',true)}
-            {f('ชื่อลูกค้า *','custName','',true)}
-            {f('ที่อยู่','custAddress','')}
+          <div className="grid grid-cols-12 gap-2">
+            <div className="col-span-2">
+              <label className="block text-[10px] text-slate-500 mb-1">รหัส</label>
+              <input value={(p.custCode as string) ?? ''} onChange={e => {
+                  const newCode = e.target.value.slice(0,3)
+                  // เช็คก่อนว่า lot เดิมเป็น auto-gen ของ custCode เก่าหรือไม่
+                  const yy = String((new Date().getFullYear() + 543) % 100).padStart(2,'0')
+                  const mm = String(new Date().getMonth() + 1).padStart(2,'0')
+                  const mc = (p.machine_no ?? '').toUpperCase()
+                  const oldCc = (p.custCode ?? '').replace(/\D/g,'').padStart(4,'0').slice(-4)
+                  const oldAuto = mc && oldCc !== '0000' ? `${yy}${mc}${oldCc}${mm}` : ''
+                  onChange('custCode', newCode)
+                  if (oldAuto && (p.lotNo ?? '') === oldAuto) {
+                    const newCcDigits = newCode.replace(/\D/g,'').padStart(4,'0').slice(-4)
+                    if (mc && newCcDigits !== '0000') {
+                      onChange('lotNo', `${yy}${mc}${newCcDigits}${mm}`)
+                    }
+                  }
+                }}
+                maxLength={3}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-brand-500 font-mono"/>
+            </div>
+            <div className="col-span-7">
+              <label className="block text-[10px] text-slate-500 mb-1">ชื่อลูกค้า *</label>
+              <input value={(p.custName as string) ?? ''} onChange={e => onChange('custName', e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-brand-500"/>
+            </div>
+            <div className="col-span-3">
+              <label className="block text-[10px] text-slate-500 mb-1">สาขา</label>
+              <input value={(p.custBranch as string) ?? ''} onChange={e => onChange('custBranch', e.target.value)}
+                placeholder="เช่น สำนักงานใหญ่"
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-brand-500"/>
+            </div>
           </div>
 
           {/* ── 5) ตั้งค่าการชั่ง + ใบปะหน้า ───────────────────── */}

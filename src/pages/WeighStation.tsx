@@ -3,7 +3,8 @@ import { Save, Printer, RefreshCw, CheckCircle2, ArrowLeft, Wind, X, Settings } 
 import QRCode from 'react-qr-code'
 import QRCodeLib from 'qrcode'
 import { supabase } from '../lib/supabase'
-import { loadProfiles, saveProfiles, type MachineProfile } from './MachineSettings'
+import { loadProfiles, saveProfiles, fmtSize, convertWidth, type MachineProfile } from './MachineSettings'
+import ReworkJobList from './ReworkJobList'
 import { loadLongLayout, type FieldConfig } from './LabelDesigner'
 import { fetchProducts, type Product } from './Products'
 import ReworkInbox from './ReworkInbox'
@@ -62,7 +63,7 @@ async function printLabel(p: MachineProfile, rollNo: number, gross: number, net:
     prodname:    p.productName,
     machine:     `เครื่อง&nbsp;&nbsp;<b>${p.machine_no}</b>`,
     core:        `Core Weight&nbsp;&nbsp;<b>${fmt(core, dec)}</b>`,
-    size:        `Size&nbsp;&nbsp;<b style="font-size:1.2em">${p.widthCm}</b>&nbsp;cm&nbsp;×&nbsp;<b style="font-size:1.2em">${p.thickMc}</b>&nbsp;mc`,
+    size:        `Size&nbsp;&nbsp;<b style="font-size:1.2em">${p.widthCm}</b>&nbsp;${p.widthUnit ?? 'cm'}&nbsp;×&nbsp;<b style="font-size:1.2em">${p.thickMc}</b>&nbsp;mc`,
     // right column
     lotno:       `Lot No&nbsp;&nbsp;<b>${p.lotNo}</b>`,
     length:      `Length&nbsp;&nbsp;<b>${p.length || '—'}</b>&nbsp;M.${p.pcs ? `&nbsp;&nbsp;<b>${p.pcs}</b>&nbsp;Pcs.` : ''}`,
@@ -188,7 +189,7 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
   <div class="prod-row">
     <span class="pname">${p.productName}</span>
     <span class="pdot">·</span>
-    <span class="psize">${p.widthCm} cm × ${p.thickMc} mc</span>
+    <span class="psize">${p.widthCm} ${p.widthUnit ?? 'cm'} × ${p.thickMc} mc</span>
     <span class="plot">Lot: ${p.lotNo}</span>
   </div>
 
@@ -268,7 +269,7 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
   <div class="body">
     <div class="r"><span class="k">Product</span><span class="v xl">${p.productName}</span></div>
     <div class="r"><span class="k">Item Code</span><span class="v">${p.itemCode || '—'}</span></div>
-    <div class="r"><span class="k">Size</span><span class="v">${p.widthCm} cm × ${p.thickMc} mc</span></div>
+    <div class="r"><span class="k">Size</span><span class="v">${p.widthCm} ${p.widthUnit ?? 'cm'} × ${p.thickMc} mc</span></div>
     <div class="r"><span class="k">Lot No</span><span class="v">${p.lotNo}</span></div>
     <div class="r"><span class="k">Length</span><span class="v">${p.length || '—'} M.${p.pcs ? ' · '+p.pcs+' Pcs.' : ''}</span></div>
     <div class="sep"></div>
@@ -332,28 +333,41 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
 }) {
   const [editing, setEditing]   = useState<MachineProfile | null>(null)
   const [progress, setProgress] = useState<Record<string, { done: number; rolls: number }>>({})
-  const [parked,   setParked]   = useState<Record<string, any>>({}) // machine_no → parked_job row
+  const [parked,   setParked]   = useState<Record<string, any[]>>({}) // machine_no → list ของ parked
+  const [showResumeClosed, setShowResumeClosed] = useState(false)
+  const [parkedPickerMachine, setParkedPickerMachine] = useState<string | null>(null)
 
-  // โหลด parked jobs
+  // โหลด parked jobs — group ตาม machine_no
   async function loadParked() {
-    const { data } = await supabase.from('parked_jobs').select('*')
+    const { data } = await supabase.from('parked_jobs').select('*').order('parked_at', { ascending: false })
     if (!data) return
-    const map: Record<string, any> = {}
-    data.forEach(r => { map[r.machine_no] = r })
+    const map: Record<string, any[]> = {}
+    data.forEach(r => {
+      if (!map[r.machine_no]) map[r.machine_no] = []
+      map[r.machine_no].push(r)
+    })
     setParked(map)
   }
 
-  // คืนงานที่จอด
-  async function restoreParked(machineNo: string) {
-    const job = parked[machineNo]
-    if (!job) return
-    if (!confirm(`คืนงาน "${job.profile_snapshot?.productName}" ให้เครื่อง ${machineNo}?\nงานที่รันอยู่จะถูกแทนที่`)) return
+  // คืนงานที่จอด — ถ้ามีหลายงาน ให้เปิด picker ก่อน
+  async function clickRestore(machineNo: string) {
+    const jobs = parked[machineNo] ?? []
+    if (jobs.length === 0) return
+    if (jobs.length === 1) {
+      await doRestore(jobs[0])
+    } else {
+      setParkedPickerMachine(machineNo)
+    }
+  }
+
+  async function doRestore(job: any) {
+    if (!confirm(`คืนงาน "${job.profile_snapshot?.productName}" ให้เครื่อง ${job.machine_no}?\nงานที่รันอยู่ตอนนี้จะถูกแทนที่ (ถ้ามี — อย่าลืมพักไว้ก่อน)`)) return
     const snap = job.profile_snapshot as MachineProfile
     await supabase.from('machine_profiles').upsert({
-      machine_no: machineNo,
-      cust_code: snap.custCode, cust_name: snap.custName, cust_address: snap.custAddress,
+      machine_no: job.machine_no,
+      cust_code: snap.custCode, cust_name: snap.custName, cust_branch: snap.custBranch, cust_address: snap.custAddress,
       decimal_places: snap.decimal, item_code: snap.itemCode, mat_code: snap.matCode, product_code: snap.productCode,
-      product_name: snap.productName, width_cm: snap.widthCm, thick_mc: snap.thickMc,
+      product_name: snap.productName, width_cm: snap.widthCm, width_unit: snap.widthUnit ?? 'cm', thick_mc: snap.thickMc,
       lot_no: snap.lotNo, length: snap.length, pcs: snap.pcs, core_weight: snap.coreWeight,
       inspector: snap.inspector, locked: snap.locked, planned_qty: snap.plannedQty,
       label_size: snap.labelSize, header_text: snap.headerText ?? '',
@@ -361,8 +375,15 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
       updated_at: new Date().toISOString(),
     }, { onConflict: 'machine_no' })
     await supabase.from('parked_jobs').delete().eq('id', job.id)
-    setParked(prev => { const n = { ...prev }; delete n[machineNo]; return n })
+    setParkedPickerMachine(null)
+    await loadParked()
     onProfileUpdated()
+  }
+
+  async function deleteParked(job: any) {
+    if (!confirm(`ลบงานจอด "${job.profile_snapshot?.productName}" (Lot ${job.lot_no}) ทิ้ง?\n\nม้วนที่ชั่งไว้ยังอยู่ใน DB — แค่ลบ snapshot profile ทิ้ง`)) return
+    await supabase.from('parked_jobs').delete().eq('id', job.id)
+    await loadParked()
   }
 
   useEffect(() => { loadParked() }, [])
@@ -415,10 +436,10 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
             if (data) {
               const prof: MachineProfile = {
                 machine_no: data.machine_no,
-                custCode: data.cust_code ?? '', custName: data.cust_name ?? '', custAddress: data.cust_address ?? '',
+                custCode: data.cust_code ?? '', custName: data.cust_name ?? '', custBranch: data.cust_branch ?? '', custAddress: data.cust_address ?? '',
                 decimal: (data.decimal_places ?? 2) as 1|2,
                 itemCode: data.item_code ?? '', matCode: data.mat_code ?? '', productCode: data.product_code ?? '',
-                productName: data.product_name ?? '', widthCm: data.width_cm ?? '', thickMc: data.thick_mc ?? '',
+                productName: data.product_name ?? '', widthCm: data.width_cm ?? '', widthUnit: (data.width_unit ?? 'cm') as 'cm'|'mm', thickMc: data.thick_mc ?? '',
                 lotNo: data.lot_no ?? '', length: data.length ?? '', pcs: data.pcs ?? '',
                 coreWeight: data.core_weight ?? '1.25', inspector: data.inspector ?? '', locked: data.locked ?? false,
                 plannedQty: data.planned_qty ?? '',
@@ -434,21 +455,27 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
       )}
 
       <div className="flex-1 flex flex-col min-h-0">
-        <div className="mb-2">
-          <h1 className="text-white font-bold text-xl flex items-center gap-2">
-            <Wind size={20} className="text-brand-400" />
-            เลือกเครื่อง
-            {dept && (
-              <span className={`text-sm font-bold px-3 py-1 rounded-full ${
-                dept==='blow'   ? 'bg-blue-500/20 text-blue-300' :
-                dept==='print'  ? 'bg-purple-500/20 text-purple-300' :
-                                  'bg-green-500/20 text-green-300'
-              }`}>
-                {dept==='blow' ? '🌬 ผลิต(เป่า)' : dept==='print' ? '🖨 ผลิต(พิมพ์)' : '🔁 กรอ(Rework)'}
-              </span>
-            )}
-          </h1>
-          <p className="text-slate-400 text-sm mt-1">เครื่องว่าง → คลิกเพื่อกรอกข้อมูลงาน · เครื่องพร้อม → คลิกเพื่อเริ่มชั่ง</p>
+        <div className="mb-2 flex items-center justify-between">
+          <div>
+            <h1 className="text-white font-bold text-xl flex items-center gap-2">
+              <Wind size={20} className="text-brand-400" />
+              เลือกเครื่อง
+              {dept && (
+                <span className={`text-sm font-bold px-3 py-1 rounded-full ${
+                  dept==='blow'   ? 'bg-blue-500/20 text-blue-300' :
+                  dept==='print'  ? 'bg-purple-500/20 text-purple-300' :
+                                    'bg-green-500/20 text-green-300'
+                }`}>
+                  {dept==='blow' ? '🌬 ผลิต(เป่า)' : dept==='print' ? '🖨 ผลิต(พิมพ์)' : '🔁 กรอ(Rework)'}
+                </span>
+              )}
+            </h1>
+            <p className="text-slate-400 text-sm mt-1">เครื่องว่าง → คลิกเพื่อกรอกข้อมูลงาน · เครื่องพร้อม → คลิกเพื่อเริ่มชั่ง</p>
+          </div>
+          <button onClick={() => setShowResumeClosed(true)}
+            className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-1.5">
+            📂 ดึงงานเก่า
+          </button>
         </div>
 
         {/* Grid — แสดงทุกเครื่อง, size เท่ากันหมด */}
@@ -480,10 +507,10 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
                   <div className={`flex items-center justify-between px-3 py-2.5 ${ready ? 'bg-brand-600/20 border-b border-brand-500/20' : 'bg-slate-800/40 border-b border-slate-700/40'}`}>
                     <span className={`font-black text-lg tracking-wide ${ready ? 'text-brand-300' : 'text-slate-500'}`}>{p.machine_no}</span>
                     <div className="flex items-center gap-1.5">
-                      {parked[p.machine_no] && (
+                      {parked[p.machine_no] && parked[p.machine_no].length > 0 && (
                         <button className="pointer-events-auto z-10 text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/40 transition-colors"
-                          onClick={e => { e.stopPropagation(); restoreParked(p.machine_no) }}>
-                          🅿 มีงานจอด ↩
+                          onClick={e => { e.stopPropagation(); clickRestore(p.machine_no) }}>
+                          🅿 จอด {parked[p.machine_no].length} งาน ↩
                         </button>
                       )}
                       {ready
@@ -506,7 +533,7 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
                       <div className="flex gap-1.5 flex-wrap">
                         {p.soNo && <span className="text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/25 px-2 py-0.5 rounded font-bold">SO {p.soNo}</span>}
                         <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded font-mono border border-slate-700">Lot {p.lotNo.slice(-8)}</span>
-                        {p.widthCm && <span className="text-[10px] bg-brand-500/15 text-brand-300 border border-brand-500/25 px-2 py-0.5 rounded font-bold">{p.widthCm}×{p.thickMc}mc</span>}
+                        {p.widthCm && <span className="text-[10px] bg-brand-500/15 text-brand-300 border border-brand-500/25 px-2 py-0.5 rounded font-bold">{fmtSize(p.widthCm, p.thickMc, p.widthUnit)}</span>}
                       </div>
 
                       {/* Mat + Inspector */}
@@ -540,16 +567,21 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
                     </div>
                   ) : (
                     <div className="flex-1 flex flex-col items-center justify-center text-center px-3 py-4">
-                      {parked[p.machine_no] ? (
+                      {parked[p.machine_no] && parked[p.machine_no].length > 0 ? (
                         <>
                           <div className="w-8 h-8 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center mb-2">
                             <span className="text-amber-400 text-base">🅿</span>
                           </div>
-                          <p className="text-amber-300 text-xs font-bold">มีงานจอดอยู่</p>
-                          <p className="text-amber-400/70 text-[10px] mt-0.5 truncate max-w-full px-2">{parked[p.machine_no]?.profile_snapshot?.productName}</p>
+                          <p className="text-amber-300 text-xs font-bold">มีงานจอด {parked[p.machine_no].length} งาน</p>
+                          <p className="text-amber-400/70 text-[10px] mt-0.5 truncate max-w-full px-2">
+                            {parked[p.machine_no].length === 1
+                              ? parked[p.machine_no][0]?.profile_snapshot?.productName
+                              : parked[p.machine_no].map(j => j.profile_snapshot?.productName).filter(Boolean).slice(0,2).join(', ')
+                            }
+                          </p>
                           <button className="pointer-events-auto z-10 mt-2 text-xs font-bold px-3 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/40 transition-colors"
-                            onClick={e => { e.stopPropagation(); restoreParked(p.machine_no) }}>
-                            ↩ คืนงานนี้
+                            onClick={e => { e.stopPropagation(); clickRestore(p.machine_no) }}>
+                            ↩ {parked[p.machine_no].length > 1 ? 'เลือกคืน' : 'คืนงานนี้'}
                           </button>
                         </>
                       ) : (
@@ -583,6 +615,52 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
           onSaved={() => { setEditing(null); onProfileUpdated(); loadParked() }}
           onParked={() => { setEditing(null); onProfileUpdated(); loadParked() }} />
       )}
+      {/* Resume closed-job modal */}
+      {showResumeClosed && (
+        <ResumeClosedJobModal
+          dept={dept}
+          machines={sorted}
+          onClose={() => setShowResumeClosed(false)}
+          onResumed={() => { setShowResumeClosed(false); onProfileUpdated() }} />
+      )}
+      {/* Parked picker — เลือกงานจอดที่จะคืน (กรณี > 1) */}
+      {parkedPickerMachine && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setParkedPickerMachine(null)}>
+          <div className="bg-slate-900 border border-amber-500/40 rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+              <p className="text-white font-bold">🅿 งานจอดที่เครื่อง {parkedPickerMachine}</p>
+              <button onClick={() => setParkedPickerMachine(null)} className="text-slate-400 hover:text-white">✕</button>
+            </div>
+            <div className="px-3 py-3 max-h-[60vh] overflow-y-auto space-y-2">
+              {(parked[parkedPickerMachine] ?? []).map(job => {
+                const snap = job.profile_snapshot ?? {}
+                const parkedAt = job.parked_at ? new Date(job.parked_at).toLocaleString('th-TH', { dateStyle:'short', timeStyle:'short' }) : '—'
+                return (
+                  <div key={job.id} className="bg-slate-800 border border-slate-700 rounded-xl p-3">
+                    <p className="text-white font-bold text-sm">{snap.productName || '—'}</p>
+                    <p className="text-slate-400 text-xs">{snap.custName || '—'}</p>
+                    <p className="text-amber-300 text-xs font-mono mt-0.5">Lot {job.lot_no || snap.lotNo || '—'}</p>
+                    <p className="text-slate-500 text-[10px] mt-1">พักโดย <b className="text-slate-300">{job.parked_by || '—'}</b> · {parkedAt}</p>
+                    <div className="flex gap-2 mt-2">
+                      <button onClick={() => doRestore(job)}
+                        className="flex-1 bg-amber-600 hover:bg-amber-500 text-white py-1.5 rounded-lg text-xs font-bold">
+                        ↩ คืนงานนี้
+                      </button>
+                      <button onClick={() => deleteParked(job)}
+                        className="px-3 bg-slate-800 hover:bg-red-900/40 border border-slate-700 hover:border-red-500/40 text-slate-400 hover:text-red-300 py-1.5 rounded-lg text-xs">
+                        🗑
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+              {(parked[parkedPickerMachine] ?? []).length === 0 && (
+                <p className="text-slate-500 text-center py-6 text-sm">ไม่มีงานจอดแล้ว</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -607,7 +685,7 @@ function saveSuggestion(field: string, value: string) {
 }
 function saveAllSuggestions(p: MachineProfile) {
   const fields: (keyof MachineProfile)[] = [
-    'custCode','custName','custAddress','matCode','productCode','productName',
+    'custCode','custName','custBranch','custAddress','matCode','productCode','productName',
     'widthCm','thickMc','length','pcs','coreWeight','inspector','plannedQty','headerText'
   ]
   fields.forEach(k => saveSuggestion(k, (p[k] as string) ?? ''))
@@ -633,11 +711,19 @@ function ItemCodePicker({ value, products, onChange, onPick }: {
 
   const filtered = (() => {
     const v = value.trim().toLowerCase()
-    return products
-      .filter(s => s.item_code && (!v || s.item_code.toLowerCase().includes(v) ||
+    if (!v) return products.filter(s => s.item_code)  // ว่าง → โชว์ทั้งหมด
+    return products.filter(s => {
+      if (!s.item_code) return false
+      const sizeStr = `${s.width_cm ?? ''}x${s.thick_mc ?? ''}`.toLowerCase()
+      return (
+        s.item_code.toLowerCase().includes(v) ||
         s.product_name?.toLowerCase().includes(v) ||
-        s.cust_name?.toLowerCase().includes(v)))
-      .slice(0, 10)
+        s.cust_name?.toLowerCase().includes(v) ||
+        (s.width_cm ?? '').toLowerCase().includes(v) ||
+        (s.thick_mc ?? '').toLowerCase().includes(v) ||
+        sizeStr.includes(v)
+      )
+    })
   })()
 
   return (
@@ -647,15 +733,19 @@ function ItemCodePicker({ value, products, onChange, onPick }: {
         onChange={e => { onChange(e.target.value); setOpen(true) }}
         onFocus={() => setOpen(true)}
         onClick={() => setOpen(true)}
-        placeholder="คลิกเพื่อเลือก Item Code จากคลัง..."
+        placeholder="พิมพ์ค้นหา (item code / size / ลูกค้า) หรือคลิกเลือก..."
         className="w-full bg-slate-800 border-2 border-brand-500/40 hover:border-brand-500 focus:border-brand-500 rounded-lg px-2.5 py-2 text-white text-sm outline-none cursor-pointer"
       />
       {open && (
-        <div className="absolute z-20 mt-1 w-full bg-slate-800 border border-brand-500/40 rounded-lg shadow-2xl max-h-72 overflow-y-auto">
+        <div className="absolute z-20 mt-1 w-full bg-slate-800 border border-brand-500/40 rounded-lg shadow-2xl max-h-80 overflow-y-auto">
+          <div className="sticky top-0 bg-slate-900 border-b border-slate-700 px-3 py-1.5 text-[10px] text-slate-400 flex justify-between">
+            <span>พบ {filtered.length} รายการ {value.trim() && `(กรอง: "${value.trim()}")`}</span>
+            <span className="text-brand-400">พิมพ์เพื่อกรอง / Enter เพื่อใช้ค่าที่พิมพ์</span>
+          </div>
           {filtered.length === 0 ? (
             <div className="px-3 py-4 text-xs text-slate-400 text-center">
-              <p>ยังไม่มี Item Code</p>
-              <p className="text-brand-400 mt-1">ไปเพิ่มที่เมนู "คลัง Item Code"</p>
+              <p>ไม่พบ Item Code ที่ตรงกัน</p>
+              <p className="text-brand-400 mt-1">กด Enter เพื่อใช้ค่าที่พิมพ์ หรือเพิ่มที่เมนู "คลัง Item Code"</p>
             </div>
           ) : filtered.map((s, i) => (
             <button key={s.id ?? s.item_code + i} type="button"
@@ -665,7 +755,7 @@ function ItemCodePicker({ value, products, onChange, onPick }: {
                 <span className="text-brand-400 font-mono font-bold text-xs">{s.item_code}</span>
                 {s.width_cm && (
                   <span className="text-[10px] bg-brand-500/15 text-brand-300 px-1.5 py-0.5 rounded">
-                    {s.width_cm}×{s.thick_mc}mc
+                    {s.width_cm}cm×{s.thick_mc}mc
                   </span>
                 )}
               </div>
@@ -675,6 +765,237 @@ function ItemCodePicker({ value, products, onChange, onPick }: {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Resume Closed Job Modal — ดึงงานที่ปิดไปแล้วกลับมาทำต่อ ──────────────────
+function ResumeClosedJobModal({ dept, machines, onClose, onResumed }: {
+  dept?: 'blow' | 'print' | 'rewind'
+  machines: MachineProfile[]
+  onClose: () => void
+  onResumed: () => void
+}) {
+  const [rows, setRows]   = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [restoring, setRestoring] = useState<string | null>(null)
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true)
+      const machineNos = machines.map(m => m.machine_no).filter(Boolean)
+
+      // 1) ดึง job_summaries (งานที่ปิดถาวรแล้ว)
+      let qs = supabase.from('job_summaries').select('*').order('closed_at', { ascending: false }).limit(300)
+      if (machineNos.length) qs = qs.in('machine_no', machineNos)
+      const { data: summaries } = await qs
+
+      // 2) ดึง production_rolls — รวบทุก (machine, lot) ที่มีม้วน (รวมงานที่ยังไม่ปิด/ปิดไม่สรุป)
+      let qr = supabase.from('production_rolls')
+        .select('machine_no, lot_no, product_name, customer, item_code, mat_code, sale_order, work_order, weight, roll_type, width_cm, width_unit, thick_mc, product_code, cust_code, cust_branch, inspector, section, created_at')
+        .order('created_at', { ascending: false })
+        .limit(3000)
+      if (machineNos.length) qr = qr.in('machine_no', machineNos)
+      const { data: rolls } = await qr
+
+      // รวมข้อมูล — key = machine_no + '|' + lot_no
+      const map = new Map<string, any>()
+
+      // ใส่ summaries ก่อน (มี planned_qty + closed info)
+      for (const s of summaries ?? []) {
+        if (!s.machine_no || !s.lot_no) continue
+        const k = `${s.machine_no}|${s.lot_no}`
+        map.set(k, {
+          id:           s.id,
+          machine_no:   s.machine_no,
+          lot_no:       s.lot_no,
+          product_name: s.product_name,
+          customer:     s.customer,
+          item_code:    s.item_code,
+          mat_code:     s.mat_code,
+          sale_order:   s.sale_order,
+          work_order:   s.work_order,
+          planned_qty:  s.planned_qty,
+          good_kg:      s.good_kg,
+          inspector:    s.inspector,
+          closed_at:    s.closed_at,
+          source:       'closed',
+        })
+      }
+
+      // เพิ่มจาก rolls (สำหรับ lot ที่ไม่อยู่ใน summaries หรือเสริมข้อมูล)
+      const aggKg: Record<string, number> = {}
+      const aggCount: Record<string, number> = {}
+      const latest: Record<string, string> = {}
+      for (const r of rolls ?? []) {
+        if (!r.machine_no || !r.lot_no) continue
+        const k = `${r.machine_no}|${r.lot_no}`
+        if (r.roll_type === 'good') {
+          aggKg[k]    = (aggKg[k] ?? 0) + (r.weight ?? 0)
+          aggCount[k] = (aggCount[k] ?? 0) + 1
+        }
+        if (!latest[k] || r.created_at > latest[k]) latest[k] = r.created_at
+        if (!map.has(k)) {
+          map.set(k, {
+            id:           `roll:${k}`,
+            machine_no:   r.machine_no,
+            lot_no:       r.lot_no,
+            product_name: r.product_name,
+            customer:     r.customer,
+            item_code:    r.item_code,
+            mat_code:     r.mat_code,
+            sale_order:   r.sale_order,
+            work_order:   r.work_order,
+            inspector:    r.inspector,
+            section:      r.section,
+            closed_at:    null,   // ยังไม่ปิดถาวร
+            source:       'open',
+          })
+        }
+      }
+
+      // ใส่ aggregate kg + count + latest activity เข้าทุก row
+      const enriched = Array.from(map.values()).map(row => {
+        const k = `${row.machine_no}|${row.lot_no}`
+        return {
+          ...row,
+          good_kg:    row.good_kg    ?? aggKg[k]    ?? 0,
+          good_rolls: aggCount[k]    ?? 0,
+          last_active: latest[k] ?? row.closed_at ?? null,
+        }
+      })
+      // เรียงตามล่าสุด
+      enriched.sort((a:any, b:any) => (b.last_active || '').localeCompare(a.last_active || ''))
+
+      setRows(enriched)
+      setLoading(false)
+    })()
+  }, [])
+
+  const filtered = rows.filter(r => {
+    if (!search.trim()) return true
+    const s = search.toLowerCase()
+    return [r.machine_no, r.lot_no, r.product_name, r.customer, r.work_order, r.sale_order]
+      .filter(Boolean).some(x => String(x).toLowerCase().includes(s))
+  })
+
+  async function resume(r: any) {
+    if (!confirm(
+      `ดึงงานนี้กลับ?\n\n` +
+      `เครื่อง ${r.machine_no} · Lot ${r.lot_no}\n` +
+      `${r.product_name} · ${r.customer}\n\n` +
+      `⚠ จะ overwrite profile ของเครื่อง ${r.machine_no} (ถ้ามีงานรันอยู่ตอนนี้)`
+    )) return
+    setRestoring(r.id)
+    try {
+      // ดึงม้วนจริงจาก production_rolls เพื่อเอา width_unit/width_cm/thick_mc ล่าสุด
+      const { data: sample } = await supabase.from('production_rolls')
+        .select('*').eq('machine_no', r.machine_no).eq('lot_no', r.lot_no).limit(1).maybeSingle()
+
+      await supabase.from('machine_profiles').upsert({
+        machine_no:    r.machine_no,
+        lot_no:        r.lot_no,
+        sale_order:    r.sale_order  ?? '',
+        work_order:    r.work_order  ?? '',
+        delivery_date: r.delivery_date ?? null,
+        product_name:  r.product_name ?? '',
+        cust_name:     r.customer    ?? '',
+        item_code:     r.item_code   ?? '',
+        mat_code:      r.mat_code    ?? '',
+        planned_qty:   r.planned_qty != null ? String(r.planned_qty) : '',
+        inspector:     r.inspector   ?? '',
+        section:       sample?.section ?? dept ?? 'blow',
+        // ดึง dimension จากม้วนจริง (ถ้ามี)
+        width_cm:      sample?.width_cm   ?? '',
+        width_unit:    sample?.width_unit ?? 'cm',
+        thick_mc:      sample?.thick_mc   ?? '',
+        product_code:  sample?.product_code ?? '',
+        cust_code:     sample?.cust_code    ?? '',
+        cust_branch:   sample?.cust_branch  ?? '',
+        updated_at:    new Date().toISOString(),
+      }, { onConflict: 'machine_no' })
+
+      alert(`✓ ดึงงาน "${r.product_name}" กลับมาที่เครื่อง ${r.machine_no} แล้ว — กดเข้าเครื่องเพื่อชั่งต่อ`)
+      onResumed()
+    } catch (e: any) {
+      alert('ดึงงานไม่สำเร็จ: ' + (e?.message ?? e))
+    } finally { setRestoring(null) }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-3xl max-h-[88vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 shrink-0">
+          <div>
+            <p className="text-white font-bold text-base">📂 ดึงงานเก่ามาชั่งต่อ</p>
+            <p className="text-slate-400 text-xs mt-0.5">เลือกงานที่ปิดไปแล้วเพื่อ restore profile กลับ — ม้วนเก่ายังอยู่ในระบบ</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={18}/></button>
+        </div>
+        <div className="px-5 py-2 border-b border-slate-800 shrink-0">
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="ค้นหา (เครื่อง / lot / สินค้า / ลูกค้า / WO / SO)..."
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-brand-500"/>
+        </div>
+        <div className="flex-1 overflow-y-auto px-2">
+          {loading ? (
+            <p className="text-center py-10 text-slate-500">กำลังโหลด...</p>
+          ) : filtered.length === 0 ? (
+            <p className="text-center py-10 text-slate-500">{search.trim() ? 'ไม่พบงานที่ตรงกัน' : 'ยังไม่มีงานที่ปิดไว้'}</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-slate-800/50 text-[10px] text-slate-400 uppercase sticky top-0">
+                <tr>
+                  <th className="px-3 py-2 text-left font-semibold">เครื่อง / Lot</th>
+                  <th className="px-3 py-2 text-left font-semibold">สินค้า / ลูกค้า</th>
+                  <th className="px-3 py-2 text-right font-semibold">ยอด / ผลิต</th>
+                  <th className="px-3 py-2 text-left font-semibold">สถานะ / ล่าสุด</th>
+                  <th className="px-3 py-2"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {filtered.map(r => {
+                  const lastActive = r.last_active ? new Date(r.last_active).toLocaleString('th-TH', { dateStyle:'short', timeStyle:'short' }) : '—'
+                  const planned = parseFloat(r.planned_qty) || 0
+                  const good = r.good_kg || 0
+                  const remaining = Math.max(planned - good, 0)
+                  const isClosed = r.source === 'closed'
+                  return (
+                    <tr key={r.id} className="hover:bg-slate-800/40">
+                      <td className="px-3 py-2">
+                        <p className="text-white font-bold">{r.machine_no}</p>
+                        <p className="text-slate-500 text-[10px] font-mono">{r.lot_no}</p>
+                      </td>
+                      <td className="px-3 py-2">
+                        <p className="text-slate-200 text-xs">{r.product_name || '—'}</p>
+                        <p className="text-slate-500 text-[10px]">{r.customer || '—'}</p>
+                      </td>
+                      <td className="px-3 py-2 text-right text-xs">
+                        <p className="text-slate-400">{planned ? `${planned.toFixed(0)} Kg` : '—'}</p>
+                        <p className="text-green-400">{r.good_rolls || 0} ม้วน · {good.toFixed(2)} Kg</p>
+                        {remaining > 0 && <p className="text-amber-400 text-[10px]">เหลือ {remaining.toFixed(0)}</p>}
+                      </td>
+                      <td className="px-3 py-2 text-[10px]">
+                        {isClosed
+                          ? <span className="inline-block px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 font-bold">🏁 ปิดถาวร</span>
+                          : <span className="inline-block px-1.5 py-0.5 rounded bg-emerald-900/40 text-emerald-300 font-bold">📦 ยังไม่ปิด</span>}
+                        <p className="text-slate-500 mt-0.5">{lastActive}</p>
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <button onClick={() => resume(r)} disabled={restoring === r.id}
+                          className="bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-xs font-bold">
+                          {restoring === r.id ? '...' : '↩ ดึงคืน'}
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
@@ -703,14 +1024,23 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
     if (!mc || !cc || cc === '0000') return ''
     return `${yy}${mc}${cc}${mm}`
   }
-  // setMany ที่เติม lotNo ให้อัตโนมัติเมื่อ custCode มา (และไม่ทับของเดิม)
+  // เช็คว่า lot string ตรงรูปแบบ auto-gen ของเครื่องนี้หรือเปล่า: yy + machine_no + 4digit + mm
+  function isAutoLotPattern(lot: string, machine_no: string): boolean {
+    if (!lot || !machine_no) return false
+    const yy = String((new Date().getFullYear() + 543) % 100).padStart(2, '0')
+    const mm = String(new Date().getMonth() + 1).padStart(2, '0')
+    const re = new RegExp(`^${yy}${machine_no.toUpperCase()}\\d{4}${mm}$`)
+    return re.test(lot)
+  }
+  // setMany สำหรับ Item Code pick: regen lot ทันทีตาม custCode ใหม่
+  // เหมือนกับการเปลี่ยน custName/widthCm/thickMc ที่เขียนทับทันที
+  // ถ้าผู้ใช้ต้องการ Lot custom ให้พิมพ์ทับหลังจากเลือก Item แล้ว
   const setManyWithLot = (patch: Partial<MachineProfile>) => {
     setP(prev => {
       const next = { ...prev, ...patch }
-      if (!next.lotNo?.trim() && next.machine_no && next.custCode) {
-        const auto = genLotNo(next.machine_no, next.custCode)
-        if (auto) next.lotNo = auto
-      }
+      if (!next.machine_no) return next
+      const newAuto = genLotNo(next.machine_no, next.custCode ?? '')
+      if (newAuto) next.lotNo = newAuto
       return next
     })
   }
@@ -730,16 +1060,16 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
     if (!parkBy.trim()) { alert('กรุณากรอกชื่อผู้จอดงาน'); return }
     setParking(true)
     try {
-      // บันทึก snapshot ลง parked_jobs
+      // บันทึก snapshot ลง parked_jobs — รองรับหลายงานต่อเครื่อง (unique: machine_no + lot_no)
       await supabase.from('parked_jobs').upsert(
-        { machine_no: profile.machine_no, profile_snapshot: profile, parked_by: parkBy.trim(), parked_at: new Date().toISOString() },
-        { onConflict: 'machine_no' }
+        { machine_no: profile.machine_no, lot_no: profile.lotNo, profile_snapshot: profile, parked_by: parkBy.trim(), parked_at: new Date().toISOString() },
+        { onConflict: 'machine_no,lot_no' }
       )
       // เคลียร์งานออกจากเครื่อง (เหลือแค่ machine_no + section)
       await supabase.from('machine_profiles').upsert({
         machine_no: profile.machine_no, section: profile.section ?? 'blow',
         decimal_places: profile.decimal, core_weight: profile.coreWeight,
-        cust_code:'', cust_name:'', cust_address:'', mat_code:'', product_code:'',
+        cust_code:'', cust_name:'', cust_branch:'', cust_address:'', mat_code:'', product_code:'',
         product_name:'', width_cm:'', thick_mc:'', lot_no:'', length:'', pcs:'',
         inspector:'', planned_qty:'', label_size: profile.labelSize ?? 'long',
         header_text:'', blank_header: false, locked: false,
@@ -793,6 +1123,7 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
         machine_no:    p.machine_no,
         cust_code:     p.custCode,
         cust_name:     p.custName,
+        cust_branch:   p.custBranch,
         cust_address:  p.custAddress,
         decimal_places: p.decimal,
         item_code:     p.itemCode,
@@ -800,6 +1131,7 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
         product_code:  p.productCode,
         product_name:  p.productName,
         width_cm:      p.widthCm,
+        width_unit:    p.widthUnit ?? 'cm',
         thick_mc:      p.thickMc,
         lot_no:        p.lotNo,
         length:        p.length,
@@ -893,6 +1225,7 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
                       productCode: match.product_code,
                       productName: match.product_name,
                       widthCm:     match.width_cm,
+                      widthUnit:   (match.width_unit ?? 'cm') as 'cm'|'mm',  // ใช้หน่วยตามที่ master ตั้งไว้
                       thickMc:     match.thick_mc,
                       custCode:    match.cust_code,
                       custName:    match.cust_name ?? '',
@@ -912,6 +1245,7 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
                   productCode: s.product_code,
                   productName: s.product_name,
                   widthCm:     s.width_cm,
+                  widthUnit:   (s.width_unit ?? 'cm') as 'cm'|'mm',  // ใช้หน่วยตามที่ master ตั้งไว้
                   thickMc:     s.thick_mc,
                   custCode:    s.cust_code,
                   custName:    s.cust_name ?? '',
@@ -920,29 +1254,19 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
               />
             </div>
             {inp('Mat Code',     'matCode', '',      true)}
-            {/* Lot No พร้อมปุ่มสร้างอัตโนมัติ */}
+            {/* Lot No — กดปุ๊ป auto-gen ทันที (ถ้าว่าง), แก้ได้ */}
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-[10px] text-slate-500">Lot No *</label>
-                <button type="button"
-                  onClick={() => {
-                    const yy = String((new Date().getFullYear() + 543) % 100).padStart(2, '0')
-                    const mm = String(new Date().getMonth() + 1).padStart(2, '0')
-                    const mc = (p.machine_no ?? '').toUpperCase()
-                    const cc = (p.custCode ?? '').replace(/\D/g, '').padStart(4, '0').slice(-4)
-                    if (!mc) { alert('ใส่หมายเลขเครื่องก่อน'); return }
-                    if (!cc || cc === '0000') { alert('เลือก Item Code ที่มีรหัสลูกค้าก่อน'); return }
-                    setP(prev => ({ ...prev, lotNo: `${yy}${mc}${cc}${mm}` }))
-                  }}
-                  className="text-[10px] bg-brand-600/20 hover:bg-brand-600/40 text-brand-300 px-2 py-0.5 rounded font-bold border border-brand-500/40">
-                  🎲 สร้างอัตโนมัติ
-                </button>
-              </div>
+              <label className="block text-[10px] text-slate-500 mb-1">Lot No * <span className="text-emerald-400 normal-case">(คลิกช่อง → สร้างให้อัตโนมัติ)</span></label>
               <input
                 value={p.lotNo ?? ''}
                 onChange={e => setP(prev => ({ ...prev, lotNo: e.target.value }))}
-                placeholder="69SL01000101"
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-brand-500 font-mono"
+                onFocus={() => {
+                  if ((p.lotNo ?? '').trim()) return
+                  const auto = genLotNo(p.machine_no ?? '', p.custCode ?? '')
+                  if (auto) setP(prev => ({ ...prev, lotNo: auto }))
+                }}
+                placeholder="คลิกเพื่อสร้างอัตโนมัติ หรือพิมพ์เอง..."
+                className="w-full bg-slate-800 border-2 border-brand-500/40 hover:border-brand-500 focus:border-brand-500 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none font-mono cursor-pointer"
               />
             </div>
             {inp('Length (M.)',  'length',  '',          true)}
@@ -970,16 +1294,60 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
           <div className="grid grid-cols-2 gap-2">
             {/* Product Code — removed */}
             {inp('ชื่อสินค้า *',  'productName', '')}
-            {inp('กว้าง (cm)',    'widthCm',     '',            true)}
+            {/* กว้าง + toggle cm/mm */}
+            <div>
+              <label className="block text-[10px] text-slate-500 mb-1">กว้าง *</label>
+              <div className="flex gap-1">
+                <input value={p.widthCm ?? ''} onChange={e => setP(prev => ({ ...prev, widthCm: e.target.value }))}
+                  className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-brand-500" />
+                {(['cm','mm'] as const).map(u => (
+                  <button key={u} type="button"
+                    onMouseDown={e => {
+                      e.preventDefault()
+                      const cur = (p.widthUnit ?? 'cm') as 'cm'|'mm'
+                      if (cur !== u) {
+                        setP(prev => ({ ...prev, widthCm: convertWidth(prev.widthCm ?? '', cur, u), widthUnit: u }))
+                      } else {
+                        setP(prev => ({ ...prev, widthUnit: u }))
+                      }
+                    }}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold ${
+                      (p.widthUnit ?? 'cm') === u ? 'bg-brand-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
+                    }`}>{u}</button>
+                ))}
+              </div>
+            </div>
             {inp('หนา (mc)',      'thickMc',     '',            true)}
           </div>
 
           {/* ── ลูกค้า (auto-fill ได้) ────────────────────────── */}
           <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider pt-2">ลูกค้า</p>
-          <div className="grid grid-cols-2 gap-2">
-            {inp('รหัสลูกค้า', 'custCode', '', true)}
-            {inp('ชื่อลูกค้า *', 'custName', '', true)}
-            {inp('ที่อยู่', 'custAddress', '')}
+          <div className="grid grid-cols-12 gap-2">
+            <div className="col-span-2">
+              <label className="block text-[10px] text-slate-500 mb-1">รหัส</label>
+              <input value={p.custCode ?? ''} onChange={e => setP(prev => {
+                  const newCode = e.target.value.slice(0,3)
+                  const next = { ...prev, custCode: newCode }
+                  if (next.machine_no && isAutoLotPattern(prev.lotNo ?? '', prev.machine_no ?? '')) {
+                    const newAuto = genLotNo(next.machine_no, newCode)
+                    if (newAuto) next.lotNo = newAuto
+                  }
+                  return next
+                })}
+                maxLength={3}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-brand-500 font-mono"/>
+            </div>
+            <div className="col-span-7">
+              <label className="block text-[10px] text-slate-500 mb-1">ชื่อลูกค้า *</label>
+              <input value={p.custName ?? ''} onChange={e => setP(prev => ({ ...prev, custName: e.target.value }))}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-brand-500"/>
+            </div>
+            <div className="col-span-3">
+              <label className="block text-[10px] text-slate-500 mb-1">สาขา</label>
+              <input value={p.custBranch ?? ''} onChange={e => setP(prev => ({ ...prev, custBranch: e.target.value }))}
+                placeholder="เช่น สำนักงานใหญ่"
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-brand-500"/>
+            </div>
           </div>
 
           <p className="text-brand-400 text-[10px] font-bold uppercase tracking-wider pt-2">เครื่อง</p>
@@ -1064,7 +1432,47 @@ function loadQueue(): any[] {
 function saveQueue(q: any[]) { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)) }
 
 // ── Weigh Page ────────────────────────────────────────────────────────────────
-function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () => void }) {
+function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfile; onBack: () => void }) {
+  // เก็บ profile เป็น state + refresh จาก DB ตอน mount — กันใช้ข้อมูล cached เก่า (เช่น widthUnit ไม่ตรง)
+  const [profile, setProfile] = useState<MachineProfile>(initialProfile)
+  useEffect(() => {
+    if (!initialProfile.machine_no) return
+    // ⚠ ไม่ refresh ในแผนกกรอ (rework_job mode) — profile มาจาก job ไม่ใช่ machine_profiles
+    if (initialProfile.section === 'rewind') return
+    supabase.from('machine_profiles').select('*').eq('machine_no', initialProfile.machine_no).maybeSingle()
+      .then(({ data }) => {
+        if (!data) return
+        setProfile({
+          machine_no:  data.machine_no,
+          custCode:    data.cust_code    ?? '',
+          custName:    data.cust_name    ?? '',
+          custBranch:  data.cust_branch  ?? '',
+          custAddress: data.cust_address ?? '',
+          decimal:    (data.decimal_places ?? 2) as 1|2,
+          itemCode:    data.item_code    ?? '',
+          matCode:     data.mat_code     ?? '',
+          productCode: data.product_code ?? '',
+          productName: data.product_name ?? '',
+          widthCm:     data.width_cm     ?? '',
+          widthUnit:   (data.width_unit  ?? 'cm') as 'cm'|'mm',
+          thickMc:     data.thick_mc     ?? '',
+          lotNo:       data.lot_no       ?? '',
+          length:      data.length       ?? '',
+          pcs:         data.pcs          ?? '',
+          coreWeight:  data.core_weight  ?? '1.25',
+          inspector:   data.inspector    ?? '',
+          locked:      data.locked       ?? false,
+          plannedQty:  data.planned_qty  ?? '',
+          labelSize:  (data.label_size   ?? 'long') as 'long'|'short',
+          headerText:  data.header_text  ?? '',
+          blankHeader: data.blank_header ?? false,
+          section:    (data.section      ?? 'blow') as 'blow'|'print'|'rewind',
+          soNo:        data.sale_order   ?? '',
+          woNo:        data.work_order   ?? '',
+          deliveryDate: data.delivery_date ?? '',
+        })
+      })
+  }, [initialProfile.machine_no])
   const [gross,        setGross]        = useState(0)
   // ── Scale Bridge (WebSocket) ─────────────────────────────────────────
   const [serialConnected, setSerialConnected] = useState(false)
@@ -1140,7 +1548,6 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
 
   const [rollNo,       setRollNo]       = useState(1)
   const [saving,       setSaving]       = useState(false)
-  const [reworkDone,   setReworkDone]   = useState(false)  // กรอครบแล้ว → ปิดการชั่ง
   const [lastRoll,     setLastRoll]     = useState<any>(null)
   const [weighedKg,    setWeighedKg]    = useState(0)
   const [weighedRolls, setWeighedRolls] = useState<any[]>([])
@@ -1150,6 +1557,25 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
   const [inspectorSetAt, setInspectorSetAt] = useState<number>(0)
   const [showInspectorPrompt, setShowInspectorPrompt] = useState(true)
   const [inspectorInput, setInspectorInput] = useState(profile.inspector || '')
+
+  // ── แผนกกรอ: สาเหตุที่ม้วนนี้เสีย/มาจากอะไร (กรอกตอนชั่งออก = กรอสำเร็จ) ──
+  const isRework = profile.section === 'rewind'
+  const [reworkCause, setReworkCause]   = useState('')
+  const [reworkJobId, setReworkJobId]   = useState<string | null>(null)
+  useEffect(() => {
+    if (!isRework || !profile.lotNo) return
+    supabase.from('rework_jobs')
+      .select('id, source_defect_reason')
+      .eq('lot_no', profile.lotNo)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .then(({ data }) => {
+        if (data && data[0]) {
+          setReworkJobId(data[0].id)
+          setReworkCause(data[0].source_defect_reason ?? '')
+        }
+      })
+  }, [isRework, profile.lotNo])
 
   function confirmInspector(name: string) {
     if (!name.trim()) return
@@ -1240,6 +1666,8 @@ function WeighPage({ profile, onBack }: { profile: MachineProfile; onBack: () =>
   }, [profile.section, weighType])
   const [scrapSub,     setScrapSub]     = useState<'scrap_clear'|'scrap_color'|'scrap_lump'>('scrap_clear')
   const [badReason,    setBadReason]    = useState('')
+  // ม้วนกรอ: ผลิตประเมินว่ากรอได้ (default) หรือ "รอพิจารณา" (ส่งให้ ผจก ตัดสิน)
+  const [badMode,      setBadMode]      = useState<'rework'|'pending_review'>('rework')
   const [scrapReason,  setScrapReason]  = useState('')
   const [badRollNo,    setBadRollNo]    = useState(1)  // ม้วนกรอเริ่มที่ 1 ของงานนี้
   const [stable,       setStable]       = useState(true)
@@ -1390,7 +1818,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
   <div class="row"><span>Mat Code</span><b>${profile.matCode || '—'}</b></div>
   <div class="row"><span>Lot No</span><b>${profile.lotNo}</b></div>
   <div class="row"><span>เครื่อง</span><b>${profile.machine_no}</b></div>
-  <div class="row"><span>ขนาด</span><b>${profile.widthCm} cm × ${profile.thickMc} mc</b></div>
+  <div class="row"><span>ขนาด</span><b>${profile.widthCm} ${profile.widthUnit ?? 'cm'} × ${profile.thickMc} mc</b></div>
 </div>
 <div class="kpi">
   <div class="kpi-box"><div class="lbl">ยอดสั่ง</div><div class="val">${planned.toLocaleString('th-TH')}</div><div style="font-size:8pt">Kgs.</div></div>
@@ -1473,6 +1901,14 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         inspector:      inspector || null,
       })
 
+      // ── 1.5) ถ้าเป็นงานกรอ — ปิด rework_job ของ lot นี้ด้วย (ไม่งั้นการ์ดยังค้างใน "งานกรอ") ──
+      if (isRework && profile.lotNo) {
+        const upd = supabase.from('rework_jobs')
+          .update({ status: 'closed', closed_at: new Date().toISOString(), closed_by: inspector || null })
+          .eq('lot_no', profile.lotNo).eq('status', 'active')
+        await (reworkJobId ? upd.eq('id', reworkJobId) : upd)
+      }
+
       // ── 2) พิมพ์ใบสรุป — ตรวจว่า popup เปิดได้ก่อนเคลียร์ profile ──
       const win = window.open('', '_blank', 'width=900,height=700')
       if (!win) {
@@ -1486,7 +1922,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
 
       // ── 3) เคลียร์ข้อมูลงาน (เก็บแต่ machine_no, core_weight, label_size, locked) ──
       await supabase.from('machine_profiles').update({
-        cust_code: '', cust_name: '', cust_address: '',
+        cust_code: '', cust_name: '', cust_branch: '', cust_address: '',
         item_code: '', mat_code: '', product_code: '', product_name: '',
         width_cm: '', thick_mc: '',
         lot_no: '', length: '', pcs: '',
@@ -1514,31 +1950,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
     if (!inspector.trim()) { setShowInspectorPrompt(true); return }
     if (isBad && !badReason.trim()) { alert('กรุณาระบุเหตุผลม้วนกรอ'); return }
     if (isScrap && !scrapReason.trim()) { alert('กรุณาระบุเหตุผลเศษเสีย'); return }
-
-    // ── กันชั่งซ้ำในแผนกกรอ: ตรวจเฉพาะกรณี "กรอจากเป่า" (มีม้วนต้นทาง tagged) ──
-    // ถ้าเป็น "ตั้งค่าชั่งเอง" (ไม่มีม้วน tagged เลย) → ปล่อยให้ชั่งอิสระ
-    if (isGood && profile.section === 'rewind' && profile.machine_no && profile.lotNo) {
-      const tag = `ส่งไปกรอที่ ${profile.machine_no} · Lot ${profile.lotNo}`
-      // เช็คว่าเคยมีม้วนต้นทาง tagged มาก่อนหรือไม่ (ทุกสถานะ)
-      const { count: anyTagged } = await supabase.from('production_rolls')
-        .select('*', { count: 'exact', head: true })
-        .eq('roll_type', 'bad')
-        .like('rework_remark', `%${tag}%`)
-      // ถ้าเคยมีต้นทาง — ตรวจว่ายังเหลือ reworking อยู่หรือไม่
-      if (anyTagged && anyTagged > 0) {
-        const { count: stillOpen } = await supabase.from('production_rolls')
-          .select('*', { count: 'exact', head: true })
-          .eq('roll_type', 'bad')
-          .eq('rework_status', 'reworking')
-          .like('rework_remark', `%${tag}%`)
-        if (!stillOpen || stillOpen === 0) {
-          alert(`⚠ กรอครบทุกม้วนแล้ว — เครื่อง ${profile.machine_no} ไม่มีม้วนต้นทางรอชั่งเพิ่ม\n\nหากต้องการชั่งม้วนใหม่ กรุณากลับหน้า "ม้วนรอกรอ" เพื่อรับงานใหม่`)
-          setReworkDone(true)
-          return
-        }
-      }
-      // ถ้าไม่เคยมีต้นทาง → "ตั้งค่าชั่งเอง" — ปล่อยชั่งได้อิสระ ไม่ผูกกับระบบผลิต
-    }
+    if (isGood && isRework && !reworkCause.trim()) { alert('กรุณาระบุสาเหตุที่ม้วนนี้เสีย / มาจากอะไร'); return }
 
     setSaving(true)
     try {
@@ -1565,7 +1977,10 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         customer:     profile.custName,
         section:      profile.section ?? 'blow',
         width_cm:     profile.widthCm || null,
+        width_unit:   profile.widthUnit ?? 'cm',
         thick_mc:     profile.thickMc || null,
+        // ม้วนกรอ "รอ ผจก พิจารณา" → set review_status (ม้วนอื่นเป็น null = ปกติ)
+        review_status: (isBad && badMode === 'pending_review') ? 'pending_review' : null,
         created_at:   new Date().toISOString(),
       }
 
@@ -1645,46 +2060,11 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         setRollNo(nextRollNo(newList.filter((r:any) => r?.roll_type === 'good')))
         // print fire-and-forget (ไม่ await — ไม่บล็อก save flow)
         printLabel({...profile, inspector}, rollNo, gross, saveWeight, profile.labelSize ?? 'long', 'good', '', data.id)
-
-        // ── ถ้าเป็นแผนกกรอ "กรอจากเป่า" → ปิดม้วนต้นทาง 1 ม้วน + ถ้าหมดแล้ว เคลียร์เครื่อง ──
-        // (ถ้า "ตั้งค่าชั่งเอง" จะไม่มี source tagged → skip ทั้งหมด)
-        if (profile.section === 'rewind' && profile.machine_no && profile.lotNo) {
-          (async () => {
-            const tag = `ส่งไปกรอที่ ${profile.machine_no} · Lot ${profile.lotNo}`
-            // หาม้วนต้นทางที่ 'reworking' เก่าสุด — ปิด 1 ม้วน
-            const { data: src } = await supabase.from('production_rolls')
-              .select('id')
-              .eq('roll_type', 'bad')
-              .eq('rework_status', 'reworking')
-              .like('rework_remark', `%${tag}%`)
-              .order('rework_received_at', { ascending: true })
-              .limit(1)
-            // ไม่เจอ source → "ตั้งค่าชั่งเอง" → ไม่ต้องผูกกับระบบผลิต
-            if (!src || src.length === 0) return
-            await supabase.from('production_rolls')
-              .update({ rework_status: 'reworked', rework_dest_id: data.id })
-              .eq('id', src[0].id)
-            // นับที่เหลือ — ถ้าหมด → เคลียร์เครื่อง (ห้ามชั่งซ้ำ)
-            const { count } = await supabase.from('production_rolls')
-              .select('*', { count: 'exact', head: true })
-              .eq('roll_type', 'bad')
-              .eq('rework_status', 'reworking')
-              .like('rework_remark', `%${tag}%`)
-            if (!count || count === 0) {
-              // ล้างงานบนเครื่อง — กลายเป็นว่างทันที
-              await supabase.from('machine_profiles').update({
-                cust_code:'', cust_name:'', cust_address:'',
-                item_code:'', mat_code:'', product_code:'', product_name:'',
-                width_cm:'', thick_mc:'',
-                lot_no:'', length:'', pcs:'',
-                planned_qty:'', inspector:'',
-                work_order:'', sale_order:'',
-                updated_at: new Date().toISOString(),
-              }).eq('machine_no', profile.machine_no)
-              // ตั้ง flag → หน้า WeighPage จะแสดง banner + ปิดปุ่มชั่ง
-              setReworkDone(true)
-            }
-          })().catch(e => console.warn('auto-close err:', e))
+        // แผนกกรอ: บันทึกสาเหตุที่ม้วนนี้เสีย/มาจากอะไร กลับเข้างานกรอ (ตาม Lot)
+        if (isRework && reworkCause.trim()) {
+          const upd = supabase.from('rework_jobs').update({ source_defect_reason: reworkCause.trim() })
+          ;(reworkJobId ? upd.eq('id', reworkJobId) : upd.eq('lot_no', profile.lotNo))
+            .then(() => {}, (e: any) => console.warn('update rework cause err:', e))
         }
       } else if (isBad) {
         const newList = [...weighedRolls, data]
@@ -1742,7 +2122,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       p_work_order: profile.woNo ?? null,
       p_sale_order: profile.soNo ?? null,
     })
-    if (error && /function .* does not exist/i.test(error.message)) {
+    if (error && (/function .* does not exist/i.test(error.message) || /could not find the function/i.test(error.message))) {
       // ── Legacy fallback (จะแสดง warning ให้ admin migrate) ──
       console.warn('RPC delete_roll_atomic ยังไม่ถูก deploy — รัน db/hardening.sql ใน Supabase')
       const { error: logErr } = await supabase.from('roll_deletion_logs').insert({
@@ -1755,8 +2135,8 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         length:       r.length, pcs: r.pcs,
         product_name: profile.productName, product_code: profile.productCode,
         item_code:    profile.itemCode, mat_code: profile.matCode,
-        cust_code:    profile.custCode, cust_name: profile.custName,
-        width_cm:     profile.widthCm, thick_mc: profile.thickMc,
+        cust_code:    profile.custCode, cust_name: profile.custName, cust_branch: profile.custBranch,
+        width_cm:     profile.widthCm, width_unit: profile.widthUnit ?? 'cm', thick_mc: profile.thickMc,
         inspector:    r.inspector, started_at: r.started_at,
         original_id:  r.id, section: profile.section ?? 'blow',
       })
@@ -1878,20 +2258,6 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
             ))}
           </div>
 
-          {/* ── Banner: กรอครบแล้ว ─────────────── */}
-          {reworkDone && (
-            <div className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-xl px-4 py-3.5 flex items-center gap-3 shadow-lg">
-              <span className="text-3xl">✅</span>
-              <div className="flex-1">
-                <p className="text-white font-black text-base">กรอครบทุกม้วนแล้ว!</p>
-                <p className="text-green-100 text-xs">เครื่อง {profile.machine_no} ว่างแล้ว — กลับหน้าเลือกเครื่องเพื่อรับงานถัดไป</p>
-              </div>
-              <button onClick={onBack} className="bg-white/20 hover:bg-white/30 text-white text-sm px-4 py-2 rounded-lg font-bold">
-                ← กลับ
-              </button>
-            </div>
-          )}
-
           {/* ── แจ้งเตือน: ม้วนถัดไปกำลังทดแทนเลขที่ลบ ─────────────── */}
           {((isGood && isFillingGapGood) || (isBad && isFillingGapBad)) && (
             <div className="relative bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 rounded-xl p-[2px] shadow-lg shadow-amber-500/40 animate-pulse">
@@ -1931,11 +2297,38 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
             </div>
           )}
 
-          {/* Bad reason */}
+          {/* Bad: ส่งกรอ vs รอพิจารณา */}
           {isBad && (
-            <input value={badReason} onChange={e => setBadReason(e.target.value)}
-              placeholder="เหตุผลม้วนกรอ (จำเป็น)..."
-              className="w-full bg-slate-800 border border-orange-500/40 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-orange-500 placeholder-slate-500" />
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-1.5">
+                <button type="button" onClick={() => setBadMode('rework')}
+                  className={`py-2 rounded-xl text-xs font-bold border-2 transition-colors ${
+                    badMode === 'rework'
+                      ? 'bg-orange-600 border-orange-500 text-white'
+                      : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-orange-500/40'
+                  }`}>
+                  ✓ ส่งกรอ
+                </button>
+                <button type="button" onClick={() => setBadMode('pending_review')}
+                  className={`py-2 rounded-xl text-xs font-bold border-2 transition-colors ${
+                    badMode === 'pending_review'
+                      ? 'bg-amber-600 border-amber-500 text-white'
+                      : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-amber-500/40'
+                  }`}>
+                  ⏳ รอ ผจก พิจารณา
+                </button>
+              </div>
+              <input value={badReason} onChange={e => setBadReason(e.target.value)}
+                placeholder={badMode === 'pending_review' ? 'เหตุผลที่ไม่แน่ใจว่ากรอได้ (จำเป็น)...' : 'เหตุผลม้วนกรอ (จำเป็น)...'}
+                className={`w-full bg-slate-800 border rounded-xl px-3 py-2 text-sm text-white outline-none placeholder-slate-500 ${
+                  badMode === 'pending_review' ? 'border-amber-500/40 focus:border-amber-500' : 'border-orange-500/40 focus:border-orange-500'
+                }`} />
+              {badMode === 'pending_review' && (
+                <p className="text-[10px] text-amber-400/80 leading-tight">
+                  💡 ม้วนนี้จะรอ ผจก พิจารณา — ยังไม่ถูกส่งไปแผนกกรอ
+                </p>
+              )}
+            </div>
           )}
 
           {/* Scrap reason */}
@@ -1943,6 +2336,17 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
             <input value={scrapReason} onChange={e => setScrapReason(e.target.value)}
               placeholder="เหตุผลเศษเสีย (จำเป็น)..."
               className="w-full bg-slate-800 border border-red-500/40 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-red-500 placeholder-slate-500" />
+          )}
+
+          {/* แผนกกรอ: สาเหตุที่ม้วนนี้เสีย/มาจากอะไร (กรอกตอนชั่งออก = กรอสำเร็จ) */}
+          {isRework && isGood && (
+            <div className="space-y-1">
+              <p className="text-rose-300 text-xs font-bold">⚠ สาเหตุที่ม้วนนี้เสีย / มาจากอะไร (จำเป็น)</p>
+              <input value={reworkCause} onChange={e => setReworkCause(e.target.value)}
+                placeholder="เช่น ฟิล์มย่น, พิมพ์เหลื่อม, ขอบไม่ตรง..."
+                className="w-full bg-slate-800 border border-rose-500/40 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-rose-500 placeholder-slate-500" />
+              <p className="text-[10px] text-rose-400/70 leading-tight">บันทึกเข้างานกรอตาม Lot — โชว์บนแดชบอดเพื่อดูว่าผลิตเสียจากสาเหตุใด</p>
+            </div>
           )}
 
           {/* Scale display */}
@@ -2036,7 +2440,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                 </span>
               </div>
             )}
-            <button onClick={handleSave} disabled={saving || saveWeight <= 0 || !stable || (isBad && !badReason.trim()) || (isScrap && !scrapReason.trim()) || reworkDone}
+            <button onClick={handleSave} disabled={saving || saveWeight <= 0 || !stable || (isBad && !badReason.trim()) || (isScrap && !scrapReason.trim()) || (isGood && isRework && !reworkCause.trim())}
               className={`flex-1 py-3 rounded-xl text-white font-black flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-40 ${
                 !stable ? 'bg-slate-700 cursor-not-allowed' :
                 isGood  ? 'bg-brand-600 hover:bg-brand-500' :
@@ -2052,12 +2456,13 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
           </div>
 
           {/* hint ทำไมกดไม่ได้ */}
-          {(saveWeight <= 0 || !stable || (isBad && !badReason.trim()) || (isScrap && !scrapReason.trim())) && (
+          {(saveWeight <= 0 || !stable || (isBad && !badReason.trim()) || (isScrap && !scrapReason.trim()) || (isGood && isRework && !reworkCause.trim())) && (
             <p className="text-center text-slate-600 text-xs">
               {!stable ? '⟳ รอค่าชั่งนิ่งก่อน' :
                saveWeight <= 0 ? '▲ พิมพ์น้ำหนักหรือกดสุ่มค่าก่อน' :
                isBad && !badReason.trim() ? '▲ กรอกเหตุผลม้วนกรอก่อน' :
-               isScrap && !scrapReason.trim() ? '▲ กรอกเหตุผลเศษเสียก่อน' : ''}
+               isScrap && !scrapReason.trim() ? '▲ กรอกเหตุผลเศษเสียก่อน' :
+               isGood && isRework && !reworkCause.trim() ? '▲ กรอกสาเหตุที่ม้วนนี้เสียก่อน' : ''}
             </p>
           )}
 
@@ -2196,7 +2601,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
               </div>
             </div>
 
-            {/* ── ม้วนกรอ — ซ่อนในแผนกกรอ ────────────────── */}
+            {/* ── ม้วนกรอ (ส่งกรอ — ไม่รวมที่รอผจก) ────────── */}
             {profile.section !== 'rewind' && (
             <div className="flex-1 flex flex-col min-w-0">
               <div className="px-3 py-2 bg-orange-500/10 border-b border-orange-500/20 shrink-0">
@@ -2209,7 +2614,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
               </div>
               <div className="flex-1 overflow-y-auto divide-y divide-slate-800/40">
                 {(() => {
-                  const bads = weighedRolls.filter((r:any)=>r.roll_type==='bad')
+                  const bads = weighedRolls.filter((r:any)=>r.roll_type==='bad' && (r as any).review_status !== 'pending_review')
                   const isReplacement = (r:any) =>
                     bads.some((x:any) => (x.roll_no ?? 0) > (r.roll_no ?? 0) && new Date(x.created_at) < new Date(r.created_at))
                   return [...bads]
@@ -2240,14 +2645,14 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                   )
                     })
                 })()}
-                {weighedRolls.filter((r:any)=>r?.roll_type==='bad').length===0 && (
+                {weighedRolls.filter((r:any)=>r?.roll_type==='bad' && (r as any).review_status !== 'pending_review').length===0 && (
                   <div className="py-8 text-center text-slate-600 text-xs">ยังไม่มีม้วนกรอ</div>
                 )}
               </div>
-              {/* bad footer + scrap summary */}
+              {/* bad footer */}
               <div className="border-t border-slate-800 px-3 py-1.5 bg-slate-900 flex justify-between text-xs shrink-0">
-                <span className="text-slate-500">{weighedRolls.filter((r:any)=>r?.roll_type==='bad').length} ม้วน</span>
-                <span className="text-orange-300 font-black">{fmt(weighedRolls.filter((r:any)=>r?.roll_type==='bad').reduce((s:number,r:any)=>s+(r.weight??0),0),dec)} Kgs.</span>
+                <span className="text-slate-500">{weighedRolls.filter((r:any)=>r?.roll_type==='bad' && (r as any).review_status !== 'pending_review').length} ม้วน</span>
+                <span className="text-orange-300 font-black">{fmt(weighedRolls.filter((r:any)=>r?.roll_type==='bad' && (r as any).review_status !== 'pending_review').reduce((s:number,r:any)=>s+(r.weight??0),0),dec)} Kgs.</span>
               </div>
               {/* เศษ summary */}
               {weighedRolls.some((r:any)=>r.roll_type?.startsWith('scrap')) && (
@@ -2267,6 +2672,60 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                   })}
                 </div>
               )}
+            </div>
+            )}
+
+            {/* ── ⏳ รอ ผจก พิจารณา ────────────────────────── */}
+            {profile.section !== 'rewind' && (
+            <div className="flex-1 flex flex-col min-w-0">
+              <div className="px-3 py-2 bg-amber-500/10 border-b border-amber-500/20 shrink-0">
+                <span className="text-amber-300 text-xs font-bold">⏳ รอ ผจก พิจารณา</span>
+              </div>
+              <div className="grid grid-cols-4 border-b border-slate-800 bg-slate-800/20 shrink-0">
+                {['เวลา','ม้วน','นน.','เหตุผล'].map(h=>(
+                  <div key={h} className="px-3 py-1.5 text-slate-500 text-[9px] font-semibold uppercase">{h}</div>
+                ))}
+              </div>
+              <div className="flex-1 overflow-y-auto divide-y divide-slate-800/40">
+                {(() => {
+                  const pending = weighedRolls.filter((r:any) => r.roll_type === 'bad' && (r as any).review_status === 'pending_review')
+                  return [...pending]
+                    .sort((a:any,b:any) => (a.roll_no ?? 0) - (b.roll_no ?? 0))
+                    .map((r:any) => {
+                      const isNew = lastRoll?.id === r.id
+                      const d = new Date(r.created_at)
+                      const dateShort = `${d.getDate()}/${d.getMonth()+1}`
+                      const time = d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})
+                      return (
+                        <div key={r.id} onClick={()=>setSelectedRoll(r)}
+                          className={`grid grid-cols-4 hover:bg-slate-800/40 cursor-pointer transition-colors ${isNew ? 'bg-amber-500/5' : ''}`}>
+                          <div className="px-3 py-2.5 text-slate-500 text-xs leading-tight">
+                            <div className="text-[9px] text-slate-600">{dateShort}</div>
+                            <div>{time}</div>
+                          </div>
+                          <div className="px-3 py-2.5">
+                            <span className="font-bold font-mono text-amber-200">{r.roll_no}</span>
+                            {isNew && <span className="ml-1 text-[9px] text-amber-400">NEW</span>}
+                          </div>
+                          <div className="px-3 py-2.5 font-black text-amber-300">{fmt(r.weight??0,dec)}</div>
+                          <div className="px-3 py-2.5 text-slate-400 text-xs truncate">{r.remark||'—'}</div>
+                        </div>
+                      )
+                    })
+                })()}
+                {weighedRolls.filter((r:any) => r.roll_type === 'bad' && (r as any).review_status === 'pending_review').length === 0 && (
+                  <div className="py-8 text-center text-slate-600 text-xs">ไม่มีม้วนรอพิจารณา</div>
+                )}
+              </div>
+              {/* pending footer */}
+              <div className="border-t border-slate-800 px-3 py-1.5 bg-slate-900 flex justify-between text-xs shrink-0">
+                <span className="text-slate-500">
+                  {weighedRolls.filter((r:any) => r.roll_type === 'bad' && (r as any).review_status === 'pending_review').length} ม้วน
+                </span>
+                <span className="text-amber-300 font-black">
+                  {fmt(weighedRolls.filter((r:any) => r.roll_type === 'bad' && (r as any).review_status === 'pending_review').reduce((s:number,r:any) => s + (r.weight??0), 0), dec)} Kgs.
+                </span>
+              </div>
             </div>
             )}
 
@@ -2320,14 +2779,45 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
               <p className="text-slate-500 text-xs text-center">เลือกการดำเนินการ:</p>
             </div>
 
-            <div className="flex gap-2 px-6 py-4 border-t border-slate-800">
-              <button onClick={() => setShowCloseModal(false)} disabled={closing}
-                className="flex-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-400 py-3 rounded-xl text-sm transition-colors">
-                ยกเลิก
+            <div className="px-6 pb-4 space-y-2">
+              <button onClick={async () => {
+                  const by = prompt('ชื่อผู้พักงาน:')
+                  if (!by || !by.trim()) return
+                  setClosing(true)
+                  try {
+                    await supabase.from('parked_jobs').upsert(
+                      { machine_no: profile.machine_no, lot_no: profile.lotNo, profile_snapshot: profile, parked_by: by.trim(), parked_at: new Date().toISOString() },
+                      { onConflict: 'machine_no,lot_no' }
+                    )
+                    await supabase.from('machine_profiles').update({
+                      cust_code:'', cust_name:'', cust_branch:'', cust_address:'',
+                      item_code:'', mat_code:'', product_code:'', product_name:'',
+                      width_cm:'', thick_mc:'',
+                      lot_no:'', length:'', pcs:'',
+                      planned_qty:'',
+                      inspector:'',
+                    }).eq('machine_no', profile.machine_no)
+                    alert(`⏸ พักงาน "${profile.productName}" แล้ว — ดึงคืนได้ที่หน้าเลือกเครื่อง (ปุ่ม 🅿 มีงานจอด)`)
+                    setShowCloseModal(false)
+                    onBack()
+                  } catch (e:any) {
+                    alert('พักงานไม่สำเร็จ: ' + e?.message)
+                  } finally { setClosing(false) }
+                }} disabled={closing}
+                className="w-full bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2">
+                ⏸ พักงาน (ดึงกลับมาทำต่อได้)
               </button>
               <button onClick={handleCloseJob} disabled={closing}
-                className="flex-[2] bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white py-3 rounded-xl font-bold transition-colors">
-                {closing ? 'กำลังปิด...' : '🏁 ปิดงาน + เริ่มงานใหม่'}
+                className="w-full bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2">
+                {closing ? 'กำลังปิด...' : '🏁 ปิดงานถาวร (ปิดสรุปยอด)'}
+              </button>
+              <p className="text-[10px] text-slate-500 text-center">
+                <b className="text-amber-400">พัก:</b> profile หาย ม้วนยังอยู่ — ดึงกลับได้ทุกเมื่อ ·
+                <b className="text-brand-400 ml-2">ปิดถาวร:</b> เขียน summary + ดึงงานเก่าได้จากปุ่ม "📂 ดึงงานเก่า"
+              </p>
+              <button onClick={() => setShowCloseModal(false)} disabled={closing}
+                className="w-full bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-400 py-2 rounded-xl text-sm transition-colors">
+                ยกเลิก
               </button>
             </div>
           </div>
@@ -2409,7 +2899,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                   { k:'สินค้า',      v: profile.productName },
                   { k:'Mat Code',    v: profile.matCode,    mono:true },
                   { k:'Lot No',      v: profile.lotNo,      mono:true },
-                  { k:'ขนาด',        v: profile.widthCm && profile.thickMc ? `${profile.widthCm} cm × ${profile.thickMc} mc` : '—' },
+                  { k:'ขนาด',        v: fmtSize(profile.widthCm, profile.thickMc, profile.widthUnit) || '—' },
                   { k:'ความยาว',     v: profile.length ? `${profile.length} M.` : '—' },
                   { k:'เครื่อง',     v: profile.machine_no },
                   { k:'ผู้ตรวจสอบ', v: selectedRoll.inspector || profile.inspector || '—' },
@@ -2514,6 +3004,7 @@ export default function WeighStation({ dept }: { dept?: 'blow' | 'print' | 'rewi
           machine_no:  r.machine_no,
           custCode:    r.cust_code    ?? '',
           custName:    r.cust_name    ?? '',
+          custBranch:  r.cust_branch  ?? '',
           custAddress: r.cust_address ?? '',
           decimal:    (r.decimal_places ?? 2) as 1|2,
           itemCode:    r.item_code    ?? '',
@@ -2521,6 +3012,7 @@ export default function WeighStation({ dept }: { dept?: 'blow' | 'print' | 'rewi
           productCode: r.product_code ?? '',
           productName: r.product_name ?? '',
           widthCm:     r.width_cm     ?? '',
+          widthUnit:   (r.width_unit  ?? 'cm') as 'cm'|'mm',
           thickMc:     r.thick_mc     ?? '',
           lotNo:       r.lot_no       ?? '',
           length:      r.length       ?? '',
@@ -2539,6 +3031,8 @@ export default function WeighStation({ dept }: { dept?: 'blow' | 'print' | 'rewi
         }))
         setProfiles(list)
         saveProfiles(list)
+        // ✨ sync selected ด้วย — กัน WeighPage ใช้ profile เก่า (เช่น widthUnit ที่เพิ่งเปลี่ยน)
+        setSelected(prev => prev ? (list.find(x => x.machine_no === prev.machine_no) ?? prev) : null)
       })
   }
 
@@ -2547,6 +3041,12 @@ export default function WeighStation({ dept }: { dept?: 'blow' | 'print' | 'rewi
   // filter เครื่องตาม dept
   const filtered = dept ? profiles.filter(p => (p.section ?? 'blow') === dept) : profiles
 
-  if (!selected) return <MachinePicker profiles={filtered} onSelect={setSelected} onProfileUpdated={reload} dept={dept} />
+  if (!selected) {
+    // แผนกกรอ: ใช้ job-centric list แทน machine picker
+    if (dept === 'rewind') {
+      return <ReworkJobList onPickJob={(prof) => setSelected(prof)} />
+    }
+    return <MachinePicker profiles={filtered} onSelect={setSelected} onProfileUpdated={reload} dept={dept} />
+  }
   return <WeighPage profile={selected} onBack={() => { setSelected(null); reload() }} />
 }

@@ -62,11 +62,12 @@ function rollOrigin(r: Roll): { label: string; sub: string; cls: string } {
 
 const DEPT_LABEL: Record<string,string> = { blow:'เป่า', print:'พิมพ์', rewind:'กรอ' }
 
-export default function ReviewQueue({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
+// mode: 'prod' = พิจารณาม้วนกรอ (ผลิตประเมินว่ากรอไม่ได้) · 'nc' = NC จริง (คลัง/QC)
+export default function ReviewQueue({ dept, mode = 'prod' }: { dept?: 'blow'|'print'|'rewind'; mode?: 'prod'|'nc' }) {
+  const isNC = mode === 'nc'
   const [allRolls, setAllRolls] = useState<Roll[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'pending'|'decided'>('pending')
-  const [originFilter, setOriginFilter] = useState<'all'|'prod'|'nc'>('all')
   const [search, setSearch] = useState('')
   const [decideRoll, setDecideRoll] = useState<Roll | null>(null)
 
@@ -82,27 +83,21 @@ export default function ReviewQueue({ dept }: { dept?: 'blow'|'print'|'rewind' }
   }
   useEffect(() => { load() }, [])
 
-  // แต่ละแผนกเห็นเฉพาะม้วนของแผนกตัวเอง (ตาม section) — ถ้าไม่ระบุ dept = เห็นทั้งหมด
-  const rolls = dept ? allRolls.filter(r => (r.section ?? 'blow') === dept) : allRolls
+  // แต่ละแผนกเห็นเฉพาะม้วนของแผนกตัวเอง (ตาม section) + แยกตามโหมด (NC จริง vs ผลิตประเมิน)
+  const rolls = allRolls
+    .filter(r => !dept || (r.section ?? 'blow') === dept)
+    .filter(r => isNC ? isRealNC(r) : !isRealNC(r))
 
   const pending  = rolls.filter(r => r.review_status === 'pending_review')
   const decided  = rolls.filter(r => r.review_status === 'approved_rework' || r.review_status === 'other')
   const base     = tab === 'pending' ? pending : decided
-  const byOrigin = base.filter(r => originFilter === 'all' ? true : originFilter === 'nc' ? isRealNC(r) : !isRealNC(r))
-  const shown    = byOrigin.filter(r => {
+  const shown    = base.filter(r => {
     if (!search.trim()) return true
     const s = search.toLowerCase()
     return [r.machine_no, r.lot_no, r.product_name, r.customer, r.remark, String(r.roll_no)]
       .filter(Boolean).some(x => String(x).toLowerCase().includes(s))
   })
 
-  const totalKgPending = pending.reduce((s,r) => s + (r.weight ?? 0), 0)
-  // นับแยกกลุ่มต้นทางในแท็บปัจจุบัน
-  const ncCount   = base.filter(isRealNC).length
-  const prodCount = base.length - ncCount
-  // แยกการ์ดด้านบนตามต้นทาง (เฉพาะ "รอพิจารณา")
-  const prodPending = pending.filter(r => !isRealNC(r))
-  const ncPending   = pending.filter(r => isRealNC(r))
   const sumKg = (arr: Roll[]) => arr.reduce((s,r) => s + (r.weight ?? 0), 0)
 
   return (
@@ -111,8 +106,14 @@ export default function ReviewQueue({ dept }: { dept?: 'blow'|'print'|'rewind' }
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-2xl font-black text-slate-800">⚠ NC — พิจารณาม้วน{dept && <span className="ml-2 text-base font-bold text-brand-600">· แผนก{DEPT_LABEL[dept]}</span>}</h1>
-            <p className="text-slate-500 text-sm mt-0.5">{dept ? `เห็นเฉพาะม้วนของแผนก${DEPT_LABEL[dept]} — ` : ''}ผลิตประเมินว่ากรอไม่ได้ / เสียในคลัง — รอ ผจก ตัดสินใจ</p>
+            <h1 className="text-2xl font-black text-slate-800">
+              {isNC ? '⚠ NC — ของเสียจากคลัง / QC' : '🏭 พิจารณาม้วนกรอ'}
+              {dept && <span className="ml-2 text-base font-bold text-brand-600">· แผนก{DEPT_LABEL[dept]}</span>}
+            </h1>
+            <p className="text-slate-500 text-sm mt-0.5">
+              {dept ? `เห็นเฉพาะม้วนของแผนก${DEPT_LABEL[dept]} — ` : ''}
+              {isNC ? 'ของที่เคยผ่านออกไปแล้ว เสียในคลัง / ตรวจไม่ผ่านก่อนโหลด — รอ ผจก ตัดสิน' : 'ผลิตประเมินเองว่ากรอไม่ได้ (ม้วนกรอรอตรวจ) — รอ ผจก ตัดสิน'}
+            </p>
           </div>
           <button onClick={load}
             className="bg-white hover:bg-slate-50 border border-slate-300 px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-1.5">
@@ -120,17 +121,12 @@ export default function ReviewQueue({ dept }: { dept?: 'blow'|'print'|'rewind' }
           </button>
         </div>
 
-        {/* Summary cards — แยกต้นทางด้านบน: ผลิตรอพิจารณา / NC จริง */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          <div className="bg-white border-2 border-sky-300 rounded-2xl p-4 shadow-sm">
-            <p className="text-sky-600 text-xs font-bold uppercase tracking-wider">🏭 ผลิตรอพิจารณา</p>
-            <p className="text-3xl font-black text-sky-700 mt-1">{prodPending.length}</p>
-            <p className="text-sky-600 text-xs mt-1">{fmt(sumKg(prodPending),2)} Kgs.</p>
-          </div>
-          <div className="bg-white border-2 border-purple-300 rounded-2xl p-4 shadow-sm">
-            <p className="text-purple-600 text-xs font-bold uppercase tracking-wider">⚠ NC จริง (คลัง/QC)</p>
-            <p className="text-3xl font-black text-purple-700 mt-1">{ncPending.length}</p>
-            <p className="text-purple-600 text-xs mt-1">{fmt(sumKg(ncPending),2)} Kgs.</p>
+        {/* Summary cards */}
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className={`bg-white border-2 rounded-2xl p-4 shadow-sm ${isNC ? 'border-purple-300' : 'border-sky-300'}`}>
+            <p className={`text-xs font-bold uppercase tracking-wider ${isNC ? 'text-purple-600' : 'text-sky-600'}`}>⏳ รอพิจารณา</p>
+            <p className={`text-3xl font-black mt-1 ${isNC ? 'text-purple-700' : 'text-sky-700'}`}>{pending.length}</p>
+            <p className={`text-xs mt-1 ${isNC ? 'text-purple-600' : 'text-sky-600'}`}>{fmt(sumKg(pending),2)} Kgs.</p>
           </div>
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
             <p className="text-emerald-600 text-xs font-bold uppercase tracking-wider">✓ อนุมัติให้กรอ</p>
@@ -162,50 +158,18 @@ export default function ReviewQueue({ dept }: { dept?: 'blow'|'print'|'rewind' }
           </div>
         </div>
 
-        {/* แยกกลุ่มต้นทาง: ผลิตรอพิจารณา vs NC จริง */}
-        <div className="flex gap-2 mb-3">
-          <button onClick={() => setOriginFilter('all')}
-            className={`px-4 py-2 rounded-xl text-sm font-bold border-2 ${originFilter==='all'?'bg-slate-700 border-slate-700 text-white':'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
-            ทั้งหมด ({base.length})
-          </button>
-          <button onClick={() => setOriginFilter('prod')}
-            className={`px-4 py-2 rounded-xl text-sm font-bold border-2 ${originFilter==='prod'?'bg-sky-600 border-sky-500 text-white':'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
-            🏭 ผลิตรอพิจารณา ({prodCount})
-          </button>
-          <button onClick={() => setOriginFilter('nc')}
-            className={`px-4 py-2 rounded-xl text-sm font-bold border-2 ${originFilter==='nc'?'bg-purple-600 border-purple-500 text-white':'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
-            ⚠ NC จริง (คลัง/QC) ({ncCount})
-          </button>
-        </div>
-
         {/* List */}
         {loading ? (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm"><p className="text-center py-10 text-slate-400">กำลังโหลด...</p></div>
         ) : shown.length === 0 ? (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm"><p className="text-center py-12 text-slate-400">
-            {tab === 'pending' ? '✓ ไม่มีม้วนรอพิจารณา' : 'ยังไม่มีม้วนที่ตัดสินแล้ว'}
+            {tab === 'pending' ? (isNC ? '✓ ไม่มีม้วน NC รอพิจารณา' : '✓ ไม่มีม้วนกรอรอพิจารณา') : 'ยังไม่มีม้วนที่ตัดสินแล้ว'}
           </p></div>
-        ) : originFilter === 'all' ? (
-          // ── แยกเป็น 2 กลุ่มชัดเจน: ผลิตรอพิจารณา (ผจก) vs NC จริง (คลัง/QC) ──
-          <div className="space-y-4">
-            <RollGroup
-              title="🏭 ผลิตรอพิจารณา (ผจก)"
-              subtitle="ผลิตประเมินเองว่ากรอไม่ได้ — รอ ผจก ตัดสิน"
-              headerCls="bg-sky-50 border-sky-200 text-sky-800"
-              rows={shown.filter(r => !isRealNC(r))}
-              tab={tab} onDecide={setDecideRoll} />
-            <RollGroup
-              title="⚠ NC จริง (คลัง / QC)"
-              subtitle="ของที่เคยผ่านออกไปแล้ว — เสียในคลัง / ตรวจไม่ผ่านก่อนโหลด"
-              headerCls="bg-purple-50 border-purple-200 text-purple-800"
-              rows={shown.filter(r => isRealNC(r))}
-              tab={tab} onDecide={setDecideRoll} />
-          </div>
         ) : (
           <RollGroup
-            title={originFilter === 'nc' ? '⚠ NC จริง (คลัง / QC)' : '🏭 ผลิตรอพิจารณา (ผจก)'}
-            subtitle={originFilter === 'nc' ? 'ของที่เคยผ่านออกไปแล้ว — เสียในคลัง / ตรวจไม่ผ่านก่อนโหลด' : 'ผลิตประเมินเองว่ากรอไม่ได้ — รอ ผจก ตัดสิน'}
-            headerCls={originFilter === 'nc' ? 'bg-purple-50 border-purple-200 text-purple-800' : 'bg-sky-50 border-sky-200 text-sky-800'}
+            title={isNC ? '⚠ NC จริง (คลัง / QC)' : '🏭 ม้วนกรอรอพิจารณา (ผลิตประเมิน)'}
+            subtitle={isNC ? 'ของที่เคยผ่านออกไปแล้ว — เสียในคลัง / ตรวจไม่ผ่านก่อนโหลด' : 'ผลิตประเมินเองว่ากรอไม่ได้ — รอ ผจก ตัดสิน'}
+            headerCls={isNC ? 'bg-purple-50 border-purple-200 text-purple-800' : 'bg-sky-50 border-sky-200 text-sky-800'}
             rows={shown}
             tab={tab} onDecide={setDecideRoll} />
         )}

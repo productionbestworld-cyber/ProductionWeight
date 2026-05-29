@@ -11,7 +11,7 @@ import Warehouse from './pages/Warehouse'
 import Admin, { PinGate, DeptPinGate, isAdminUnlocked, isDeptUnlocked, lockAllDepts, lockAdmin } from './pages/Admin'
 import ReviewQueue from './pages/ReviewQueue'
 
-type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings' | 'admin' | 'review'
+type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings' | 'admin' | 'review' | 'nc'
 type Dept = 'blow' | 'print' | 'rewind'
 
 const DEPT_KEY = 'bwp_dept'
@@ -104,7 +104,8 @@ export default function App() {
     { key: 'warehouse', label: 'คลังสินค้า',    icon: WarehouseIcon,   depts: ['blow','print','rewind'] },
     { key: 'dashboard', label: 'Dashboard',      icon: LayoutDashboard, depts: ['blow','print','rewind'] },
     { key: 'history',   label: 'ประวัติผลิต',    icon: History,         depts: ['blow','print','rewind'] },
-    { key: 'review',    label: 'NC / พิจารณาม้วน', icon: Search,         depts: ['blow','print','rewind'] },
+    { key: 'review',    label: 'พิจารณาม้วนกรอ', icon: Search,         depts: ['blow','print','rewind'] },
+    { key: 'nc',        label: 'NC (คลัง/QC)',   icon: AlertTriangle,   depts: ['blow','print','rewind'] },
     { key: 'settings',  label: 'ตั้งค่าเครื่อง', icon: Settings,        depts: ['blow','print','rewind'] },
   ] as const).filter(n => (n.depts as readonly string[]).includes(dept))
 
@@ -260,7 +261,8 @@ export default function App() {
         {page === 'warehouse' && <Warehouse dept={dept} />}
         {page === 'dashboard' && <Dashboard dept={dept} />}
         {page === 'history'   && <HistoryPage dept={dept} />}
-        {page === 'review'    && <ReviewQueue dept={dept} />}
+        {page === 'review'    && <ReviewQueue dept={dept} mode="prod" />}
+        {page === 'nc'        && <ReviewQueue dept={dept} mode="nc" />}
         {page === 'settings'  && <MachineSettings dept={dept} />}
         {page === 'admin'     && <Admin dept={dept} />}
       </main>

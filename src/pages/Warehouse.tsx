@@ -1,6 +1,6 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, Fragment } from 'react'
 import { supabase } from '../lib/supabase'
-import { Package, Plus, Truck, BarChart3, RefreshCw, Search, Printer, Download, X, CheckCircle2, ChevronDown, ChevronRight } from 'lucide-react'
+import { Package, Plus, Truck, BarChart3, RefreshCw, Search, Printer, Download, X, CheckCircle2, ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 
 function fmt(n: number | null | undefined, d = 2) {
@@ -14,7 +14,10 @@ function thaiDate(d = new Date()) {
   return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()+543}`
 }
 
-type Tab = 'stock' | 'so' | 'ship'
+type Tab = 'stock' | 'so' | 'ship' | 'scrap'
+const SCRAP_LABEL: Record<string,string> = {
+  scrap_clear: 'เศษใส', scrap_color: 'เศษสี', scrap_lump: 'เศษก้อน/ตะกอน',
+}
 type SO = {
   id: string; so_no: string; customer: string; product_name: string
   target_kg: number; status: string; created_at: string; note: string
@@ -182,13 +185,12 @@ function SOModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => voi
 const RETURN_TO_REWORK_TYPES = [
   { key:'qc_reject',        no:'1.4', label:'ตรวจไม่ผ่านก่อนโหลด',     emoji:'🚫' },
   { key:'warehouse_damage', no:'1.5', label:'เสียจากคลัง/เคลื่อนย้าย', emoji:'📦' },
-  { key:'return_no_cn',     no:'1.2', label:'ลูกค้าคืน (ไม่ลดหนี้)',   emoji:'↩️' },
-  { key:'return_with_cn',   no:'1.3', label:'ลูกค้าคืน (ลดหนี้/NC)',   emoji:'📋' },
 ] as const
 
 export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   const [tab, setTab] = useState<Tab>('stock')
   const [rolls, setRolls] = useState<Roll[]>([])
+  const [scrapRolls, setScrapRolls] = useState<any[]>([])
   const [sos, setSOs] = useState<SO[]>([])
   const [loading, setLoading] = useState(true)
   const [showSOModal, setShowSOModal] = useState(false)
@@ -207,25 +209,32 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   const [selectedSO, setSelectedSO] = useState<SO | null>(null)
   const [selectedRolls, setSelectedRolls] = useState<Set<string>>(new Set())
   const [returnModal, setReturnModal] = useState<any | null>(null)
+  const [expandedRoll, setExpandedRoll] = useState<string | null>(null)
   const [shipStaff, setShipStaff] = useState('')
   const [shipping, setShipping] = useState(false)
 
   async function loadAll() {
     setLoading(true)
-    const [{ data: r }, { data: s }] = await Promise.all([
+    const [{ data: r }, { data: s }, { data: sc }] = await Promise.all([
       supabase.from('production_rolls').select('*')
         .eq('transferred', true).order('created_at', { ascending: false }),
       supabase.from('sales_orders').select('*').order('created_at', { ascending: false }),
+      supabase.from('production_rolls').select('*')
+        .in('roll_type', ['scrap_clear','scrap_color','scrap_lump'])
+        .order('created_at', { ascending: false }),
     ])
     setRolls((r ?? []) as Roll[])
     setSOs((s ?? []) as SO[])
+    setScrapRolls(sc ?? [])
     setLoading(false)
   }
   useEffect(() => { loadAll() }, [])
 
-  // stock = transferred แต่ยังไม่ shipped
-  const stock = useMemo(() => rolls.filter(r => !r.shipped), [rolls])
-  const shipped = useMemo(() => rolls.filter(r => r.shipped), [rolls])
+  // stock = ม้วนดี (good) ที่ transferred แต่ยังไม่ shipped
+  // กรอง roll_type='good' กันม้วนเศษ/กรอ (roll_no=0 หรือเลขซ้ำ) เล็ดลอดเข้าคลัง
+  const goodRolls = useMemo(() => rolls.filter(r => ((r as any).roll_type ?? 'good') === 'good'), [rolls])
+  const stock = useMemo(() => goodRolls.filter(r => !r.shipped), [goodRolls])
+  const shipped = useMemo(() => goodRolls.filter(r => r.shipped), [goodRolls])
 
   // filter stock
   // helper: สร้าง size label จาก width_cm × thick_mc (รองรับหน่วย mm)
@@ -255,6 +264,23 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
     })
     return Array.from(map.values()).sort((a, b) => a.lot.localeCompare(b.lot))
   }, [filteredStock])
+
+  // ── เศษ (scrap) — เชื่อมจากงานผลิต/กรอ จัดกลุ่มตาม Lot/งาน ──
+  const scrapByLot = useMemo(() => {
+    const map = new Map<string, { lot: string; product: string; customer: string; machine: string; rolls: any[] }>()
+    scrapRolls.forEach(r => {
+      const k = `${r.lot_no ?? '?'}__${r.product_name ?? '?'}`
+      if (!map.has(k)) map.set(k, { lot: r.lot_no ?? '(ไม่ระบุ Lot)', product: r.product_name ?? '—', customer: r.customer ?? '—', machine: r.machine_no ?? '—', rolls: [] })
+      map.get(k)!.rolls.push(r)
+    })
+    return Array.from(map.values()).sort((a, b) => a.lot.localeCompare(b.lot))
+  }, [scrapRolls])
+  const scrapKg = useMemo(() => scrapRolls.reduce((s,r)=>s+(r.weight??0),0), [scrapRolls])
+  const scrapByType = useMemo(() => {
+    const m: Record<string,{kg:number;n:number}> = {}
+    scrapRolls.forEach(r => { const t = r.roll_type; if(!m[t]) m[t]={kg:0,n:0}; m[t].kg+=(r.weight??0); m[t].n++ })
+    return m
+  }, [scrapRolls])
 
   // dropdown options
   const products  = useMemo(() => Array.from(new Set(stock.map(r => r.product_name).filter(Boolean))).sort(), [stock])
@@ -404,6 +430,7 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
             { key:'stock', label:'สต็อกคงเหลือ', icon: BarChart3 },
             { key:'so',    label:`Sales Orders (${sos.length})`, icon: Package },
             { key:'ship',  label:'จัดส่ง', icon: Truck },
+            { key:'scrap', label:`เศษ (${scrapRolls.length})`, icon: Trash2 },
           ] as const).map(t => (
             <button key={t.key} onClick={() => setTab(t.key)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -522,15 +549,21 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="bg-slate-800/30 text-[10px] text-slate-500 uppercase">
-                            {['ม้วนที่','เครื่อง','นน.เต็ม','นน.สุทธิ (Kgs.)','ผู้ตรวจ','วันผลิต','รับโอนเมื่อ'].map(h=>(
+                            {['ลำดับ','ม้วนที่','เครื่อง','นน.เต็ม','นน.สุทธิ (Kgs.)','ผู้ตรวจ','วันผลิต','รับโอนเมื่อ'].map(h=>(
                               <th key={h} className="px-4 py-2 text-left font-semibold tracking-wider">{h}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800/50">
-                          {group.rolls.map(r => (
-                            <tr key={r.id} className="hover:bg-slate-800/30">
-                              <td className="px-4 py-2.5 font-mono font-bold text-white">#{r.roll_no}</td>
+                          {group.rolls.map((r, idx) => {
+                            const isOpen = expandedRoll === r.id
+                            const rr = r as any
+                            return (
+                            <Fragment key={r.id}>
+                            <tr onClick={() => setExpandedRoll(isOpen ? null : r.id)}
+                              className={`cursor-pointer ${isOpen ? 'bg-slate-800/40' : 'hover:bg-slate-800/30'}`}>
+                              <td className="px-4 py-2.5 text-slate-500 text-xs">{idx + 1}</td>
+                              <td className="px-4 py-2.5 font-mono font-bold text-white">{isOpen ? '▲' : '▼'} #{r.roll_no}</td>
                               <td className="px-4 py-2.5"><span className="text-[10px] bg-brand-500/20 text-brand-300 font-bold px-1.5 py-0.5 rounded">{r.machine_no||'—'}</span></td>
                               <td className="px-4 py-2.5 text-slate-300">{fmt((r.weight??0)+(r.core_weight??0))}</td>
                               <td className="px-4 py-2.5 text-green-300 font-black">{fmt(r.weight)}</td>
@@ -538,7 +571,29 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                               <td className="px-4 py-2.5 text-slate-400 text-xs">{fmtDT(r.created_at)}</td>
                               <td className="px-4 py-2.5 text-slate-500 text-xs">{r.transferred_at ? fmtDT(r.transferred_at) : '—'}</td>
                             </tr>
-                          ))}
+                            {isOpen && (
+                            <tr className="bg-slate-800/20">
+                              <td colSpan={8} className="px-4 pb-4 pt-1">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 text-xs mb-3">
+                                  <div><span className="text-slate-500">สินค้า</span><p className="text-white font-semibold">{rr.product_name||'—'}</p></div>
+                                  <div><span className="text-slate-500">รหัสสินค้า</span><p className="text-white font-semibold">{rr.product_code||'—'}</p></div>
+                                  <div><span className="text-slate-500">ลูกค้า</span><p className="text-white font-semibold">{rr.customer||'—'}</p></div>
+                                  <div><span className="text-slate-500">Lot</span><p className="text-white font-semibold font-mono">{rr.lot_no||'—'}</p></div>
+                                  <div><span className="text-slate-500">นน.แกน</span><p className="text-white font-semibold">{fmt(rr.core_weight)} Kg</p></div>
+                                  <div><span className="text-slate-500">นน.สุทธิ</span><p className="text-brand-300 font-bold">{fmt(rr.weight)} Kg</p></div>
+                                  <div><span className="text-slate-500">กว้าง</span><p className="text-white font-semibold">{rr.width_cm||'—'} cm</p></div>
+                                  <div><span className="text-slate-500">หนา</span><p className="text-white font-semibold">{rr.thick_mc||'—'}</p></div>
+                                </div>
+                                <button onClick={(e) => { e.stopPropagation(); setReturnModal(r) }}
+                                  className="text-sm bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded-xl font-bold">
+                                  ⚠ แจ้ง NC — ม้วนเสีย/มีปัญหาในคลัง (รอ ผจก ตัดสิน)
+                                </button>
+                              </td>
+                            </tr>
+                            )}
+                            </Fragment>
+                            )
+                          })}
                         </tbody>
                         <tfoot>
                           <tr className="border-t border-slate-700 bg-slate-800/30">
@@ -731,33 +786,61 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                     <div className="divide-y divide-slate-800/60">
                       {availableForShip.map(r => {
                         const isSel = selectedRolls.has(r.id)
+                        const isOpen = expandedRoll === r.id
                         return (
-                          <div key={r.id}
+                          <div key={r.id} className={isOpen ? 'bg-slate-800/30' : ''}>
+                          <div
                             className={`flex items-center gap-3 px-4 py-3 transition-colors ${isSel ? 'bg-brand-500/12' : 'hover:bg-slate-800/50'}`}>
+                            {/* ติ๊กเลือกม้วน (สำหรับจัดส่ง) */}
                             <div onClick={() => toggleRoll(r.id)} className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all cursor-pointer ${isSel ? 'bg-brand-500 border-brand-500' : 'border-slate-600'}`}>
                               {isSel && <span className="text-white text-[10px] font-black">✓</span>}
                             </div>
                             <span className="bg-brand-600 text-white font-black text-xs px-2 py-1 rounded-lg w-12 text-center flex-shrink-0">{r.machine_no||'?'}</span>
-                            <div onClick={() => toggleRoll(r.id)} className="flex-1 min-w-0 cursor-pointer">
+                            {/* คลิกที่ม้วนเพื่อดูรายละเอียด */}
+                            <div onClick={() => setExpandedRoll(isOpen ? null : r.id)} className="flex-1 min-w-0 cursor-pointer">
                               <div className="flex items-baseline gap-2">
                                 <span className="font-mono font-black text-white">ม้วน #{r.roll_no}</span>
                                 <span className="text-slate-500 text-xs font-mono">Lot {r.lot_no}</span>
                               </div>
                               <p className="text-slate-500 text-xs truncate">{r.product_name||'—'}</p>
                             </div>
-                            <div onClick={() => toggleRoll(r.id)} className="text-right flex-shrink-0 cursor-pointer">
+                            <div onClick={() => setExpandedRoll(isOpen ? null : r.id)} className="text-right flex-shrink-0 cursor-pointer">
                               <p className="font-black text-lg text-brand-300 leading-none">{fmt(r.weight)}</p>
                               <p className="text-slate-600 text-[10px]">Kgs. สุทธิ</p>
                             </div>
-                            {/* ส่งกลับกรอ */}
-                            <button onClick={(e) => { e.stopPropagation(); setReturnModal(r) }}
-                              title="ส่งกลับแผนกกรอ (ม้วนมีปัญหา)"
-                              className="flex-shrink-0 text-[10px] bg-amber-600/80 hover:bg-amber-500 text-white px-2 py-1.5 rounded font-bold whitespace-nowrap">
-                              🔧 ส่งกรอ
+                            <button onClick={() => setExpandedRoll(isOpen ? null : r.id)}
+                              title="ดูรายละเอียด"
+                              className="flex-shrink-0 text-slate-400 hover:text-white text-xs w-6 text-center">
+                              {isOpen ? '▲' : '▼'}
                             </button>
                             <div className="text-right flex-shrink-0 w-14">
                               <p className="text-slate-400 text-xs">{fmtDT(r.created_at).slice(0,5)}</p>
                             </div>
+                          </div>
+
+                          {/* รายละเอียดม้วน + ปุ่มแจ้ง NC */}
+                          {isOpen && (() => { const rr = r as any; return (
+                            <div className="px-4 pb-4 pt-1 bg-slate-800/30 border-t border-slate-800/60">
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 text-xs mb-3">
+                                <div><span className="text-slate-500">เครื่อง</span><p className="text-white font-semibold">{r.machine_no||'—'}</p></div>
+                                <div><span className="text-slate-500">Lot</span><p className="text-white font-semibold font-mono">{r.lot_no||'—'}</p></div>
+                                <div><span className="text-slate-500">ม้วนที่</span><p className="text-white font-semibold">{r.roll_no||'—'}</p></div>
+                                <div><span className="text-slate-500">สินค้า</span><p className="text-white font-semibold">{r.product_name||'—'}</p></div>
+                                <div><span className="text-slate-500">รหัสสินค้า</span><p className="text-white font-semibold">{rr.product_code||'—'}</p></div>
+                                <div><span className="text-slate-500">ลูกค้า</span><p className="text-white font-semibold">{rr.customer||'—'}</p></div>
+                                <div><span className="text-slate-500">นน.เต็ม (Gross)</span><p className="text-white font-semibold">{fmt(rr.gross_weight)} Kg</p></div>
+                                <div><span className="text-slate-500">นน.แกน</span><p className="text-white font-semibold">{fmt(rr.core_weight)} Kg</p></div>
+                                <div><span className="text-slate-500">นน.สุทธิ</span><p className="text-brand-300 font-bold">{fmt(rr.weight)} Kg</p></div>
+                                <div><span className="text-slate-500">กว้าง</span><p className="text-white font-semibold">{rr.width_cm||'—'} cm</p></div>
+                                <div><span className="text-slate-500">หนา</span><p className="text-white font-semibold">{rr.thick_mc||'—'}</p></div>
+                                <div><span className="text-slate-500">ผู้ตรวจ</span><p className="text-white font-semibold">{rr.inspector||'—'}</p></div>
+                              </div>
+                              <button onClick={() => setReturnModal(r)}
+                                className="w-full text-sm bg-amber-600 hover:bg-amber-500 text-white px-4 py-2.5 rounded-xl font-bold">
+                                ⚠ แจ้ง NC — ม้วนเสีย/มีปัญหาในคลัง (รอ ผจก ตัดสิน)
+                              </button>
+                            </div>
+                          ) })()}
                           </div>
                         )
                       })}
@@ -768,6 +851,78 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
             </div>
           </div>
         )}
+
+        {/* ══════════ TAB: SCRAP (เศษจากงาน) ══════════════════════════════ */}
+        {tab === 'scrap' && (<>
+          {/* สรุปยอดเศษ */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <div className="bg-slate-900 border border-red-700/40 rounded-2xl p-4">
+              <p className="text-xs text-slate-400">🗑 เศษรวม</p>
+              <p className="text-3xl font-black text-red-400 mt-1">{fmt(scrapKg,1)}<span className="text-base text-slate-500 font-normal"> kg</span></p>
+              <p className="text-[11px] text-slate-500">{scrapRolls.length} ม้วน</p>
+            </div>
+            {(['scrap_clear','scrap_color','scrap_lump'] as const).map(t => (
+              <div key={t} className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                <p className="text-xs text-slate-400">{SCRAP_LABEL[t]}</p>
+                <p className="text-2xl font-black text-slate-200 mt-1">{fmt(scrapByType[t]?.kg ?? 0,1)}<span className="text-sm text-slate-500 font-normal"> kg</span></p>
+                <p className="text-[11px] text-slate-500">{scrapByType[t]?.n ?? 0} ม้วน</p>
+              </div>
+            ))}
+          </div>
+
+          {loading ? <div className="text-slate-500 text-sm py-8 text-center">กำลังโหลด...</div>
+          : scrapByLot.length === 0 ? <div className="bg-slate-900 border border-slate-800 rounded-2xl py-16 text-center text-slate-500">ยังไม่มีเศษจากงานผลิต/กรอ</div>
+          : (
+            <div className="space-y-2">
+              {scrapByLot.map(group => {
+                const key = `scrap__${group.lot}__${group.product}`
+                const isOpen = expandedLots.has(key)
+                const subKg = group.rolls.reduce((s,r)=>s+(r.weight??0),0)
+                return (
+                  <div key={key} className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                    <button onClick={() => setExpandedLots(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-800/50 text-left">
+                      {isOpen ? <ChevronDown size={16} className="text-slate-500"/> : <ChevronRight size={16} className="text-slate-500"/>}
+                      <span className="font-mono text-sm text-red-300">Lot {group.lot}</span>
+                      <span className="text-sm text-slate-300">{group.product}</span>
+                      <span className="text-xs text-slate-500">· {group.customer} · เครื่อง {group.machine}</span>
+                      <span className="ml-auto text-sm font-bold text-red-400">{fmt(subKg,1)} kg</span>
+                      <span className="text-xs text-slate-500">{group.rolls.length} ม้วน</span>
+                    </button>
+                    {isOpen && (
+                      <div className="overflow-x-auto border-t border-slate-800">
+                        <table className="w-full text-xs">
+                          <thead className="bg-slate-800/50 text-slate-400">
+                            <tr>
+                              <th className="px-3 py-2 text-left">ม้วนที่</th>
+                              <th className="px-3 py-2 text-left">ประเภทเศษ</th>
+                              <th className="px-3 py-2 text-right">นน.สุทธิ</th>
+                              <th className="px-3 py-2 text-left">สาเหตุ/หมายเหตุ</th>
+                              <th className="px-3 py-2 text-left">ผู้ตรวจ</th>
+                              <th className="px-3 py-2 text-left">เวลา</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {group.rolls.map((r:any) => (
+                              <tr key={r.id} className="border-t border-slate-800 text-slate-300">
+                                <td className="px-3 py-1.5 font-bold">#{r.roll_no ?? '—'}</td>
+                                <td className="px-3 py-1.5"><span className="px-2 py-0.5 rounded-full bg-red-500/15 text-red-300 text-[11px]">{SCRAP_LABEL[r.roll_type] ?? r.roll_type}</span></td>
+                                <td className="px-3 py-1.5 text-right font-bold">{fmt(r.weight ?? 0,2)}</td>
+                                <td className="px-3 py-1.5 text-amber-300">{r.remark || '—'}</td>
+                                <td className="px-3 py-1.5">{r.inspector || '—'}</td>
+                                <td className="px-3 py-1.5 text-slate-500">{r.created_at ? fmtDT(r.created_at) : '—'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </>)}
 
       </div>
 
@@ -792,48 +947,47 @@ function ReturnToReworkModal({ roll, onClose, onDone }:
   const [saving, setSaving] = useState(false)
 
   async function save() {
-    if (!reason.trim()) { alert('ระบุเหตุผลที่ส่งกลับกรอ'); return }
-    if (!by.trim())     { alert('กรอกชื่อผู้ส่ง'); return }
+    if (!reason.trim()) { alert('ระบุเหตุผลที่แจ้ง NC'); return }
+    if (!by.trim())     { alert('กรอกชื่อผู้แจ้ง'); return }
     setSaving(true)
 
-    // ── ใช้ RPC atomic: log + update ใน transaction เดียว ──
-    const { error } = await supabase.rpc('return_to_rework_atomic', {
-      p_roll_id:      roll.id,
-      p_inbound_type: inboundType,
-      p_reason:       reason.trim(),
-      p_by:           by.trim(),
+    // ── 1) บันทึก log (ม้วนออกจาก FG/คลัง → เข้า NC) ──
+    const { error: logErr } = await supabase.from('roll_deletion_logs').insert({
+      deleted_by:   by.trim(),
+      reason:       `[แจ้ง NC จากคลัง] ${reason.trim()}`,
+      machine_no:   roll.machine_no, lot_no: roll.lot_no, roll_no: roll.roll_no,
+      roll_type:    'good', weight: roll.weight, gross_weight: roll.gross_weight,
+      core_weight:  roll.core_weight, length: roll.length,
+      product_name: roll.product_name, product_code: roll.product_code,
+      item_code:    roll.item_code, mat_code: roll.mat_code,
+      cust_code:    roll.cust_code, cust_name: roll.customer,
+      width_cm:     roll.width_cm, thick_mc: roll.thick_mc,
+      inspector:    roll.inspector, started_at: roll.created_at,
+      section:      roll.section ?? 'blow',
     })
+    // log เป็นแค่ paper trail — ถ้า insert ไม่ได้ (เช่น column ยังไม่ครบ) ก็ไม่ขวางการแจ้ง NC
+    if (logErr) console.warn('roll_deletion_logs insert failed (non-fatal):', logErr.message)
 
-    // Fallback: ถ้า RPC ยังไม่ deploy → ใช้ 2-step
-    if (error && (/function .* does not exist/i.test(error.message) || /could not find the function/i.test(error.message))) {
-      console.warn('RPC return_to_rework_atomic ยังไม่ถูก deploy — รัน db/hardening.sql')
-      const { error: logErr } = await supabase.from('roll_deletion_logs').insert({
-        deleted_by:   by.trim(),
-        reason:       `[ส่งกลับกรอ] ${reason.trim()}`,
-        machine_no:   roll.machine_no, lot_no: roll.lot_no, roll_no: roll.roll_no,
-        roll_type:    'good', weight: roll.weight, gross_weight: roll.gross_weight,
-        core_weight:  roll.core_weight, length: roll.length,
-        product_name: roll.product_name, product_code: roll.product_code,
-        item_code:    roll.item_code, mat_code: roll.mat_code,
-        cust_code:    roll.cust_code, cust_name: roll.customer,
-        width_cm:     roll.width_cm, thick_mc: roll.thick_mc,
-        inspector:    roll.inspector, started_at: roll.created_at,
-        original_id:  roll.id, section: 'rewind',
-      })
-      if (logErr) { setSaving(false); alert('บันทึกไม่สำเร็จ (log): ' + logErr.message); return }
-      const { error: updErr } = await supabase.from('production_rolls').update({
-        roll_type: 'bad', remark: reason.trim(), inbound_type: inboundType,
-        rework_status: null, transferred: true, transferred_by: by.trim(),
-        transferred_at: new Date().toISOString(), transfer_doc_id: null, section: 'rewind',
-      }).eq('id', roll.id)
-      setSaving(false)
-      if (updErr) { alert('บันทึกไม่สำเร็จ: ' + updErr.message); return }
-    } else {
-      setSaving(false)
-      if (error) { alert('บันทึกไม่สำเร็จ: ' + error.message); return }
-    }
+    // ── 2) ม้วนเข้า NC = รอพิจารณา (ReviewQueue) ไม่เด้งเข้ากรอตรงๆ ──
+    //     ผจก ตัดสินทีหลังว่าจะ ส่งกรอ / เศษ / เก็บไว้
+    const { error: updErr } = await supabase.from('production_rolls').update({
+      roll_type:       'bad',
+      remark:          reason.trim(),
+      inbound_type:    inboundType,
+      review_status:   'pending_review',
+      review_action:   null,
+      rework_status:   null,
+      // ปลดออกจากคลัง — กักไว้ NC (ยังไม่ส่งกรอ)
+      transferred:     false,
+      transferred_by:  null,
+      transferred_at:  null,
+      transfer_doc_id: null,
+    }).eq('id', roll.id)
+    setSaving(false)
+    if (updErr) { alert('บันทึกไม่สำเร็จ: ' + updErr.message); return }
+
     const sel = RETURN_TO_REWORK_TYPES.find(t => t.key === inboundType)
-    alert(`✓ ส่งม้วน #${roll.roll_no} (${fmt(roll.weight)} Kg) กลับแผนกกรอแล้ว\nประเภท: ${sel?.no} ${sel?.label}\nเหตุผล: ${reason}`)
+    alert(`✓ แจ้ง NC ม้วน #${roll.roll_no} (${fmt(roll.weight)} Kg) แล้ว\nประเภท: ${sel?.no} ${sel?.label}\nเหตุผล: ${reason}\n\nรอ ผจก ตัดสินที่หน้า "พิจารณาม้วน"`)
     onDone()
   }
 
@@ -841,7 +995,7 @@ function ReturnToReworkModal({ roll, onClose, onDone }:
     <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-slate-900 border border-amber-600 rounded-2xl w-full max-w-md p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <p className="text-white font-bold text-base flex items-center gap-2"><span className="text-xl">🔧</span> ส่งม้วนกลับแผนกกรอ</p>
+          <p className="text-white font-bold text-base flex items-center gap-2"><span className="text-xl">⚠</span> แจ้ง NC — ม้วนเสียในคลัง</p>
           <button onClick={onClose} className="text-slate-500 hover:text-white"><X size={18}/></button>
         </div>
 
@@ -866,24 +1020,24 @@ function ReturnToReworkModal({ roll, onClose, onDone }:
           ))}
         </div>
 
-        <label className="block text-xs text-slate-400 mb-1">เหตุผลที่ส่งกลับ *</label>
+        <label className="block text-xs text-slate-400 mb-1">เหตุผลที่แจ้ง NC *</label>
         <input value={reason} onChange={e => setReason(e.target.value)}
-          placeholder="เช่น แกนติด, ม้วนเป็นลอน, ลูกค้าตีคืน..."
+          placeholder="เช่น แกนติด, ม้วนเป็นลอน, เสียระหว่างขนย้าย, ลูกค้าตีคืน..."
           autoFocus
           className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-amber-500 mb-3"/>
 
-        <label className="block text-xs text-slate-400 mb-1">ชื่อผู้ส่ง *</label>
+        <label className="block text-xs text-slate-400 mb-1">ชื่อผู้แจ้ง *</label>
         <input value={by} onChange={e => setBy(e.target.value)}
           className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-amber-500"/>
 
         <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5 mt-3 text-xs text-amber-200">
-          💡 ม้วนนี้จะออกจากคลัง → ไปอยู่ใน <b>แผนกกรอ → คิวรอกรอ</b> ของประเภทที่เลือก → หลังกรอเสร็จจะชั่งใหม่และส่งกลับคลังตามปกติ
+          💡 ม้วนนี้จะออกจากคลัง → เข้า <b>NC (รอพิจารณา)</b> ที่หน้า "พิจารณาม้วน" → ผจก ตัดสินว่า <b>ส่งกรอ / เศษเสีย / เก็บไว้</b>
         </div>
 
         <div className="flex gap-2 mt-4">
           <button onClick={onClose} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 py-2.5 rounded-lg text-sm">ยกเลิก</button>
           <button onClick={save} disabled={saving} className="flex-1 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white py-2.5 rounded-lg text-sm font-bold">
-            {saving ? 'บันทึก...' : '🔧 ส่งกลับกรอ'}
+            {saving ? 'บันทึก...' : '⚠ แจ้ง NC'}
           </button>
         </div>
       </div>

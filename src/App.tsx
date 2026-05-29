@@ -104,7 +104,7 @@ export default function App() {
     { key: 'warehouse', label: 'คลังสินค้า',    icon: WarehouseIcon,   depts: ['blow','print','rewind'] },
     { key: 'dashboard', label: 'Dashboard',      icon: LayoutDashboard, depts: ['blow','print','rewind'] },
     { key: 'history',   label: 'ประวัติผลิต',    icon: History,         depts: ['blow','print','rewind'] },
-    { key: 'review',    label: 'พิจารณาม้วน',    icon: Search,          depts: ['blow','print','rewind'] },
+    { key: 'review',    label: 'NC / พิจารณาม้วน', icon: Search,         depts: ['blow','print','rewind'] },
     { key: 'settings',  label: 'ตั้งค่าเครื่อง', icon: Settings,        depts: ['blow','print','rewind'] },
   ] as const).filter(n => (n.depts as readonly string[]).includes(dept))
 

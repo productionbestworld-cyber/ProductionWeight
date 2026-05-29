@@ -178,6 +178,16 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
         alert('ปิดงานไม่สำเร็จ: ไม่มีสิทธิ์อัปเดต (RLS) หรือไม่พบงานนี้\nให้เปิดสิทธิ์ UPDATE บนตาราง rework_jobs ใน Supabase')
         return
       }
+      // ปิดงานแล้ว → ม้วนต้นทางที่ยัง "กำลังกรอ" ของ Lot นี้ ถือว่ากรอเสร็จ → reworked
+      const srcLot = ((closeFor as any).source_lot_no || '').trim()
+      if (srcLot) {
+        const { error: rollErr } = await supabase.from('production_rolls')
+          .update({ rework_status: 'reworked' })
+          .eq('lot_no', srcLot)
+          .eq('roll_type', 'bad')
+          .eq('rework_status', 'reworking')
+        if (rollErr) console.warn('อัปเดตสถานะม้วนต้นทางไม่สำเร็จ (non-fatal):', rollErr.message)
+      }
       setCloseFor(null)
       await load()
     } catch (e: any) {

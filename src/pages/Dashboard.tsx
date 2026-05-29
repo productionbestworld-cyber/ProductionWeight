@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, Fragment } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   BarChart as HBarChart,
@@ -38,9 +38,10 @@ type Roll = {
   is_legacy?: boolean
 }
 
-type Tab = 'overview' | 'so' | 'transfer' | 'daily' | 'compare' | 'table' | 'machines' | 'customers' | 'rework' | 'logs'
+type Tab = 'control' | 'overview' | 'so' | 'transfer' | 'daily' | 'compare' | 'table' | 'machines' | 'customers' | 'rework' | 'logs'
 
 const TABS: { key: Tab; label: string }[] = [
+  { key: 'control',   label: '🎛 ศูนย์ควบคุม' },
   { key: 'overview',  label: '📊 Dashboard ภาพรวม' },
   { key: 'so',        label: '📋 รายงาน SO' },
   { key: 'transfer',  label: '📦 รายงานโอนคลัง' },
@@ -88,8 +89,13 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   const [compRolls,  setCompRolls]  = useState<Roll[]>([])
 
   const [loading, setLoading] = useState(true)
-  const [tab,     setTab]     = useState<Tab>('overview')
+  const [tab,     setTab]     = useState<Tab>('control')
   const [openSO,  setOpenSO]  = useState<Record<string, boolean>>({})
+  // ── ศูนย์ควบคุม: modal สั่งการ ──
+  const [ctrlDecideRoll, setCtrlDecideRoll] = useState<any | null>(null)
+  const [ctrlCloseJob,   setCtrlCloseJob]   = useState<any | null>(null)
+  const [expandedJob,    setExpandedJob]    = useState<string | null>(null)
+  const [showBadOther,   setShowBadOther]   = useState(false)
 
   // filters
   const today = toDateStr(new Date())
@@ -165,7 +171,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
       const to   = new Date(dateTo);   to.setHours(23,59,59,999)
       supabase
         .from('production_rolls')
-        .select('id,roll_type,weight,machine_no,lot_no,product_name,customer,width_cm,thick_mc,created_at,roll_no,section,remark,review_status,review_action,review_action_reason,review_decision_by,rework_status,rework_remark,transferred')
+        .select('id,roll_type,weight,gross_weight,core_weight,length,pcs,machine_no,lot_no,product_name,product_code,item_code,customer,cust_code,width_cm,width_unit,thick_mc,inspector,work_order,sale_order,created_at,roll_no,section,remark,review_status,review_action,review_action_reason,review_decision_by,rework_status,rework_remark,transferred,transferred_at,inbound_type')
         .gte('created_at', from.toISOString())
         .lte('created_at', to.toISOString())
         .order('created_at', { ascending: true })
@@ -241,6 +247,11 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
 
   const kg = (arr: typeof filtered) => arr.reduce((s, r) => s + (r.weight ?? 0), 0)
 
+  // แยก FG: ครั้งแรก (จากผลิต) vs จากกรอ (แผนก rewind กู้คืนได้)
+  const fgFirst   = useMemo(() => fg.filter(r => ((r as any).section ?? 'blow') !== 'rewind'), [fg])
+  const fgRework  = useMemo(() => fg.filter(r => ((r as any).section ?? 'blow') === 'rewind'), [fg])
+  const fgFirstKg = useMemo(() => kg(fgFirst),  [fgFirst])
+  const fgReworkKg= useMemo(() => kg(fgRework), [fgRework])
   const fgKg         = useMemo(() => kg(fg),         [fg])
   const badKg        = useMemo(() => kg(bad),        [bad])
   const scrapClearKg = useMemo(() => kg(scrapClear), [scrapClear])
@@ -507,6 +518,237 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
           </div>
         </div>
 
+        {/* ════════════════════════════════ TAB: CONTROL CENTER ══════════════════════════════ */}
+        {tab === 'control' && (() => {
+          const ncPending   = reviewPending
+          const ncPendingKg = kg(ncPending)
+          const activeJobs  = reworkJobs.filter(j => (j.status ?? 'active') === 'active')
+          const reworking   = reworkRolls.filter(r => r.rework_status === 'reworking')
+          const runningMc   = machineProfiles.filter(m => m.lot_no)
+          const fgPct = totalKg > 0 ? (fgKg / totalKg) * 100 : 0
+          // แตกม้วนกรอตาม lifecycle ให้สัมพันกับ "FG จากกรอ"
+          const badReview   = bad.filter(r => (r as any).review_status === 'pending_review')
+          const badWorking  = bad.filter(r => (r as any).rework_status === 'reworking')
+          const badDone     = bad.filter(r => (r as any).rework_status === 'reworked')
+          const badScrapped = bad.filter(r => (r as any).rework_status === 'scrapped')
+          const badWaiting  = bad.filter(r => (r as any).review_status !== 'pending_review' && (r as any).transferred === true
+                                && (!(r as any).rework_status || (r as any).rework_status === 'pending'))
+          const badOther    = bad.filter(r => ![...badReview,...badWorking,...badDone,...badScrapped,...badWaiting].includes(r))
+          const sumW = (arr:any[]) => arr.reduce((s,r)=>s+(r.weight??0),0)
+          return (
+          <div className="space-y-4">
+            {/* ── สรุปยอดผลิต (ดูครบในหน้าเดียว) ── */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="bg-white rounded-xl border-l-4 border-slate-400 border border-gray-200 shadow-sm p-4">
+                <p className="text-xs text-gray-500">⚖ ผลิตรวม</p>
+                <p className="text-3xl font-black text-gray-800 mt-1">{num(totalKg,1)}<span className="text-base text-gray-400 font-normal"> kg</span></p>
+                <p className="text-[11px] text-gray-400">{filtered.length} ม้วน</p>
+              </div>
+              <div className="bg-white rounded-xl border-l-4 border-green-500 border border-gray-200 shadow-sm p-4">
+                <p className="text-xs text-gray-500">✓ FG (ดี) รวม</p>
+                <p className="text-3xl font-black text-green-600 mt-1">{num(fgKg,1)}<span className="text-base text-gray-400 font-normal"> kg</span></p>
+                <p className="text-[11px] text-gray-400 mb-1">{fg.length} ม้วน · {fgPct.toFixed(1)}%</p>
+                <div className="space-y-0.5 text-[11px]">
+                  <p className="flex justify-between"><span className="text-gray-500">🏭 ครั้งแรก</span><span className="font-bold text-gray-700">{num(fgFirstKg,1)} kg · {fgFirst.length}</span></p>
+                  <p className="flex justify-between"><span className="text-emerald-600">🔧 จากกรอ</span><span className="font-bold text-emerald-700">{num(fgReworkKg,1)} kg · {fgRework.length}</span></p>
+                </div>
+              </div>
+              <div className="bg-white rounded-xl border-l-4 border-orange-500 border border-gray-200 shadow-sm p-4">
+                <p className="text-xs text-gray-500">🔧 ม้วนกรอ</p>
+                <p className="text-3xl font-black text-orange-600 mt-1">{num(badKg,1)}<span className="text-base text-gray-400 font-normal"> kg</span></p>
+                <p className="text-[11px] text-gray-400 mb-1">{bad.length} ม้วน</p>
+                <div className="space-y-0.5 text-[11px]">
+                  {badReview.length > 0   && <p className="flex justify-between"><span className="text-purple-600">⏳ รอพิจารณา</span><span className="font-bold text-purple-700">{num(sumW(badReview),1)} kg · {badReview.length}</span></p>}
+                  {badWaiting.length > 0  && <p className="flex justify-between"><span className="text-amber-600">📥 ส่งไปกรอ (รอเริ่ม)</span><span className="font-bold text-amber-700">{num(sumW(badWaiting),1)} kg · {badWaiting.length}</span></p>}
+                  {badWorking.length > 0  && <p className="flex justify-between"><span className="text-blue-600">⚙ กำลังกรอ</span><span className="font-bold text-blue-700">{num(sumW(badWorking),1)} kg · {badWorking.length}</span></p>}
+                  {badDone.length > 0     && <p className="flex justify-between"><span className="text-emerald-600">✓ กรอเสร็จ (ม้วนต้นทาง)</span><span className="font-bold text-emerald-700">{num(sumW(badDone),1)} kg · {badDone.length}</span></p>}
+                  {badDone.length > 0     && <p className="flex justify-between pl-3"><span className="text-emerald-500">↳ ได้ FG จากกรอ</span><span className="font-bold text-emerald-600">{num(fgReworkKg,1)} kg · {fgRework.length}</span></p>}
+                  {badDone.length > 0     && <p className="flex justify-between pl-3"><span className="text-rose-500">↳ สูญเสีย/เศษกรอ</span><span className="font-bold text-rose-600">{num(sumW(badDone)-fgReworkKg,1)} kg</span></p>}
+                  {badScrapped.length > 0 && <p className="flex justify-between"><span className="text-red-600">🗑 ทำลาย →เศษ</span><span className="font-bold text-red-700">{num(sumW(badScrapped),1)} kg · {badScrapped.length}</span></p>}
+                  {badOther.length > 0    && <button onClick={()=>setShowBadOther(v=>!v)} className="flex justify-between w-full hover:bg-gray-50 rounded px-0.5"><span className="text-gray-400">{showBadOther ? '▲' : '▼'} ยังไม่จัดการ</span><span className="font-bold text-gray-500">{num(sumW(badOther),1)} kg · {badOther.length}</span></button>}
+                </div>
+              </div>
+              <div className="bg-white rounded-xl border-l-4 border-red-500 border border-gray-200 shadow-sm p-4">
+                <p className="text-xs text-gray-500">🗑 เศษรวม</p>
+                <p className="text-3xl font-black text-red-600 mt-1">{num(allScrapKg,1)}<span className="text-base text-gray-400 font-normal"> kg</span></p>
+                <p className="text-[11px] text-gray-400">🏭 ผลิต {num(scrapByProdKg,1)} · ⚖ ผจก {num(scrapByMgrKg,1)} kg</p>
+              </div>
+            </div>
+
+            {/* รายละเอียดม้วน "ยังไม่จัดการ" */}
+            {showBadOther && badOther.length > 0 && (
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                  <p className="text-sm font-bold text-gray-700">• ม้วนกรอที่ยังไม่จัดการ ({badOther.length} ม้วน · {num(sumW(badOther),1)} kg)</p>
+                  <button onClick={()=>setShowBadOther(false)} className="text-gray-400 hover:text-gray-700 text-xs">ปิด ✕</button>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 text-gray-500">
+                      <tr>
+                        <th className="px-3 py-2 text-left">เครื่อง</th>
+                        <th className="px-3 py-2 text-left">Lot</th>
+                        <th className="px-3 py-2 text-left">ม้วนที่</th>
+                        <th className="px-3 py-2 text-left">สินค้า</th>
+                        <th className="px-3 py-2 text-left">ลูกค้า</th>
+                        <th className="px-3 py-2 text-right">นน.สุทธิ</th>
+                        <th className="px-3 py-2 text-left">สาเหตุเสีย</th>
+                        <th className="px-3 py-2 text-left">สถานะ</th>
+                        <th className="px-3 py-2 text-left">เวลา</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {badOther.map((r:any) => {
+                        const st = r.review_status === 'pending_review' ? '⏳ รอพิจารณา'
+                          : r.rework_status === 'reworking' ? '⚙ กำลังกรอ'
+                          : r.rework_status === 'reworked' ? '✓ กรอเสร็จ'
+                          : r.rework_status === 'scrapped' ? '🗑 ทำลาย'
+                          : r.transferred ? '📥 ส่งกรอแล้ว'
+                          : r.review_action === 'keep' ? '📦 เก็บสต็อก'
+                          : r.review_action === 'scrap' ? '🗑 สั่งทำลาย'
+                          : r.review_action ? `ผจก: ${r.review_action}`
+                          : '• ยังไม่ส่ง/ยังไม่ตัดสิน'
+                        return (
+                          <tr key={r.id} className="border-t border-gray-100 text-gray-700">
+                            <td className="px-3 py-1.5 font-bold">{r.machine_no || '—'}</td>
+                            <td className="px-3 py-1.5 font-mono">{r.lot_no || '—'}</td>
+                            <td className="px-3 py-1.5">#{r.roll_no ?? '—'}</td>
+                            <td className="px-3 py-1.5">{r.product_name || '—'}</td>
+                            <td className="px-3 py-1.5">{r.customer || '—'}</td>
+                            <td className="px-3 py-1.5 text-right font-bold">{num(r.weight ?? 0,1)}</td>
+                            <td className="px-3 py-1.5 text-rose-600">{r.remark || '—'}</td>
+                            <td className="px-3 py-1.5">{st}</td>
+                            <td className="px-3 py-1.5 text-gray-400">{r.created_at ? new Date(r.created_at).toLocaleString('th-TH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—'}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* KPI ภาพรวมสั่งการ */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <button onClick={()=>setTab('control')} className="bg-white rounded-xl border-l-4 border-amber-500 border border-gray-200 shadow-sm p-4 text-left">
+                <p className="text-xs text-gray-500">⏳ NC รอตัดสิน</p>
+                <p className="text-3xl font-black text-amber-600 mt-1">{ncPending.length}</p>
+                <p className="text-[11px] text-gray-400">{num(ncPendingKg,1)} kg</p>
+              </button>
+              <button onClick={()=>setTab('rework')} className="bg-white rounded-xl border-l-4 border-blue-500 border border-gray-200 shadow-sm p-4 text-left">
+                <p className="text-xs text-gray-500">🔧 งานกรอเปิดอยู่</p>
+                <p className="text-3xl font-black text-blue-600 mt-1">{activeJobs.length}</p>
+              </button>
+              <button onClick={()=>setTab('rework')} className="bg-white rounded-xl border-l-4 border-indigo-500 border border-gray-200 shadow-sm p-4 text-left">
+                <p className="text-xs text-gray-500">⚙ กำลังกรอ</p>
+                <p className="text-3xl font-black text-indigo-600 mt-1">{reworking.length}</p>
+              </button>
+              <button onClick={()=>setTab('machines')} className="bg-white rounded-xl border-l-4 border-green-500 border border-gray-200 shadow-sm p-4 text-left">
+                <p className="text-xs text-gray-500">● เครื่องเดิน</p>
+                <p className="text-3xl font-black text-green-600 mt-1">{runningMc.length}<span className="text-base text-gray-400 font-normal">/{machineProfiles.length}</span></p>
+              </button>
+              <button onClick={()=>setTab('machines')} className="bg-white rounded-xl border-l-4 border-gray-400 border border-gray-200 shadow-sm p-4 text-left">
+                <p className="text-xs text-gray-500">📦 งานจอด</p>
+                <p className="text-3xl font-black text-gray-700 mt-1">{parkedJobs.length}</p>
+              </button>
+            </div>
+
+            {/* ── NC รอพิจารณา — สั่งตัดสินได้เลย ── */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+                <p className="font-bold text-gray-700">⚠ NC รอตัดสิน (สั่งการได้เลย)</p>
+                <span className="text-xs text-gray-400">{ncPending.length} ม้วน · {num(ncPendingKg,1)} kg</span>
+              </div>
+              {ncPending.length === 0 ? (
+                <p className="text-center py-8 text-gray-400 text-sm">✓ ไม่มีม้วน NC รอตัดสิน</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 text-[11px] text-gray-500 uppercase">
+                      <tr>{['เครื่อง·Lot·ม้วน','สินค้า/ลูกค้า','น้ำหนัก','เหตุผลจากผลิต','สั่งการ'].map(h=><th key={h} className="px-3 py-2.5 text-left font-semibold">{h}</th>)}</tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {ncPending.map(r => (
+                        <tr key={r.id} className="hover:bg-gray-50">
+                          <td className="px-3 py-2"><p className="font-bold text-gray-800">{r.machine_no} · #{r.roll_no}</p><p className="text-[11px] text-gray-400 font-mono">{r.lot_no}</p></td>
+                          <td className="px-3 py-2"><p className="text-gray-700 text-xs">{r.product_name||'—'}</p><p className="text-[11px] text-gray-400">{r.customer||'—'}</p></td>
+                          <td className="px-3 py-2 font-bold text-amber-700">{num(r.weight,2)} kg</td>
+                          <td className="px-3 py-2 text-xs text-gray-600 max-w-[220px]">{r.remark||'—'}</td>
+                          <td className="px-3 py-2">
+                            <button onClick={()=>setCtrlDecideRoll(r)} className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold">ตัดสิน →</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* ── งานกรอที่เปิดอยู่ — ปิดงานได้ ── */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+                <p className="font-bold text-gray-700">🔧 งานกรอที่เปิดอยู่ (คุม/ปิดงาน)</p>
+                <span className="text-xs text-gray-400">{activeJobs.length} งาน</span>
+              </div>
+              {activeJobs.length === 0 ? (
+                <p className="text-center py-8 text-gray-400 text-sm">ไม่มีงานกรอที่เปิดอยู่</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 text-[11px] text-gray-500 uppercase">
+                      <tr>{['Lot','สินค้า/ลูกค้า','เครื่องกรอ','เปิดเมื่อ','สั่งการ'].map(h=><th key={h} className="px-3 py-2.5 text-left font-semibold">{h}</th>)}</tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {activeJobs.map(j => (
+                        <tr key={j.id} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 font-mono text-xs text-gray-700">{j.lot_no||j.source_lot_no||'—'}</td>
+                          <td className="px-3 py-2"><p className="text-gray-700 text-xs">{j.product_name||'—'}</p><p className="text-[11px] text-gray-400">{j.cust_name||j.customer||'—'}</p></td>
+                          <td className="px-3 py-2"><span className="bg-indigo-100 text-indigo-700 font-bold text-xs px-2 py-0.5 rounded">{j.machine_no||'—'}</span></td>
+                          <td className="px-3 py-2 text-gray-500 text-xs">{j.created_at ? new Date(j.created_at).toLocaleString('th-TH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—'}</td>
+                          <td className="px-3 py-2">
+                            <button onClick={()=>setCtrlCloseJob(j)} className="bg-rose-500 hover:bg-rose-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold">ปิดงาน ✕</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* ── เครื่องที่กำลังเดิน ── */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-5 py-3 border-b border-gray-100"><p className="font-bold text-gray-700">● เครื่องที่กำลังเดิน</p></div>
+              {runningMc.length === 0 ? (
+                <p className="text-center py-8 text-gray-400 text-sm">ไม่มีเครื่องที่กำลังเดิน</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 text-[11px] text-gray-500 uppercase">
+                      <tr>{['เครื่อง','แผนก','Lot','ลูกค้า','สินค้า','Plan(kg)','ผู้ตรวจ'].map(h=><th key={h} className="px-3 py-2.5 text-left font-semibold">{h}</th>)}</tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {runningMc.map(m => (
+                        <tr key={m.machine_no} className="hover:bg-gray-50">
+                          <td className="px-3 py-2"><span className="bg-green-100 text-green-700 font-bold text-xs px-2 py-0.5 rounded">{m.machine_no}</span></td>
+                          <td className="px-3 py-2 text-gray-500">{m.section ?? 'blow'}</td>
+                          <td className="px-3 py-2 font-mono text-xs text-gray-700">{m.lot_no}</td>
+                          <td className="px-3 py-2 text-gray-600 max-w-[140px] truncate">{m.cust_name||'—'}</td>
+                          <td className="px-3 py-2 text-gray-600 max-w-[160px] truncate">{m.product_name||'—'}</td>
+                          <td className="px-3 py-2 text-blue-600 font-bold">{m.planned_qty ? num(+m.planned_qty,0) : '—'}</td>
+                          <td className="px-3 py-2 text-gray-600 text-xs">{m.inspector||'—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+          )
+        })()}
+
         {/* ════════════════════════════════ TAB: OVERVIEW ══════════════════════════════ */}
         {tab === 'overview' && (<>
 
@@ -514,11 +756,15 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
           <div className={`grid gap-4 ${fSection === 'rewind' ? 'grid-cols-3' : 'grid-cols-4'}`}>
             {/* FG */}
             <div className="bg-white rounded-xl border-l-4 border-blue-500 border border-gray-200 shadow-sm p-4">
-              <p className="text-xs text-gray-500 font-medium">✅ FG (ม้วนดี)</p>
+              <p className="text-xs text-gray-500 font-medium">✅ FG (ม้วนดี) รวม</p>
               <p className="text-3xl font-black text-gray-800 mt-1">
                 {fmtKg(fgKg)} <span className="text-sm font-semibold text-gray-400">kg</span>
               </p>
-              <p className="text-blue-500 text-xs mt-1">{fg.length} ม้วน</p>
+              <p className="text-blue-500 text-xs mt-0.5 mb-1">{fg.length} ม้วน</p>
+              <div className="pt-2 border-t border-gray-100 space-y-0.5 text-[11px]">
+                <p className="flex justify-between"><span className="text-gray-500">🏭 FG ครั้งแรก</span><span className="font-bold text-gray-700">{num(fgFirstKg,1)} kg · {fgFirst.length}</span></p>
+                <p className="flex justify-between"><span className="text-emerald-600">🔧 FG จากกรอ</span><span className="font-bold text-emerald-700">{num(fgReworkKg,1)} kg · {fgRework.length}</span></p>
+              </div>
             </div>
             {/* Total + Yield */}
             <div className="bg-white rounded-xl border-l-4 border-purple-500 border border-gray-200 shadow-sm p-4">
@@ -546,16 +792,24 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
               </p>
               {/* breakdown ตามสถานะ rework */}
               {(() => {
-                const pending  = bad.filter((r:any) => !r.rework_status || r.rework_status === 'pending')
+                // ⏳ รอพิจารณา (NC ยังไม่ตัดสิน) แยกจาก 📥 รอกรอ (ตัดสิน/ส่งไปกรอแล้ว รอเริ่มกรอ)
+                const review   = bad.filter((r:any) => r.review_status === 'pending_review')
+                const pending  = bad.filter((r:any) => r.review_status !== 'pending_review' && r.transferred === true && (!r.rework_status || r.rework_status === 'pending'))
                 const working  = bad.filter((r:any) => r.rework_status === 'reworking')
                 const reworked = bad.filter((r:any) => r.rework_status === 'reworked')
                 const scrapped = bad.filter((r:any) => r.rework_status === 'scrapped')
                 const sumKg = (arr: any[]) => arr.reduce((s, r) => s + (r.weight ?? 0), 0)
                 return (
                   <div className="mt-2 pt-2 border-t border-gray-100 grid grid-cols-2 gap-x-2 gap-y-1 text-[10px]">
+                    {review.length > 0 && (
+                      <>
+                        <span className="text-purple-600">⏳ รอพิจารณา</span>
+                        <span className="text-purple-700 font-bold text-right">{review.length} ม้วน · {num(sumKg(review),1)}</span>
+                      </>
+                    )}
                     {pending.length > 0 && (
                       <>
-                        <span className="text-amber-600">📥 รอกรอ</span>
+                        <span className="text-amber-600">📥 ส่งไปกรอ (รอเริ่ม)</span>
                         <span className="text-amber-700 font-bold text-right">{pending.length} ม้วน · {num(sumKg(pending),1)}</span>
                       </>
                     )}
@@ -1487,13 +1741,19 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                   <div className="max-h-96 overflow-y-auto">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 text-[11px] text-gray-500 uppercase sticky top-0">
-                        <tr>{['สินค้า/ลูกค้า','Lot','⚠ สาเหตุเสีย','🔧 วิธีกรอ','คนกรอ','กรอได้','สถานะ'].map(h => <th key={h} className="px-3 py-2 text-left font-semibold whitespace-nowrap">{h}</th>)}</tr>
+                        <tr>{['','สินค้า/ลูกค้า','Lot','⚠ สาเหตุเสีย','🔧 วิธีกรอ','คนกรอ','กรอได้','สถานะ'].map((h,i) => <th key={i} className="px-3 py-2 text-left font-semibold whitespace-nowrap">{h}</th>)}</tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {jobsWithReason.map(j => {
                           const prog = rollsByLot.get(j.lot_no) ?? { rolls: 0, kg: 0 }
+                          const isOpen = expandedJob === j.id
+                          const lotRolls = rolls.filter(r => r.roll_type === 'good' && r.lot_no === j.lot_no)
+                            .sort((a,b)=>(a.roll_no??0)-(b.roll_no??0))
                           return (
-                            <tr key={j.id} className="hover:bg-gray-50 align-top">
+                            <Fragment key={j.id}>
+                            <tr onClick={() => setExpandedJob(isOpen ? null : j.id)}
+                              className={`align-top cursor-pointer ${isOpen ? 'bg-emerald-50' : 'hover:bg-gray-50'}`}>
+                              <td className="px-3 py-2 text-gray-400 font-bold">{isOpen ? '▲' : '▼'}</td>
                               <td className="px-3 py-2">
                                 <p className="text-gray-700 font-medium">{j.product_name || '—'}</p>
                                 <p className="text-gray-400 text-xs">{j.cust_name || '—'}</p>
@@ -1509,6 +1769,45 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                                 </span>
                               </td>
                             </tr>
+                            {isOpen && (
+                              <tr className="bg-emerald-50/40">
+                                <td colSpan={8} className="px-4 pb-3 pt-1">
+                                  <p className="text-xs font-bold text-emerald-700 mb-1.5">🧵 ม้วนที่กรอออกได้ (FG) — {lotRolls.length} ม้วน · {num(prog.kg,1)} kg</p>
+                                  {lotRolls.length === 0 ? (
+                                    <p className="text-xs text-gray-400 italic">ยังไม่มีม้วนกรอออกจาก Lot นี้</p>
+                                  ) : (
+                                    <div className="overflow-x-auto">
+                                    <table className="w-full text-xs bg-white rounded-lg overflow-hidden border border-emerald-100">
+                                      <thead className="bg-emerald-100/60 text-[10px] text-emerald-700 uppercase">
+                                        <tr>{['ม้วนที่','เครื่อง','นน.เต็ม','นน.แกน','นน.สุทธิ','ความยาว','จำนวน','ขนาด','สินค้า','ลูกค้า','WO','SO','ผู้ตรวจ','เวลา'].map(h=><th key={h} className="px-3 py-1.5 text-left font-semibold whitespace-nowrap">{h}</th>)}</tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-emerald-50">
+                                        {lotRolls.map(r => { const rr = r as any; return (
+                                          <tr key={r.id} className="hover:bg-emerald-50/50 whitespace-nowrap">
+                                            <td className="px-3 py-1.5 font-mono font-bold text-gray-700">#{r.roll_no}</td>
+                                            <td className="px-3 py-1.5"><span className="bg-blue-100 text-blue-700 font-bold px-1.5 py-0.5 rounded">{r.machine_no||'—'}</span></td>
+                                            <td className="px-3 py-1.5 text-gray-500">{num(rr.gross_weight,2)}</td>
+                                            <td className="px-3 py-1.5 text-gray-500">{num(rr.core_weight,2)}</td>
+                                            <td className="px-3 py-1.5 font-bold text-green-600">{num(r.weight,2)}</td>
+                                            <td className="px-3 py-1.5 text-gray-500">{rr.length || '—'}</td>
+                                            <td className="px-3 py-1.5 text-gray-500">{rr.pcs || '—'}</td>
+                                            <td className="px-3 py-1.5 text-gray-500">{r.width_cm && r.thick_mc ? `${r.width_cm}${rr.width_unit ?? 'cm'}×${r.thick_mc}mc` : '—'}</td>
+                                            <td className="px-3 py-1.5 text-gray-500 max-w-[140px] truncate" title={r.product_name}>{r.product_name || '—'}</td>
+                                            <td className="px-3 py-1.5 text-gray-500 max-w-[120px] truncate" title={r.customer}>{r.customer || '—'}</td>
+                                            <td className="px-3 py-1.5 text-amber-600 font-mono">{rr.work_order || '—'}</td>
+                                            <td className="px-3 py-1.5 text-blue-500 font-mono">{rr.sale_order || '—'}</td>
+                                            <td className="px-3 py-1.5 text-gray-500">{rr.inspector || '—'}</td>
+                                            <td className="px-3 py-1.5 text-gray-400">{new Date(r.created_at).toLocaleString('th-TH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</td>
+                                          </tr>
+                                        )})}
+                                      </tbody>
+                                    </table>
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            )}
+                            </Fragment>
                           )
                         })}
                       </tbody>
@@ -1864,6 +2163,149 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
           </div>
         )}
 
+      </div>
+
+      {/* ── ศูนย์ควบคุม: modal ตัดสิน NC ── */}
+      {ctrlDecideRoll && (
+        <CtrlDecideModal roll={ctrlDecideRoll}
+          onClose={() => setCtrlDecideRoll(null)}
+          onDone={() => { setCtrlDecideRoll(null); load() }} />
+      )}
+      {/* ── ศูนย์ควบคุม: modal ปิดงานกรอ ── */}
+      {ctrlCloseJob && (
+        <CtrlCloseJobModal job={ctrlCloseJob}
+          onClose={() => setCtrlCloseJob(null)}
+          onDone={() => { setCtrlCloseJob(null); load() }} />
+      )}
+    </div>
+  )
+}
+
+// ─── ศูนย์ควบคุม: ตัดสินม้วน NC (ส่งกรอ/เก็บ/เศษ) ──────────────────────
+function CtrlDecideModal({ roll, onClose, onDone }: { roll: any; onClose: () => void; onDone: () => void }) {
+  const [action, setAction] = useState<'rework'|'keep'|'scrap'>('rework')
+  const [reason, setReason] = useState('')
+  const [by, setBy] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  async function save() {
+    if (!by.trim())     { alert('กรอกชื่อผู้พิจารณา'); return }
+    if (!reason.trim()) { alert('กรอกเหตุผล/หมายเหตุการตัดสิน'); return }
+    setSaving(true)
+    const patch: any = {
+      review_status:        action === 'rework' ? 'approved_rework' : 'other',
+      review_action:        action,
+      review_action_reason: reason.trim(),
+      review_decision_by:   by.trim(),
+      review_decision_at:   new Date().toISOString(),
+    }
+    if (action === 'scrap') {
+      patch.roll_type = 'scrap_lump'
+      patch.remark = `[ผจก: ${reason.trim()}] ` + (roll.remark || '')
+    }
+    if (action === 'rework') {
+      patch.transferred    = true
+      patch.transferred_by = by.trim()
+      patch.transferred_at = new Date().toISOString()
+      patch.inbound_type   = roll.inbound_type ?? 'internal'
+      patch.rework_status  = 'pending'
+    }
+    const { error } = await supabase.from('production_rolls').update(patch).eq('id', roll.id)
+    setSaving(false)
+    if (error) { alert('บันทึกไม่สำเร็จ: ' + error.message); return }
+    onDone()
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-md p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-slate-800 font-bold text-base">🔍 ตัดสินม้วน #{roll.roll_no}</p>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700">✕</button>
+        </div>
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-3 text-xs text-slate-700 space-y-0.5">
+          <p><b>เครื่อง:</b> {roll.machine_no} · <b>Lot:</b> <span className="font-mono">{roll.lot_no}</span></p>
+          <p><b>สินค้า:</b> {roll.product_name} · {roll.customer}</p>
+          <p><b>น้ำหนัก:</b> <span className="text-amber-700 font-bold">{num(roll.weight,2)} kg</span></p>
+          <p className="text-amber-700"><b>ผลิตว่า:</b> {roll.remark || '—'}</p>
+        </div>
+        <label className="block text-xs text-slate-600 font-bold mb-1.5">การตัดสิน *</label>
+        <div className="grid grid-cols-3 gap-1.5 mb-3">
+          <button type="button" onClick={() => setAction('rework')}
+            className={`py-2 rounded-xl text-xs font-bold border-2 ${action==='rework'?'bg-emerald-600 border-emerald-500 text-white':'bg-white border-slate-200 text-slate-500'}`}>✓ ส่งกรอ</button>
+          <button type="button" onClick={() => setAction('keep')}
+            className={`py-2 rounded-xl text-xs font-bold border-2 ${action==='keep'?'bg-slate-700 border-slate-700 text-white':'bg-white border-slate-200 text-slate-500'}`}>📦 เก็บไว้</button>
+          <button type="button" onClick={() => setAction('scrap')}
+            className={`py-2 rounded-xl text-xs font-bold border-2 ${action==='scrap'?'bg-red-600 border-red-500 text-white':'bg-white border-slate-200 text-slate-500'}`}>🗑 เศษเสีย</button>
+        </div>
+        <label className="block text-xs text-slate-600 mb-1">เหตุผล / สิ่งที่จะทำ *</label>
+        <input value={reason} onChange={e => setReason(e.target.value)}
+          placeholder={action==='rework'?'เช่น กรอใหม่ที่ S01':action==='keep'?'เช่น เก็บไว้ใช้กับงานอื่น':'เช่น สีเพี้ยน ใช้ไม่ได้'}
+          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 outline-none focus:border-amber-500 mb-3"/>
+        <label className="block text-xs text-slate-600 mb-1">ผู้พิจารณา (ผจก) *</label>
+        <input value={by} onChange={e => setBy(e.target.value)} placeholder="ชื่อ ผจก"
+          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 outline-none focus:border-amber-500"/>
+        <div className="flex gap-2 mt-4">
+          <button onClick={onClose} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl text-sm font-semibold">ยกเลิก</button>
+          <button onClick={save} disabled={saving}
+            className="flex-[2] bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white py-2.5 rounded-xl font-bold text-sm">
+            {saving ? 'บันทึก...' : '✓ ยืนยันการตัดสิน'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── ศูนย์ควบคุม: ปิดงานกรอ ────────────────────────────────────────────
+function CtrlCloseJobModal({ job, onClose, onDone }: { job: any; onClose: () => void; onDone: () => void }) {
+  const [by, setBy] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  async function save() {
+    setSaving(true)
+    const { data, error } = await supabase.from('rework_jobs').update({
+      status: 'closed', closed_at: new Date().toISOString(), closed_by: by.trim() || null,
+    }).eq('id', job.id).select()
+    if (error) { setSaving(false); alert('ปิดงานไม่สำเร็จ: ' + error.message); return }
+    if (!data || data.length === 0) { setSaving(false); alert('ปิดงานไม่สำเร็จ: ไม่มีสิทธิ์อัปเดต (RLS) — รัน db/fix_rework_jobs_rls.sql'); return }
+
+    // ปิดงานแล้ว → ม้วนต้นทางที่ยัง "กำลังกรอ" (reworking) ของ Lot นี้ ถือว่ากรอเสร็จ → reworked
+    const srcLot = (job.source_lot_no || '').trim()
+    if (srcLot) {
+      const { error: rollErr } = await supabase.from('production_rolls')
+        .update({ rework_status: 'reworked' })
+        .eq('lot_no', srcLot)
+        .eq('roll_type', 'bad')
+        .eq('rework_status', 'reworking')
+      if (rollErr) console.warn('อัปเดตสถานะม้วนต้นทางไม่สำเร็จ (non-fatal):', rollErr.message)
+    }
+    setSaving(false)
+    onDone()
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-sm p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-slate-800 font-bold text-base">✕ ปิดงานกรอ</p>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700">✕</button>
+        </div>
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-3 text-xs text-slate-700 space-y-0.5">
+          <p><b>Lot:</b> <span className="font-mono">{job.lot_no||job.source_lot_no||'—'}</span></p>
+          <p><b>สินค้า:</b> {job.product_name||'—'} · {job.cust_name||job.customer||'—'}</p>
+          <p><b>เครื่องกรอ:</b> {job.machine_no||'—'}</p>
+        </div>
+        <label className="block text-xs text-slate-600 mb-1">ผู้ปิดงาน</label>
+        <input value={by} onChange={e => setBy(e.target.value)} placeholder="ชื่อผู้ปิดงาน"
+          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 outline-none focus:border-rose-500"/>
+        <div className="flex gap-2 mt-4">
+          <button onClick={onClose} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl text-sm font-semibold">ยกเลิก</button>
+          <button onClick={save} disabled={saving}
+            className="flex-[2] bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white py-2.5 rounded-xl font-bold text-sm">
+            {saving ? 'ปิดงาน...' : '✕ ยืนยันปิดงาน'}
+          </button>
+        </div>
       </div>
     </div>
   )

@@ -19,6 +19,8 @@ type Roll = {
   thick_mc: string | null
   item_code: string | null
   section: string | null
+  inbound_type: string | null
+  transferred_at: string | null
   created_at: string
   review_status: 'pending_review' | 'approved_rework' | 'other' | null
   review_action: 'rework' | 'keep' | 'scrap' | null
@@ -29,10 +31,40 @@ type Roll = {
 
 function fmt(n: number, d = 2) { return Number(n ?? 0).toFixed(d) }
 
+const SECTION_LABEL: Record<string,string> = { blow:'เป่า', print:'พิมพ์', rewind:'กรอ' }
+
+// NC จริง = มาจากคลัง/QC (ของเคยผ่านออกไปแล้ว) — แยกจากม้วนที่ผลิตประเมินเองว่ากรอไม่ได้
+function isRealNC(r: Roll): boolean {
+  if (r.inbound_type === 'warehouse_damage' || r.inbound_type === 'qc_reject') return true
+  if ((r.remark || '').includes('แจ้ง NC จากคลัง')) return true
+  return false
+}
+
+// ระบุต้นทางของม้วน NC ว่ามาจากไหน
+function rollOrigin(r: Roll): { label: string; sub: string; cls: string } {
+  const rm = r.remark || ''
+  const sec = r.section ? (SECTION_LABEL[r.section] || r.section) : ''
+  // มาจากคลัง — แจ้ง NC
+  if (r.inbound_type === 'warehouse_damage' || rm.includes('แจ้ง NC จากคลัง')) {
+    return { label: '📦 คลังแจ้ง NC', sub: '1.5 เสียจากคลัง/เคลื่อนย้าย', cls: 'bg-purple-100 text-purple-700 border-purple-200' }
+  }
+  // ตรวจไม่ผ่านก่อนโหลด
+  if (r.inbound_type === 'qc_reject') {
+    return { label: '🚫 QC ตรวจไม่ผ่าน', sub: '1.4 ตรวจไม่ผ่านก่อนโหลด', cls: 'bg-rose-100 text-rose-700 border-rose-200' }
+  }
+  // แผนกกรอส่งคืน (กรอแล้วกรอไม่ได้)
+  if (rm.includes('แผนกกรอส่งคืน')) {
+    return { label: '🔁 กรอส่งคืน', sub: 'กรอแล้ว แต่กรอไม่ได้', cls: 'bg-orange-100 text-orange-700 border-orange-200' }
+  }
+  // มาจากผลิตโดยตรง (ประเมินว่ากรอไม่ได้)
+  return { label: '🏭 ผลิตประเมิน', sub: sec ? `แผนก${sec} — กรอไม่ได้` : 'กรอไม่ได้', cls: 'bg-sky-100 text-sky-700 border-sky-200' }
+}
+
 export default function ReviewQueue() {
   const [rolls, setRolls] = useState<Roll[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'pending'|'decided'>('pending')
+  const [originFilter, setOriginFilter] = useState<'all'|'prod'|'nc'>('all')
   const [search, setSearch] = useState('')
   const [decideRoll, setDecideRoll] = useState<Roll | null>(null)
 
@@ -50,7 +82,9 @@ export default function ReviewQueue() {
 
   const pending  = rolls.filter(r => r.review_status === 'pending_review')
   const decided  = rolls.filter(r => r.review_status === 'approved_rework' || r.review_status === 'other')
-  const shown    = (tab === 'pending' ? pending : decided).filter(r => {
+  const base     = tab === 'pending' ? pending : decided
+  const byOrigin = base.filter(r => originFilter === 'all' ? true : originFilter === 'nc' ? isRealNC(r) : !isRealNC(r))
+  const shown    = byOrigin.filter(r => {
     if (!search.trim()) return true
     const s = search.toLowerCase()
     return [r.machine_no, r.lot_no, r.product_name, r.customer, r.remark, String(r.roll_no)]
@@ -58,6 +92,9 @@ export default function ReviewQueue() {
   })
 
   const totalKgPending = pending.reduce((s,r) => s + (r.weight ?? 0), 0)
+  // นับแยกกลุ่มต้นทางในแท็บปัจจุบัน
+  const ncCount   = base.filter(isRealNC).length
+  const prodCount = base.length - ncCount
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4">
@@ -65,8 +102,8 @@ export default function ReviewQueue() {
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-2xl font-black text-slate-800">🔍 พิจารณาม้วนกรอ</h1>
-            <p className="text-slate-500 text-sm mt-0.5">ม้วนที่ผลิตประเมินว่ากรอไม่ได้ — รอ ผจก ตัดสินใจ</p>
+            <h1 className="text-2xl font-black text-slate-800">⚠ NC — พิจารณาม้วน</h1>
+            <p className="text-slate-500 text-sm mt-0.5">ม้วน NC — ผลิตประเมินว่ากรอไม่ได้ / เสียในคลัง — รอ ผจก ตัดสินใจ</p>
           </div>
           <button onClick={load}
             className="bg-white hover:bg-slate-50 border border-slate-300 px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-1.5">
@@ -111,6 +148,22 @@ export default function ReviewQueue() {
           </div>
         </div>
 
+        {/* แยกกลุ่มต้นทาง: ผลิตรอพิจารณา vs NC จริง */}
+        <div className="flex gap-2 mb-3">
+          <button onClick={() => setOriginFilter('all')}
+            className={`px-4 py-2 rounded-xl text-sm font-bold border-2 ${originFilter==='all'?'bg-slate-700 border-slate-700 text-white':'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+            ทั้งหมด ({base.length})
+          </button>
+          <button onClick={() => setOriginFilter('prod')}
+            className={`px-4 py-2 rounded-xl text-sm font-bold border-2 ${originFilter==='prod'?'bg-sky-600 border-sky-500 text-white':'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+            🏭 ผลิตรอพิจารณา ({prodCount})
+          </button>
+          <button onClick={() => setOriginFilter('nc')}
+            className={`px-4 py-2 rounded-xl text-sm font-bold border-2 ${originFilter==='nc'?'bg-purple-600 border-purple-500 text-white':'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+            ⚠ NC จริง (คลัง/QC) ({ncCount})
+          </button>
+        </div>
+
         {/* List */}
         <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
           {loading ? (
@@ -123,16 +176,24 @@ export default function ReviewQueue() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-[11px] text-slate-500 uppercase tracking-wider">
                 <tr>
+                  <th className="px-3 py-2 text-left font-semibold">ต้นทาง</th>
                   <th className="px-3 py-2 text-left font-semibold">เครื่อง · Lot · ม้วน</th>
                   <th className="px-3 py-2 text-left font-semibold">สินค้า / ลูกค้า / ขนาด</th>
                   <th className="px-3 py-2 text-right font-semibold">น้ำหนัก</th>
-                  <th className="px-3 py-2 text-left font-semibold">เหตุผลจากผลิต</th>
+                  <th className="px-3 py-2 text-left font-semibold">เหตุผล / ที่มา</th>
                   <th className="px-3 py-2 text-left font-semibold">{tab==='pending' ? 'การกระทำ' : 'ผจก ตัดสิน'}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {shown.map(r => (
+                {shown.map(r => {
+                  const origin = rollOrigin(r)
+                  return (
                   <tr key={r.id} className="hover:bg-slate-50">
+                    <td className="px-3 py-2.5">
+                      <span className={`inline-block text-[11px] font-bold px-2 py-0.5 rounded-full border ${origin.cls}`}>{origin.label}</span>
+                      <p className="text-[10px] text-slate-500 mt-1">{origin.sub}</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">{new Date(r.transferred_at || r.created_at).toLocaleString('th-TH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</p>
+                    </td>
                     <td className="px-3 py-2.5">
                       <p className="font-bold text-slate-800">{r.machine_no} · #{r.roll_no}</p>
                       <p className="text-xs text-slate-500 font-mono">{r.lot_no}</p>
@@ -160,13 +221,17 @@ export default function ReviewQueue() {
                           {r.review_action === 'rework' && <span className="text-emerald-700 font-bold">✓ ส่งกรอ</span>}
                           {r.review_action === 'keep'   && <span className="text-slate-700 font-bold">📦 เก็บไว้</span>}
                           {r.review_action === 'scrap'  && <span className="text-red-700 font-bold">🗑 เศษเสีย</span>}
+                          {/* ปลายทาง — ม้วนนี้ไปอยู่ที่ไหน */}
+                          {r.review_action === 'rework' && <p className="text-[10px] text-emerald-600 mt-0.5">→ เข้าแผนกกรอ (หน้า รับจากผลิต)</p>}
+                          {r.review_action === 'keep'   && <p className="text-[10px] text-slate-500 mt-0.5">→ เก็บไว้ในสต็อก (คงสถานะม้วนกรอ)</p>}
+                          {r.review_action === 'scrap'  && <p className="text-[10px] text-red-500 mt-0.5">→ รวมในยอดเศษ (Dashboard · เศษจาก ผจก)</p>}
                           <p className="text-slate-500 mt-0.5">{r.review_action_reason || '—'}</p>
-                          <p className="text-[10px] text-slate-400 mt-0.5">โดย {r.review_decision_by || '—'}</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">โดย {r.review_decision_by || '—'} · {new Date((r as any).review_decision_at || r.created_at).toLocaleString('th-TH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</p>
                         </div>
                       )}
                     </td>
                   </tr>
-                ))}
+                )})}
               </tbody>
             </table>
           )}
@@ -227,6 +292,9 @@ function DecideModal({ roll, onClose, onDone }: { roll: Roll; onClose: () => voi
         </div>
 
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-3 text-xs text-slate-700 space-y-0.5">
+          {(() => { const o = rollOrigin(roll); return (
+            <p className="mb-1"><span className={`inline-block text-[11px] font-bold px-2 py-0.5 rounded-full border ${o.cls}`}>{o.label}</span> <span className="text-slate-500">{o.sub}</span></p>
+          )})()}
           <p><b>เครื่อง:</b> {roll.machine_no} · <b>Lot:</b> <span className="font-mono">{roll.lot_no}</span></p>
           <p><b>สินค้า:</b> {roll.product_name} · {roll.customer}</p>
           <p><b>น้ำหนัก:</b> <span className="text-amber-700 font-bold">{fmt(roll.weight,2)} Kg</span></p>

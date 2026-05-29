@@ -523,13 +523,17 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
           const ncPending   = reviewPending
           const ncPendingKg = kg(ncPending)
           const activeJobs  = reworkJobs.filter(j => (j.status ?? 'active') === 'active')
-          const reworking   = reworkRolls.filter(r => r.rework_status === 'reworking')
+          // lot ต้นทางที่งานกรอถูก "ปิด" แล้ว → ม้วนที่ยังค้าง reworking ถือว่ากรอเสร็จ (self-heal ข้อมูลเก่า)
+          const closedLots  = new Set(reworkJobs.filter(j => j.status === 'closed').map(j => (j.source_lot_no || '').trim()).filter(Boolean))
+          const isStillReworking = (r:any) => r.rework_status === 'reworking' && !closedLots.has((r.lot_no || '').trim())
+          const isDoneRework     = (r:any) => r.rework_status === 'reworked' || (r.rework_status === 'reworking' && closedLots.has((r.lot_no || '').trim()))
+          const reworking   = reworkRolls.filter(r => isStillReworking(r))
           const runningMc   = machineProfiles.filter(m => m.lot_no)
           const fgPct = totalKg > 0 ? (fgKg / totalKg) * 100 : 0
           // แตกม้วนกรอตาม lifecycle ให้สัมพันกับ "FG จากกรอ"
           const badReview   = bad.filter(r => (r as any).review_status === 'pending_review')
-          const badWorking  = bad.filter(r => (r as any).rework_status === 'reworking')
-          const badDone     = bad.filter(r => (r as any).rework_status === 'reworked')
+          const badWorking  = bad.filter(r => isStillReworking(r))
+          const badDone     = bad.filter(r => isDoneRework(r))
           const badScrapped = bad.filter(r => (r as any).rework_status === 'scrapped')
           const badWaiting  = bad.filter(r => (r as any).review_status !== 'pending_review' && (r as any).transferred === true
                                 && (!(r as any).rework_status || (r as any).rework_status === 'pending'))

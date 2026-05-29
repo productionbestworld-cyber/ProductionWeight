@@ -539,6 +539,12 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                                 && (!(r as any).rework_status || (r as any).rework_status === 'pending'))
           const badOther    = bad.filter(r => ![...badReview,...badWorking,...badDone,...badScrapped,...badWaiting].includes(r))
           const sumW = (arr:any[]) => arr.reduce((s,r)=>s+(r.weight??0),0)
+          // FG ที่กรอออกได้จริง = ม้วนดีที่อยู่ใน Lot ของงานกรอ (ผูกผ่าน rework_jobs.lot_no)
+          // ใช้ rolls เต็ม ไม่อิง section filter — เพราะ FG จากกรออยู่ section=rewind จะถูกซ่อนถ้า filter เป็นเป่า/พิมพ์
+          const reworkFgLots  = new Set(reworkJobs.map(j => (j.lot_no || '').trim()).filter(Boolean))
+          const reworkFgRolls = rolls.filter(r => r.roll_type === 'good' && reworkFgLots.has((r.lot_no || '').trim()))
+          const reworkFgKg    = sumW(reworkFgRolls)
+          const reworkLossKg  = Math.max(0, sumW(badDone) - reworkFgKg)
           return (
           <div className="space-y-4">
             {/* ── สรุปยอดผลิต (ดูครบในหน้าเดียว) ── */}
@@ -566,8 +572,8 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                   {badWaiting.length > 0  && <p className="flex justify-between"><span className="text-amber-600">📥 ส่งไปกรอ (รอเริ่ม)</span><span className="font-bold text-amber-700">{num(sumW(badWaiting),1)} kg · {badWaiting.length}</span></p>}
                   {badWorking.length > 0  && <p className="flex justify-between"><span className="text-blue-600">⚙ กำลังกรอ</span><span className="font-bold text-blue-700">{num(sumW(badWorking),1)} kg · {badWorking.length}</span></p>}
                   {badDone.length > 0     && <p className="flex justify-between"><span className="text-emerald-600">✓ กรอเสร็จ (ม้วนต้นทาง)</span><span className="font-bold text-emerald-700">{num(sumW(badDone),1)} kg · {badDone.length}</span></p>}
-                  {badDone.length > 0     && <p className="flex justify-between pl-3"><span className="text-emerald-500">↳ ได้ FG จากกรอ</span><span className="font-bold text-emerald-600">{num(fgReworkKg,1)} kg · {fgRework.length}</span></p>}
-                  {badDone.length > 0     && <p className="flex justify-between pl-3"><span className="text-rose-500">↳ สูญเสีย/เศษกรอ</span><span className="font-bold text-rose-600">{num(sumW(badDone)-fgReworkKg,1)} kg</span></p>}
+                  {badDone.length > 0     && <p className="flex justify-between pl-3"><span className="text-emerald-500">↳ ได้ FG จากกรอ</span><span className="font-bold text-emerald-600">{num(reworkFgKg,1)} kg · {reworkFgRolls.length}</span></p>}
+                  {badDone.length > 0     && <p className="flex justify-between pl-3"><span className="text-rose-500">↳ สูญเสีย/เศษกรอ</span><span className="font-bold text-rose-600">{num(reworkLossKg,1)} kg</span></p>}
                   {badScrapped.length > 0 && <p className="flex justify-between"><span className="text-red-600">🗑 ทำลาย →เศษ</span><span className="font-bold text-red-700">{num(sumW(badScrapped),1)} kg · {badScrapped.length}</span></p>}
                   {badOther.length > 0    && <button onClick={()=>setShowBadOther(v=>!v)} className="flex justify-between w-full hover:bg-gray-50 rounded px-0.5"><span className="text-gray-400">{showBadOther ? '▲' : '▼'} ยังไม่จัดการ</span><span className="font-bold text-gray-500">{num(sumW(badOther),1)} kg · {badOther.length}</span></button>}
                 </div>

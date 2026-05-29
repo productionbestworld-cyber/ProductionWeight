@@ -260,7 +260,7 @@ export default function App() {
         {page === 'warehouse' && <Warehouse dept={dept} />}
         {page === 'dashboard' && <Dashboard dept={dept} />}
         {page === 'history'   && <HistoryPage dept={dept} />}
-        {page === 'review'    && <ReviewQueue />}
+        {page === 'review'    && <ReviewQueue dept={dept} />}
         {page === 'settings'  && <MachineSettings dept={dept} />}
         {page === 'admin'     && <Admin dept={dept} />}
       </main>

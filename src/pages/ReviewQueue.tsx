@@ -60,8 +60,10 @@ function rollOrigin(r: Roll): { label: string; sub: string; cls: string } {
   return { label: '🏭 ผลิตประเมิน', sub: sec ? `แผนก${sec} — กรอไม่ได้` : 'กรอไม่ได้', cls: 'bg-sky-100 text-sky-700 border-sky-200' }
 }
 
-export default function ReviewQueue() {
-  const [rolls, setRolls] = useState<Roll[]>([])
+const DEPT_LABEL: Record<string,string> = { blow:'เป่า', print:'พิมพ์', rewind:'กรอ' }
+
+export default function ReviewQueue({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
+  const [allRolls, setAllRolls] = useState<Roll[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'pending'|'decided'>('pending')
   const [originFilter, setOriginFilter] = useState<'all'|'prod'|'nc'>('all')
@@ -75,10 +77,13 @@ export default function ReviewQueue() {
       .select('*')
       .in('review_status', ['pending_review','approved_rework','other'])
       .order('created_at', { ascending: false })
-    setRolls((data ?? []) as Roll[])
+    setAllRolls((data ?? []) as Roll[])
     setLoading(false)
   }
   useEffect(() => { load() }, [])
+
+  // แต่ละแผนกเห็นเฉพาะม้วนของแผนกตัวเอง (ตาม section) — ถ้าไม่ระบุ dept = เห็นทั้งหมด
+  const rolls = dept ? allRolls.filter(r => (r.section ?? 'blow') === dept) : allRolls
 
   const pending  = rolls.filter(r => r.review_status === 'pending_review')
   const decided  = rolls.filter(r => r.review_status === 'approved_rework' || r.review_status === 'other')
@@ -95,6 +100,10 @@ export default function ReviewQueue() {
   // นับแยกกลุ่มต้นทางในแท็บปัจจุบัน
   const ncCount   = base.filter(isRealNC).length
   const prodCount = base.length - ncCount
+  // แยกการ์ดด้านบนตามต้นทาง (เฉพาะ "รอพิจารณา")
+  const prodPending = pending.filter(r => !isRealNC(r))
+  const ncPending   = pending.filter(r => isRealNC(r))
+  const sumKg = (arr: Roll[]) => arr.reduce((s,r) => s + (r.weight ?? 0), 0)
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4">
@@ -102,8 +111,8 @@ export default function ReviewQueue() {
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-2xl font-black text-slate-800">⚠ NC — พิจารณาม้วน</h1>
-            <p className="text-slate-500 text-sm mt-0.5">ม้วน NC — ผลิตประเมินว่ากรอไม่ได้ / เสียในคลัง — รอ ผจก ตัดสินใจ</p>
+            <h1 className="text-2xl font-black text-slate-800">⚠ NC — พิจารณาม้วน{dept && <span className="ml-2 text-base font-bold text-brand-600">· แผนก{DEPT_LABEL[dept]}</span>}</h1>
+            <p className="text-slate-500 text-sm mt-0.5">{dept ? `เห็นเฉพาะม้วนของแผนก${DEPT_LABEL[dept]} — ` : ''}ผลิตประเมินว่ากรอไม่ได้ / เสียในคลัง — รอ ผจก ตัดสินใจ</p>
           </div>
           <button onClick={load}
             className="bg-white hover:bg-slate-50 border border-slate-300 px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-1.5">
@@ -111,12 +120,17 @@ export default function ReviewQueue() {
           </button>
         </div>
 
-        {/* Summary cards */}
-        <div className="grid grid-cols-3 gap-3 mb-4">
-          <div className="bg-white border-2 border-amber-300 rounded-2xl p-4 shadow-sm">
-            <p className="text-amber-600 text-xs font-bold uppercase tracking-wider">⏳ รอพิจารณา</p>
-            <p className="text-3xl font-black text-amber-700 mt-1">{pending.length}</p>
-            <p className="text-amber-600 text-xs mt-1">{fmt(totalKgPending,2)} Kgs.</p>
+        {/* Summary cards — แยกต้นทางด้านบน: ผลิตรอพิจารณา / NC จริง */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          <div className="bg-white border-2 border-sky-300 rounded-2xl p-4 shadow-sm">
+            <p className="text-sky-600 text-xs font-bold uppercase tracking-wider">🏭 ผลิตรอพิจารณา</p>
+            <p className="text-3xl font-black text-sky-700 mt-1">{prodPending.length}</p>
+            <p className="text-sky-600 text-xs mt-1">{fmt(sumKg(prodPending),2)} Kgs.</p>
+          </div>
+          <div className="bg-white border-2 border-purple-300 rounded-2xl p-4 shadow-sm">
+            <p className="text-purple-600 text-xs font-bold uppercase tracking-wider">⚠ NC จริง (คลัง/QC)</p>
+            <p className="text-3xl font-black text-purple-700 mt-1">{ncPending.length}</p>
+            <p className="text-purple-600 text-xs mt-1">{fmt(sumKg(ncPending),2)} Kgs.</p>
           </div>
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
             <p className="text-emerald-600 text-xs font-bold uppercase tracking-wider">✓ อนุมัติให้กรอ</p>

@@ -43,6 +43,27 @@ export default function App() {
   const [connStatus, setConnStatus] = useState<ConnStatus>('checking')
   const [latency, setLatency]       = useState<number | null>(null)
 
+  // ── Badge นับม้วนรอพิจารณา (แจ้งเตือนเมื่อมี NC / ม้วนกรอรอตรวจ) ──────────
+  const [reviewBadge, setReviewBadge] = useState(0)  // ผลิตประเมิน (พิจารณาม้วนกรอ)
+  const [ncBadge, setNcBadge]         = useState(0)  // NC จริง (คลัง/QC)
+  const loadBadges = useCallback(async () => {
+    const { data } = await supabase.from('production_rolls')
+      .select('section, inbound_type, remark')
+      .eq('review_status', 'pending_review')
+    const rows = (data ?? []).filter(r => (r.section ?? 'blow') === dept)
+    const isNC = (r: any) =>
+      r.inbound_type === 'warehouse_damage' || r.inbound_type === 'qc_reject' ||
+      (r.remark || '').includes('แจ้ง NC จากคลัง')
+    setNcBadge(rows.filter(isNC).length)
+    setReviewBadge(rows.filter(r => !isNC(r)).length)
+  }, [dept])
+  useEffect(() => {
+    loadBadges()
+    const t = setInterval(loadBadges, 20_000)
+    return () => clearInterval(t)
+  }, [loadBadges, page])
+  const badges: Record<string, number> = { review: reviewBadge, nc: ncBadge }
+
   const checkConn = useCallback(async () => {
     if (!navigator.onLine) { setConnStatus('offline'); setLatency(null); return }
     setConnStatus('checking')
@@ -221,14 +242,22 @@ export default function App() {
 
         {/* Nav items */}
 
-        {NAV.map(({ key, label, icon: Icon }) => (
+        {NAV.map(({ key, label, icon: Icon }) => {
+          const badge = badges[key] ?? 0
+          return (
           <button key={key} onClick={() => setPage(key)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+            className={`relative flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
               page === key ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}>
             <Icon size={14}/> <span className="hidden md:block">{label}</span>
+            {badge > 0 && (
+              <span className={`ml-0.5 min-w-[18px] h-[18px] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-black text-white ${key==='nc' ? 'bg-purple-600' : 'bg-red-600'} ${page===key ? '' : 'animate-pulse'}`}>
+                {badge}
+              </span>
+            )}
           </button>
-        ))}
+          )
+        })}
 
         {/* Admin (lock-protected) */}
         <button onClick={gotoAdmin}

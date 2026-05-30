@@ -622,7 +622,9 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                             <tr onClick={() => setExpandedRoll(isOpen ? null : r.id)}
                               className={`cursor-pointer ${isOpen ? 'bg-slate-800/40' : 'hover:bg-slate-800/30'}`}>
                               <td className="px-4 py-2.5 text-slate-500 text-xs">{idx + 1}</td>
-                              <td className="px-4 py-2.5 font-mono font-bold text-white">{isOpen ? '▲' : '▼'} #{r.roll_no}</td>
+                              <td className="px-4 py-2.5 font-mono font-bold text-white">{isOpen ? '▲' : '▼'} #{r.roll_no}
+                                {((r as any).remark || '').includes('คืน NC') && <span className="ml-1.5 text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold" title={(r as any).remark}>↩ เคยถูก NC</span>}
+                              </td>
                               <td className="px-4 py-2.5"><span className="text-[10px] bg-brand-500/20 text-brand-300 font-bold px-1.5 py-0.5 rounded">{r.machine_no||'—'}</span></td>
                               <td className="px-4 py-2.5 text-slate-300">{fmt((r.weight??0)+(r.core_weight??0))}</td>
                               <td className="px-4 py-2.5 text-green-300 font-black">{fmt(r.weight)}</td>
@@ -643,6 +645,11 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                                   <div><span className="text-slate-500">กว้าง</span><p className="text-white font-semibold">{rr.width_cm||'—'} cm</p></div>
                                   <div><span className="text-slate-500">หนา</span><p className="text-white font-semibold">{rr.thick_mc||'—'}</p></div>
                                 </div>
+                                {((rr.remark || '').includes('คืน NC')) && (
+                                  <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2 mb-3 text-xs text-amber-300">
+                                    ↩ <b>ม้วนนี้เคยถูกแจ้ง NC แล้วคืนกลับคลัง</b> — {rr.remark}
+                                  </div>
+                                )}
                                 <button onClick={(e) => { e.stopPropagation(); setReturnModal(r) }}
                                   className="text-sm bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded-xl font-bold">
                                   ⚠ แจ้ง NC — ม้วนเสีย/มีปัญหาในคลัง (รอ ผจก ตัดสิน)

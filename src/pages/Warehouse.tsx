@@ -223,9 +223,11 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
       supabase.from('production_rolls').select('*')
         .in('roll_type', ['scrap_clear','scrap_color','scrap_lump'])
         .order('created_at', { ascending: false }),
-      // ม้วนที่ถูกแจ้ง NC ออกจากคลัง (เคยเป็นของดีในคลัง → กลายเป็น bad)
+      // ม้วนที่ถูกแจ้ง NC ออกจากคลัง และ "ยังรอ ผจก ตัดสิน" เท่านั้น
+      // (ถ้าตัดสินแล้ว เช่น ส่งกรอ/เศษ/คืน จะหายจากแถบเตือน ไม่ค้างถาวร)
       supabase.from('production_rolls').select('*')
         .eq('roll_type', 'bad')
+        .eq('review_status', 'pending_review')
         .in('inbound_type', ['qc_reject','warehouse_damage'])
         .order('created_at', { ascending: false }),
     ])

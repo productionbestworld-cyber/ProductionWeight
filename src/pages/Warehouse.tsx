@@ -191,6 +191,7 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   const [tab, setTab] = useState<Tab>('stock')
   const [rolls, setRolls] = useState<Roll[]>([])
   const [scrapRolls, setScrapRolls] = useState<any[]>([])
+  const [ncRolls, setNcRolls] = useState<any[]>([])
   const [sos, setSOs] = useState<SO[]>([])
   const [loading, setLoading] = useState(true)
   const [showSOModal, setShowSOModal] = useState(false)
@@ -215,17 +216,23 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
 
   async function loadAll() {
     setLoading(true)
-    const [{ data: r }, { data: s }, { data: sc }] = await Promise.all([
+    const [{ data: r }, { data: s }, { data: sc }, { data: nc }] = await Promise.all([
       supabase.from('production_rolls').select('*')
         .eq('transferred', true).order('created_at', { ascending: false }),
       supabase.from('sales_orders').select('*').order('created_at', { ascending: false }),
       supabase.from('production_rolls').select('*')
         .in('roll_type', ['scrap_clear','scrap_color','scrap_lump'])
         .order('created_at', { ascending: false }),
+      // ม้วนที่ถูกแจ้ง NC ออกจากคลัง (เคยเป็นของดีในคลัง → กลายเป็น bad)
+      supabase.from('production_rolls').select('*')
+        .eq('roll_type', 'bad')
+        .in('inbound_type', ['qc_reject','warehouse_damage'])
+        .order('created_at', { ascending: false }),
     ])
     setRolls((r ?? []) as Roll[])
     setSOs((s ?? []) as SO[])
     setScrapRolls(sc ?? [])
+    setNcRolls(nc ?? [])
     setLoading(false)
   }
   useEffect(() => { loadAll() }, [])
@@ -275,6 +282,17 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
     })
     return Array.from(map.values()).sort((a, b) => a.lot.localeCompare(b.lot))
   }, [scrapRolls])
+  // ── NC ที่ออกจากคลัง — จัดกลุ่มตาม Lot เพื่อแจ้งเตือนในแต่ละกลุ่มสต็อก ──
+  const ncByLotKey = useMemo(() => {
+    const map = new Map<string, any[]>()
+    ncRolls.forEach(r => {
+      const k = `${r.lot_no ?? '?'}__${r.product_name ?? '?'}`
+      if (!map.has(k)) map.set(k, [])
+      map.get(k)!.push(r)
+    })
+    return map
+  }, [ncRolls])
+
   const scrapKg = useMemo(() => scrapRolls.reduce((s,r)=>s+(r.weight??0),0), [scrapRolls])
   const scrapByType = useMemo(() => {
     const m: Record<string,{kg:number;n:number}> = {}
@@ -444,6 +462,23 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
         {/* ══════════ TAB: STOCK ══════════════════════════════════════════ */}
         {tab === 'stock' && (<>
 
+          {/* ⚠ แจ้งเตือน: ม้วนที่ถูกแจ้ง NC ออกจากคลัง */}
+          {ncRolls.length > 0 && (
+            <div className="bg-rose-500/10 border border-rose-500/40 rounded-2xl p-4">
+              <p className="text-rose-300 font-bold text-sm mb-2">⚠ มีม้วนถูกแจ้ง NC ออกจากคลัง {ncRolls.length} ม้วน · {fmt(ncRolls.reduce((s,r)=>s+(r.weight??0),0),2)} Kgs.</p>
+              <div className="flex flex-wrap gap-2">
+                {ncRolls.map((r:any) => (
+                  <span key={r.id} className="inline-flex items-center gap-1.5 bg-rose-500/15 border border-rose-500/30 text-rose-200 text-xs px-2.5 py-1 rounded-lg">
+                    <b>#{r.roll_no}</b>
+                    <span className="text-rose-300/70 font-mono">{r.lot_no}</span>
+                    <span className="text-rose-300/60">· {r.inbound_type==='qc_reject' ? '🚫 QC' : '📦 คลัง'} · {fmt(r.weight,2)}kg</span>
+                    {r.remark && <span className="text-rose-300/50">· {r.remark}</span>}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Filters */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-end gap-3 flex-wrap">
             {/* Section badge (locked when dept prop provided) */}
@@ -516,8 +551,14 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
               const key = `${group.lot}__${group.product}`
               const isOpen = expandedLots.has(key)
               const totalKg = group.rolls.reduce((s,r) => s+(r.weight??0), 0)
+              const ncInLot = ncByLotKey.get(key) ?? []
               return (
                 <div key={key} className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                  {ncInLot.length > 0 && (
+                    <div className="bg-rose-500/10 border-b border-rose-500/30 px-5 py-1.5 text-[11px] text-rose-300">
+                      ⚠ ม้วนที่แจ้ง NC ออกจาก Lot นี้: {ncInLot.map((r:any) => `#${r.roll_no}`).join(', ')} ({ncInLot.length} ม้วน · {fmt(ncInLot.reduce((s:number,r:any)=>s+(r.weight??0),0),2)}kg)
+                    </div>
+                  )}
                   {/* group header */}
                   <div className="flex items-center justify-between px-5 py-3.5">
                     <button onClick={() => toggleLot(key)} className="flex items-center gap-3 flex-1 text-left hover:opacity-80 transition-opacity">

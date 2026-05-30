@@ -175,7 +175,7 @@ export default function ReviewQueue({ dept, mode = 'prod' }: { dept?: 'blow'|'pr
         )}
       </div>
 
-      {decideRoll && <DecideModal roll={decideRoll} onClose={() => setDecideRoll(null)} onDone={() => { setDecideRoll(null); load() }} />}
+      {decideRoll && <DecideModal roll={decideRoll} mode={mode} onClose={() => setDecideRoll(null)} onDone={() => { setDecideRoll(null); load() }} />}
     </div>
   )
 }
@@ -265,8 +265,8 @@ function RollGroup({ title, subtitle, headerCls, rows, tab, onDecide }: {
 }
 
 // ─── Decide Modal ─────────────────────────────────────────────────────────────
-function DecideModal({ roll, onClose, onDone }: { roll: Roll; onClose: () => void; onDone: () => void }) {
-  const [action, setAction] = useState<'rework'|'keep'|'scrap'>('rework')
+function DecideModal({ roll, mode = 'prod', onClose, onDone }: { roll: Roll; mode?: 'prod'|'nc'; onClose: () => void; onDone: () => void }) {
+  const [action, setAction] = useState<'rework'|'keep'|'scrap'|'restore'>('rework')
   const [reason, setReason] = useState('')
   const [by, setBy] = useState('')
   const [saving, setSaving] = useState(false)
@@ -275,6 +275,26 @@ function DecideModal({ roll, onClose, onDone }: { roll: Roll; onClose: () => voi
     if (!by.trim()) { alert('กรอกชื่อผู้พิจารณา'); return }
     if (!reason.trim()) { alert('กรอกเหตุผล/หมายเหตุการตัดสิน'); return }
     setSaving(true)
+
+    // ── คืน NC ผิดพลาด → เอากลับไปเป็นของดีในคลังตามเดิม ──
+    if (action === 'restore') {
+      const patch: any = {
+        roll_type:       'good',
+        review_status:   null,       // ออกจากคิวพิจารณา → เป็นม้วนดีปกติ
+        review_action:   null,
+        review_action_reason: null,
+        rework_status:   null,
+        transferred:     true,       // กลับเข้าคลัง (สต็อก)
+        transferred_by:  by.trim(),
+        transferred_at:  new Date().toISOString(),
+        shipped:         false,
+        remark:          `[คืน NC โดย ${by.trim()}: ${reason.trim()}] ` + (roll.remark || ''),
+      }
+      const { error } = await supabase.from('production_rolls').update(patch).eq('id', roll.id)
+      setSaving(false)
+      if (error) { alert('คืน NC ไม่สำเร็จ: ' + error.message); return }
+      onDone(); return
+    }
 
     const newStatus = action === 'rework' ? 'approved_rework' : 'other'
     const patch: any = {
@@ -338,9 +358,17 @@ function DecideModal({ roll, onClose, onDone }: { roll: Roll; onClose: () => voi
           </button>
         </div>
 
+        {/* คืน NC ผิดพลาด — เอากลับเป็นของดีในคลัง (เฉพาะหน้า NC) */}
+        {mode === 'nc' && (
+          <button type="button" onClick={() => setAction('restore')}
+            className={`w-full py-2 rounded-xl text-xs font-bold border-2 mb-3 ${action==='restore'?'bg-sky-600 border-sky-500 text-white':'bg-white border-sky-300 text-sky-600 hover:bg-sky-50'}`}>
+            ↩ เอากลับไปที่เดิม (แจ้ง NC ผิด → คืนเป็นของดีในคลัง)
+          </button>
+        )}
+
         <label className="block text-xs text-slate-600 mb-1">เหตุผล / สิ่งที่จะทำ *</label>
         <input value={reason} onChange={e => setReason(e.target.value)}
-          placeholder={action==='rework'?'เช่น กรอใหม่ที่ S01':action==='keep'?'เช่น เก็บไว้ใช้กับงานอื่น':'เช่น สีเพี้ยน ใช้ไม่ได้'}
+          placeholder={action==='rework'?'เช่น กรอใหม่ที่ S01':action==='keep'?'เช่น เก็บไว้ใช้กับงานอื่น':action==='restore'?'เช่น แจ้ง NC ผิดม้วน / ตรวจซ้ำแล้วใช้ได้':'เช่น สีเพี้ยน ใช้ไม่ได้'}
           className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 outline-none focus:border-amber-500 mb-3"/>
 
         <label className="block text-xs text-slate-600 mb-1">ผู้พิจารณา (ผจก) *</label>
@@ -351,8 +379,8 @@ function DecideModal({ roll, onClose, onDone }: { roll: Roll; onClose: () => voi
         <div className="flex gap-2 mt-4">
           <button onClick={onClose} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 rounded-xl text-sm font-semibold">ยกเลิก</button>
           <button onClick={save} disabled={saving}
-            className="flex-[2] bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-1.5">
-            {saving ? 'บันทึก...' : <><Check size={14}/> ยืนยันการตัดสิน</>}
+            className={`flex-[2] disabled:opacity-50 text-white py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-1.5 ${action==='restore'?'bg-sky-600 hover:bg-sky-500':'bg-amber-600 hover:bg-amber-500'}`}>
+            {saving ? 'บันทึก...' : action==='restore' ? <>↩ คืนเป็นของดีในคลัง</> : <><Check size={14}/> ยืนยันการตัดสิน</>}
           </button>
         </div>
       </div>

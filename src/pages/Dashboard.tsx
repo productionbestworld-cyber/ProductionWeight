@@ -535,9 +535,12 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
           const badWorking  = bad.filter(r => isStillReworking(r))
           const badDone     = bad.filter(r => isDoneRework(r))
           const badScrapped = bad.filter(r => (r as any).rework_status === 'scrapped')
+          // ผจก ตัดสิน "เก็บไว้" (keep) — แยกออกจาก "ยังไม่จัดการ" (ตัดสินแล้ว แค่เก็บเป็นม้วนกรอ)
+          const badKeep     = bad.filter(r => (r as any).review_action === 'keep' && (r as any).rework_status !== 'scrapped')
           const badWaiting  = bad.filter(r => (r as any).review_status !== 'pending_review' && (r as any).transferred === true
+                                && (r as any).review_action !== 'keep'
                                 && (!(r as any).rework_status || (r as any).rework_status === 'pending'))
-          const badOther    = bad.filter(r => ![...badReview,...badWorking,...badDone,...badScrapped,...badWaiting].includes(r))
+          const badOther    = bad.filter(r => ![...badReview,...badWorking,...badDone,...badScrapped,...badWaiting,...badKeep].includes(r))
           const sumW = (arr:any[]) => arr.reduce((s,r)=>s+(r.weight??0),0)
           // FG ที่กรอออกได้จริง = ม้วนดีที่อยู่ใน Lot ของงานกรอ (ผูกผ่าน rework_jobs.lot_no)
           // ใช้ rolls เต็ม ไม่อิง section filter — เพราะ FG จากกรออยู่ section=rewind จะถูกซ่อนถ้า filter เป็นเป่า/พิมพ์
@@ -574,7 +577,8 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                   {badDone.length > 0     && <p className="flex justify-between"><span className="text-emerald-600">✓ กรอเสร็จ (ม้วนต้นทาง)</span><span className="font-bold text-emerald-700">{num(sumW(badDone),1)} kg · {badDone.length}</span></p>}
                   {badDone.length > 0     && <p className="flex justify-between pl-3"><span className="text-emerald-500">↳ ได้ FG จากกรอ</span><span className="font-bold text-emerald-600">{num(reworkFgKg,1)} kg · {reworkFgRolls.length}</span></p>}
                   {badDone.length > 0     && <p className="flex justify-between pl-3"><span className="text-rose-500">↳ สูญเสีย/เศษกรอ</span><span className="font-bold text-rose-600">{num(reworkLossKg,1)} kg</span></p>}
-                  {badScrapped.length > 0 && <p className="flex justify-between"><span className="text-red-600">🗑 ทำลาย →เศษ</span><span className="font-bold text-red-700">{num(sumW(badScrapped),1)} kg · {badScrapped.length}</span></p>}
+                  {badKeep.length > 0     && <p className="flex justify-between"><span className="text-slate-600">📦 เก็บไว้ (ผจก)</span><span className="font-bold text-slate-700">{num(sumW(badKeep),1)} kg · {badKeep.length}</span></p>}
+                  {badScrapped.length > 0 && <p className="flex justify-between"><span className="text-red-600">🗑 ทำลายทิ้ง (ม้วนกรอ)</span><span className="font-bold text-red-700">{num(sumW(badScrapped),1)} kg · {badScrapped.length}</span></p>}
                   {badOther.length > 0    && <button onClick={()=>setShowBadOther(v=>!v)} className="flex justify-between w-full hover:bg-gray-50 rounded px-0.5"><span className="text-gray-400">{showBadOther ? '▲' : '▼'} ยังไม่จัดการ</span><span className="font-bold text-gray-500">{num(sumW(badOther),1)} kg · {badOther.length}</span></button>}
                 </div>
               </div>
@@ -813,7 +817,8 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
               {(() => {
                 // ⏳ รอพิจารณา (NC ยังไม่ตัดสิน) แยกจาก 📥 รอกรอ (ตัดสิน/ส่งไปกรอแล้ว รอเริ่มกรอ)
                 const review   = bad.filter((r:any) => r.review_status === 'pending_review')
-                const pending  = bad.filter((r:any) => r.review_status !== 'pending_review' && r.transferred === true && (!r.rework_status || r.rework_status === 'pending'))
+                const keep     = bad.filter((r:any) => r.review_action === 'keep' && r.rework_status !== 'scrapped')
+                const pending  = bad.filter((r:any) => r.review_status !== 'pending_review' && r.transferred === true && r.review_action !== 'keep' && (!r.rework_status || r.rework_status === 'pending'))
                 const working  = bad.filter((r:any) => r.rework_status === 'reworking')
                 const reworked = bad.filter((r:any) => r.rework_status === 'reworked')
                 const scrapped = bad.filter((r:any) => r.rework_status === 'scrapped')
@@ -844,9 +849,15 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                         <span className="text-green-700 font-bold text-right">{reworked.length} ม้วน · {num(sumKg(reworked),1)}</span>
                       </>
                     )}
+                    {keep.length > 0 && (
+                      <>
+                        <span className="text-slate-600">📦 เก็บไว้ (ผจก)</span>
+                        <span className="text-slate-700 font-bold text-right">{keep.length} ม้วน · {num(sumKg(keep),1)}</span>
+                      </>
+                    )}
                     {scrapped.length > 0 && (
                       <>
-                        <span className="text-red-600">🗑 ทำลาย</span>
+                        <span className="text-red-600">🗑 ทำลายทิ้ง</span>
                         <span className="text-red-700 font-bold text-right">{scrapped.length} ม้วน · {num(sumKg(scrapped),1)}</span>
                       </>
                     )}

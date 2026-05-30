@@ -248,7 +248,7 @@ function RollGroup({ title, subtitle, headerCls, rows, tab, onDecide }: {
                           {r.review_action === 'scrap'  && <span className="text-red-700 font-bold">🗑 เศษเสีย</span>}
                           {/* ปลายทาง — ม้วนนี้ไปอยู่ที่ไหน */}
                           {r.review_action === 'rework' && <p className="text-[10px] text-emerald-600 mt-0.5">→ เข้าแผนกกรอ (หน้า รับจากผลิต)</p>}
-                          {r.review_action === 'keep'   && <p className="text-[10px] text-slate-500 mt-0.5">→ เก็บไว้ในสต็อก (คงสถานะม้วนกรอ)</p>}
+                          {r.review_action === 'keep'   && <p className="text-[10px] text-slate-500 mt-0.5">→ เก็บเป็นม้วนกรอ (ไม่กลับคลังของดี · ดูที่ Dashboard·ม้วนกรอ)</p>}
                           {r.review_action === 'scrap'  && <p className="text-[10px] text-red-500 mt-0.5">→ รวมในยอดเศษ (Dashboard · เศษจาก ผจก)</p>}
                           <p className="text-slate-500 mt-0.5">{r.review_action_reason || '—'}</p>
                           <p className="text-[10px] text-slate-400 mt-0.5">โดย {r.review_decision_by || '—'} · {new Date((r as any).review_decision_at || r.created_at).toLocaleString('th-TH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</p>

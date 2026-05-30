@@ -596,7 +596,25 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800/50">
-                          {group.rolls.map((r, idx) => {
+                          {[
+                            ...group.rolls.map((r:any) => ({ r, nc:false })),
+                            ...ncInLot.map((r:any) => ({ r, nc:true })),
+                          ].sort((a,b) => (b.r.roll_no??0) - (a.r.roll_no??0))
+                          .map(({ r, nc }, idx) => {
+                            // ── ม้วนที่แจ้ง NC ออกไปแล้ว — แทรกในตาราง ขีดคร่อม ──
+                            if (nc) return (
+                              <tr key={`nc_${r.id}`} className="bg-rose-500/5 text-rose-300/70 line-through">
+                                <td className="px-4 py-2.5 text-xs">{idx + 1}</td>
+                                <td className="px-4 py-2.5 font-mono font-bold">#{r.roll_no} <span className="no-underline inline-block ml-1 text-[9px] bg-rose-500/20 text-rose-300 px-1.5 py-0.5 rounded">⚠ NC</span></td>
+                                <td className="px-4 py-2.5"><span className="text-[10px] bg-rose-500/15 text-rose-300 font-bold px-1.5 py-0.5 rounded no-underline">{r.machine_no||'—'}</span></td>
+                                <td className="px-4 py-2.5">{fmt((r.weight??0)+(r.core_weight??0))}</td>
+                                <td className="px-4 py-2.5 font-black">{fmt(r.weight)}</td>
+                                <td className="px-4 py-2.5 text-xs no-underline" colSpan={3}>
+                                  <span className="text-rose-300/90">{r.inbound_type==='qc_reject' ? '🚫 QC ตรวจไม่ผ่าน' : '📦 เสียจากคลัง'}</span>
+                                  {r.remark && <span className="text-rose-300/50"> · {r.remark}</span>}
+                                </td>
+                              </tr>
+                            )
                             const isOpen = expandedRoll === r.id
                             const rr = r as any
                             return (

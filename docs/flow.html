@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>BWP — Flow ระบบ (มีรายละเอียด · ลากได้)</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{font-family:'Sarabun','Segoe UI',Tahoma,sans-serif;
+       background:radial-gradient(1200px 800px at 20% 0%,#13203b 0%,#0a0f1e 55%);
+       color:#e2e8f0;display:flex;flex-direction:column;overflow:hidden;padding:10px 14px}
+  .top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;flex:0 0 auto}
+  h1{font-size:18px;margin:0;font-weight:800}
+  h1 span{background:linear-gradient(90deg,#60a5fa,#a78bfa);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hint{font-size:12px;color:#94a3b8}
+  .legend{display:flex;flex-wrap:wrap;gap:7px;font-size:12px;margin-left:auto}
+  .legend span{display:inline-flex;align-items:center;gap:6px;background:rgba(17,24,39,.7);
+       border:1px solid #1e293b;padding:4px 10px;border-radius:20px}
+  .dot{width:11px;height:11px;border-radius:50%;display:inline-block;box-shadow:0 0 8px currentColor}
+  button{background:rgba(30,41,59,.8);border:1px solid #334155;color:#e2e8f0;border-radius:9px;
+         padding:6px 13px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{background:#334155;transform:translateY(-1px)}
+  #stage{flex:1 1 auto;min-height:0;margin-top:8px;border:1px solid #1e293b;border-radius:16px;
+         position:relative;overflow:hidden;
+         background:linear-gradient(rgba(148,163,184,.045) 1px,transparent 1px) 0 0/26px 26px,
+                    linear-gradient(90deg,rgba(148,163,184,.045) 1px,transparent 1px) 0 0/26px 26px,#0c1426}
+  #edges{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+  .node{position:absolute;width:186px;border-radius:15px;cursor:grab;user-select:none;
+        border:1.5px solid;padding:10px 12px;text-align:center;transition:box-shadow .15s,transform .08s}
+  .node:hover{transform:translateY(-2px)}
+  .node:active{cursor:grabbing}
+  .node .emoji{font-size:21px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,.5))}
+  .node .title{font-size:15px;font-weight:800;margin-top:2px;line-height:1.25}
+  .node .sub{font-size:11px;font-weight:600;opacity:.82;margin-top:3px;line-height:1.3}
+  .node .more{font-size:10px;opacity:.6;margin-top:4px}
+  .blow  {background:linear-gradient(160deg,#1d4ed8,#172554);border-color:#3b82f6;color:#dbeafe;box-shadow:0 6px 20px rgba(59,130,246,.28)}
+  .rewind{background:linear-gradient(160deg,#7c3aed,#2e1065);border-color:#8b5cf6;color:#ede9fe;box-shadow:0 6px 20px rgba(139,92,246,.28)}
+  .fg    {background:linear-gradient(160deg,#16a34a,#052e16);border-color:#22c55e;color:#dcfce7;box-shadow:0 6px 20px rgba(34,197,94,.26)}
+  .bad   {background:linear-gradient(160deg,#ea580c,#431407);border-color:#f97316;color:#ffedd5;box-shadow:0 6px 20px rgba(249,115,22,.26)}
+  .scrap {background:linear-gradient(160deg,#dc2626,#450a0a);border-color:#ef4444;color:#fee2e2;box-shadow:0 6px 20px rgba(239,68,68,.26)}
+  .mgr   {background:linear-gradient(160deg,#ca8a04,#422006);border-color:#eab308;color:#fef9c3;box-shadow:0 6px 20px rgba(234,179,8,.26)}
+  .elabel{font-size:11.5px;font-weight:700}
+  .flow{stroke-dasharray:7 9;animation:march 1s linear infinite}
+  @keyframes march{to{stroke-dashoffset:-32}}
+  /* แผงรายละเอียด */
+  #panel{position:absolute;top:12px;right:12px;width:310px;max-height:calc(100% - 24px);overflow:auto;
+         background:rgba(12,20,38,.96);border:1px solid #334155;border-radius:14px;padding:0;
+         box-shadow:0 12px 40px rgba(0,0,0,.55);display:none;backdrop-filter:blur(6px)}
+  #panel .ph{padding:13px 15px;border-bottom:1px solid #1e293b;display:flex;align-items:center;gap:9px;border-radius:14px 14px 0 0}
+  #panel .ph .pe{font-size:24px}
+  #panel .ph .pt{font-size:16px;font-weight:800}
+  #panel .pc{padding:13px 15px;font-size:13px;line-height:1.6}
+  #panel ul{margin:0;padding-left:18px}
+  #panel li{margin-bottom:6px}
+  #panel code{background:#1e293b;padding:1px 6px;border-radius:4px;font-size:11.5px;color:#fbbf24}
+  #panel .x{margin-left:auto;cursor:pointer;opacity:.7;font-size:18px}
+  #panel .x:hover{opacity:1}
+</style>
+</head>
+<body>
+  <div class="top">
+    <h1><span>🏭 BWP — Flow ทั้งระบบ</span> · เป่า → กรอ → คลัง</h1>
+    <span class="hint">🖱 ลากกล่อง = ย้าย · คลิกกล่อง = ดูรายละเอียด</span>
+    <button onclick="toggleFlow()" id="fbtn">⏸ หยุดไหล</button>
+    <button onclick="resetLayout()">↺ จัดใหม่</button>
+    <div class="legend">
+      <span style="color:#3b82f6"><i class="dot"></i><span style="color:#e2e8f0">เป่า</span></span>
+      <span style="color:#8b5cf6"><i class="dot"></i><span style="color:#e2e8f0">กรอ</span></span>
+      <span style="color:#22c55e"><i class="dot"></i><span style="color:#e2e8f0">ดี/คลัง</span></span>
+      <span style="color:#f97316"><i class="dot"></i><span style="color:#e2e8f0">ม้วนกรอ</span></span>
+      <span style="color:#ef4444"><i class="dot"></i><span style="color:#e2e8f0">เศษ/NC</span></span>
+      <span style="color:#eab308"><i class="dot"></i><span style="color:#e2e8f0">ผจก</span></span>
+    </div>
+  </div>
+
+  <div id="stage">
+    <svg id="edges"><defs id="defs"></defs></svg>
+    <div id="panel"></div>
+  </div>
+
+  <script>
+  const COLOR={blow:'#3b82f6',rewind:'#8b5cf6',fg:'#22c55e',bad:'#f97316',scrap:'#ef4444',mgr:'#eab308'};
+
+  const NODES=[
+    { id:'W', cls:'blow', emoji:'🌬', label:'เป่า: ชั่งม้วน', sub:'WeighStation · section=blow', x:30, y:280,
+      detail:['หน้า <code>ชั่งน้ำหนัก</code> แผนกเป่า','แยก <code>roll_type</code>: good / bad / scrap','ม้วน bad เลือก <b>ส่งกรอ</b> (review_status=null) หรือ <b>รอพิจารณา</b> (pending_review)','roll_no เริ่มที่ 1 · ชนกัน retry หาเลขใหม่อัตโนมัติ','ทุกการชั่งบันทึก log ไว้ recovery'] },
+    { id:'G', cls:'fg', emoji:'✅', label:'ม้วนดี', sub:'roll_type=good', x:265, y:95,
+      detail:['ม้วนที่ผ่าน QC ตอนชั่ง','รอ <b>โอนเข้าคลัง</b> (Transfer)'] },
+    { id:'B', cls:'bad', emoji:'🔧', label:'ม้วนกรอ', sub:'roll_type=bad + เหตุผล', x:265, y:300,
+      detail:['ม้วนเสีย/ต้องแก้ → ใส่ remark เหตุผล','<code>ส่งกรอ</code>: เชื่อว่ากรอได้ → ผ่าน Transfer','<code>รอพิจารณา</code>: ไม่แน่ใจ → ส่ง ผจก (pending_review)'] },
+    { id:'S', cls:'scrap', emoji:'🗑', label:'เศษ', sub:'scrap_clear/color/lump', x:265, y:515,
+      detail:['ของเสียที่ทิ้งเลย ตอนชั่ง','ใช้ <b>gross</b> โดยตรง (ไม่หักแกน)','รวมยอดที่ Dashboard · เศษรวม'] },
+    { id:'ST', cls:'fg', emoji:'🏬', label:'คลัง · สต็อก', sub:'transferred=true · shipped=false', x:520, y:95,
+      detail:['คลังสินค้า → แท็บสต็อกคงเหลือ','นับเฉพาะ <code>roll_type=good</code>','กด <b>⚠ แจ้ง NC</b> ได้ ถ้าเจอปัญหา','ม้วนคืน NC แสดงป้าย "เคยถูก NC"'] },
+    { id:'SH', cls:'fg', emoji:'🚚', label:'จัดส่ง → ลูกค้า', sub:'shipped=true', x:770, y:20,
+      detail:['ผูกกับ Sales Order','ออกใบส่งสินค้า (Delivery Note)','ม้วน shipped=true → ออกจากสต็อก'] },
+    { id:'NC', cls:'mgr', emoji:'⚠', label:'หน้า NC (คลัง/QC)', sub:'ReviewQueue · mode=nc', x:770, y:185,
+      detail:['NC จริง: เคยผ่านออกไปแล้ว','<code>inbound_type</code>=qc_reject / warehouse_damage','ผจก ตัดสิน: ส่งกรอ / เก็บ / เศษ / <b>↩ คืนม้วน</b>','มี badge เตือนบนเมนู'] },
+    { id:'RV', cls:'mgr', emoji:'🏭', label:'พิจารณาม้วนกรอ', sub:'ReviewQueue · mode=prod', x:520, y:320,
+      detail:['ผลิตประเมินเองว่ากรอไม่ได้ (pending_review)','คนละเมนูกับ NC','ผจก ตัดสิน: <b>rework</b> / keep / scrap','แยกเห็นเฉพาะแผนกตัวเอง (section)'] },
+    { id:'IN', cls:'rewind', emoji:'📥', label:'รับจากผลิต', sub:'ReworkInbox', x:520, y:475,
+      detail:['คิวม้วนรอเริ่มกรอ','โหลด: bad + transferred + rework_status null/pending','กด <b>เริ่มกรอ</b> เพื่อสร้างงาน'] },
+    { id:'SM', cls:'scrap', emoji:'🗑', label:'เศษจาก ผจก', sub:'roll_type=scrap_lump', x:265, y:680,
+      detail:['ม้วนที่ ผจก ตัดสินว่าเป็นเศษ','review_action=scrap','รวมยอด "เศษจาก ผจก" ใน Dashboard'] },
+    { id:'JB', cls:'rewind', emoji:'🧵', label:'งานกรอ (reworking)', sub:'rework_jobs', x:775, y:475,
+      detail:['สร้าง <code>rework_jobs</code> · 1 งาน/1 lot ต้นทาง','<code>source_lot_no</code> = lot จากเป่า','ม้วนต้นทาง → <code>rework_status=reworking</code>','เลือกเครื่องกรอ → gen lot ใหม่'] },
+    { id:'RW', cls:'rewind', emoji:'⚙', label:'กรอ → FG ใหม่', sub:'WeighStation · section=rewind', x:1015, y:475,
+      detail:['ชั่งม้วนที่กรอออกได้ = good ใหม่','lot = lot ของงานกรอ','นับเป็น <b>FG จากกรอ</b> (แยกจาก FG ครั้งแรก)'] },
+    { id:'CL', cls:'rewind', emoji:'✕', label:'ปิดงาน → reworked', sub:'rework_jobs status=closed', x:1245, y:475,
+      detail:['ปิดงานกรอ','ม้วนต้นทาง → <code>reworked</code>','<b>สูญเสีย/เศษกรอ</b> = น้ำหนักต้นทาง − FG ที่กรอได้','FG เข้าคลังเหมือนม้วนดีปกติ'] },
+    { id:'DS', cls:'mgr', emoji:'🎛', label:'Dashboard คุมงาน', sub:'ศูนย์ควบคุม', x:1245, y:670,
+      detail:['ดูทุกอย่างในหน้าเดียว','ผลิตรวม / FG (ครั้งแรก+จากกรอ) / ม้วนกรอ / เศษ','ตัดสิน NC + ปิดงานกรอ ได้จากตรงนี้','แตกรายละเอียดทุก KPI'] },
+  ];
+  const EDGES=[
+    ['W','G','good'],['W','B','bad'],['W','S','scrap'],
+    ['G','ST',''],['ST','SH',''],['ST','NC','⚠ แจ้ง NC'],
+    ['B','IN','ส่งกรอ'],['B','RV','รอพิจารณา'],
+    ['RV','IN','ส่งกรอ'],['RV','ST','เก็บไว้'],['RV','SM','เศษ'],
+    ['NC','IN','ส่งกรอ'],['NC','ST','เก็บ/คืน'],['NC','SM','เศษ'],
+    ['IN','JB','เริ่มกรอ'],['JB','RW',''],['RW','CL',''],['CL','ST','FG กลับคลัง'],
+    ['RW','SM','กรอแล้วเสีย'],
+    ['S','DS',''],['SM','DS',''],
+  ];
+
+  const stage=document.getElementById('stage'),svg=document.getElementById('edges'),defs=document.getElementById('defs'),panel=document.getElementById('panel');
+  const pos={},els={},NW=186;let flowing=true;
+  const nodeH=id=>els[id]?els[id].offsetHeight:64;
+
+  Object.entries(COLOR).forEach(([k,c])=>defs.insertAdjacentHTML('beforeend',
+    `<marker id="ar-${k}" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${c}"/></marker>`));
+
+  function initLayout(){NODES.forEach(n=>pos[n.id]={x:n.x,y:n.y});}
+  function buildNodes(){
+    NODES.forEach(n=>{
+      const d=document.createElement('div');
+      d.className='node '+n.cls;
+      d.innerHTML=`<div class="emoji">${n.emoji}</div><div class="title">${n.label}</div><div class="sub">${n.sub}</div><div class="more">▸ คลิกดูรายละเอียด</div>`;
+      d.style.left=pos[n.id].x+'px';d.style.top=pos[n.id].y+'px';
+      makeDraggable(d,n.id);stage.appendChild(d);els[n.id]=d;
+    });
+  }
+  function clip(cx,cy,dx,dy,hh){
+    if(!dx&&!dy)return[cx,cy];
+    const s=Math.min(dx?(NW/2)/Math.abs(dx):1e9, dy?(hh/2)/Math.abs(dy):1e9);
+    return[cx+dx*s,cy+dy*s];
+  }
+  function ends(f,t){
+    const ax=pos[f].x+NW/2,ay=pos[f].y+nodeH(f)/2,bx=pos[t].x+NW/2,by=pos[t].y+nodeH(t)/2;
+    const dx=bx-ax,dy=by-ay;
+    const[x1,y1]=clip(ax,ay,dx,dy,nodeH(f)),[x2,y2]=clip(bx,by,-dx,-dy,nodeH(t));
+    return[x1,y1,x2,y2];
+  }
+  function drawEdges(){
+    [...svg.querySelectorAll('.edge')].forEach(e=>e.remove());
+    EDGES.forEach(([f,t,lbl])=>{
+      const[x1,y1,x2,y2]=ends(f,t),cls=NODES.find(n=>n.id===f).cls,c=COLOR[cls],ddx=(x2-x1)*0.45;
+      const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+      p.setAttribute('d',`M${x1},${y1} C${x1+ddx},${y1} ${x2-ddx},${y2} ${x2},${y2}`);
+      p.setAttribute('fill','none');p.setAttribute('stroke',c);p.setAttribute('stroke-width','2.5');
+      p.setAttribute('stroke-linecap','round');p.setAttribute('opacity','.9');p.setAttribute('marker-end',`url(#ar-${cls})`);
+      p.classList.add('edge');if(flowing)p.classList.add('flow');svg.appendChild(p);
+      if(lbl){
+        const mx=(x1+x2)/2,my=(y1+y2)/2,w=lbl.length*7.6+14;
+        const bg=document.createElementNS('http://www.w3.org/2000/svg','rect');
+        bg.setAttribute('x',mx-w/2);bg.setAttribute('y',my-11);bg.setAttribute('width',w);bg.setAttribute('height',22);
+        bg.setAttribute('rx',11);bg.setAttribute('fill','#0c1426');bg.setAttribute('stroke',c);bg.setAttribute('stroke-width','1.2');
+        bg.classList.add('edge');svg.appendChild(bg);
+        const tx=document.createElementNS('http://www.w3.org/2000/svg','text');
+        tx.setAttribute('x',mx);tx.setAttribute('y',my+4);tx.setAttribute('text-anchor','middle');
+        tx.setAttribute('fill',c);tx.classList.add('edge','elabel');tx.textContent=lbl;svg.appendChild(tx);
+      }
+    });
+  }
+  function showPanel(n){
+    panel.innerHTML=`<div class="ph" style="background:${COLOR[n.cls]}22;border-bottom-color:${COLOR[n.cls]}66">
+      <span class="pe">${n.emoji}</span><span class="pt">${n.label}</span><span class="x" onclick="document.getElementById('panel').style.display='none'">✕</span></div>
+      <div class="pc"><p style="margin:0 0 8px;color:#94a3b8">${n.sub}</p><ul>${n.detail.map(d=>`<li>${d}</li>`).join('')}</ul></div>`;
+    panel.style.display='block';
+  }
+  function makeDraggable(el,id){
+    let sx,sy,ox,oy,drag=false,moved=0;
+    el.addEventListener('pointerdown',e=>{drag=true;moved=0;el.setPointerCapture(e.pointerId);
+      sx=e.clientX;sy=e.clientY;ox=pos[id].x;oy=pos[id].y;el.style.zIndex=10;});
+    el.addEventListener('pointermove',e=>{if(!drag)return;
+      moved+=Math.abs(e.movementX)+Math.abs(e.movementY);
+      pos[id].x=ox+(e.clientX-sx);pos[id].y=oy+(e.clientY-sy);
+      el.style.left=pos[id].x+'px';el.style.top=pos[id].y+'px';drawEdges();});
+    const end=()=>{drag=false;el.style.zIndex=2;
+      if(moved<5)showPanel(NODES.find(n=>n.id===id));};   // คลิก (ไม่ลาก) = เปิดรายละเอียด
+    el.addEventListener('pointerup',end);el.addEventListener('pointercancel',()=>{drag=false;el.style.zIndex=2;});
+  }
+  function resetLayout(){initLayout();NODES.forEach(n=>{els[n.id].style.left=pos[n.id].x+'px';els[n.id].style.top=pos[n.id].y+'px';});drawEdges();}
+  function toggleFlow(){flowing=!flowing;document.getElementById('fbtn').textContent=flowing?'⏸ หยุดไหล':'▶ เส้นไหล';drawEdges();}
+
+  initLayout();buildNodes();drawEdges();
+  window.addEventListener('resize',drawEdges);
+  </script>
+</body>
+</html>

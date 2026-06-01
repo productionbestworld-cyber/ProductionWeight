@@ -1511,7 +1511,10 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
           // ถ้า bridge ยังไม่ได้ต่อเครื่องชั่ง → connected = false
           if (d.connected !== undefined) setSerialConnected(d.connected)
           // ⚠ ถ้า bridge บอกว่าเครื่องชั่งไม่ต่อ → ไม่ override gross (ให้ผู้ใช้สุ่ม/พิมพ์เองได้)
-          if (d.connected === false) return
+          if (d.connected === false) {
+            if (awaitingClearRef.current) { awaitingClearRef.current = false; setAwaitingClear(false) }
+            return
+          }
           // ถ้ากำลังใช้โหมดจำลอง → ไม่ override ค่าจาก Bridge
           if (simModeRef.current) return
           // throttle update ทุก 150ms
@@ -1519,7 +1522,14 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
           if (now - lastUpdate < 150) return
           lastUpdate = now
           // เก็บค่าเต็มจาก Bridge — ไม่ truncate ที่ state (จะ format ตอน display ด้วย fmt(x, dec))
-          if (typeof d.value === 'number') setGross(d.value)
+          if (typeof d.value === 'number') {
+            setGross(d.value)
+            // ปลดล็อกกันเบิ้ล เมื่อยกของออกแล้ว (น้ำหนักตกต่ำกว่าครึ่งของม้วนที่เพิ่งชั่ง)
+            if (awaitingClearRef.current && d.value < grossAtSaveRef.current * 0.5) {
+              awaitingClearRef.current = false
+              setAwaitingClear(false)
+            }
+          }
           setSerialStable(!!d.stable)
           setStable(!!d.stable)
           if (d.raw) setRawSerial(d.raw)
@@ -1557,6 +1567,10 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
   const [rollNo,       setRollNo]       = useState(1)
   const [saving,       setSaving]       = useState(false)
   const [lastRoll,     setLastRoll]     = useState<any>(null)
+  // ── กันชั่งเบิ้ล: หลังบันทึกต้องยกของออก (น้ำหนักตก) ก่อนชั่งม้วนถัดไป ──
+  const [awaitingClear, setAwaitingClear] = useState(false)
+  const awaitingClearRef = useRef(false)
+  const grossAtSaveRef   = useRef(0)
   const [weighedKg,    setWeighedKg]    = useState(0)
   const [weighedRolls, setWeighedRolls] = useState<any[]>([])
   const [showCloseModal, setShowCloseModal] = useState(false)
@@ -1745,8 +1759,13 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  function clearAwaiting() {
+    if (awaitingClearRef.current) { awaitingClearRef.current = false; setAwaitingClear(false) }
+  }
+
   function startIdle() {
     if (timerRef.current) clearInterval(timerRef.current)
+    clearAwaiting()
     setStable(true)   // idle = พร้อมกด
     setGross(0)
     timerRef.current = setInterval(() => {
@@ -1758,6 +1777,7 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
   function readScale() {
     simModeRef.current = true
     setSimMode(true)
+    clearAwaiting()
     if (timerRef.current) clearInterval(timerRef.current)
     const target = parseFloat((22 + Math.random() * 6).toFixed(dec))
     setGross(target)
@@ -1955,6 +1975,11 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
 
   async function handleSave() {
     if (saveWeight <= 0 || !stable) return
+    // กันชั่งเบิ้ล: ถ้ายังไม่ยกของออกจากเครื่องชั่ง ห้ามบันทึกซ้ำ
+    if (awaitingClearRef.current) {
+      alert('⚠ ยกม้วนออกจากเครื่องชั่งก่อน แล้วรอน้ำหนักตกลง จึงชั่งม้วนถัดไปได้')
+      return
+    }
     if (!inspector.trim()) { setShowInspectorPrompt(true); return }
     if (isBad && !badReason.trim()) { alert('กรุณาระบุเหตุผลม้วนกรอ'); return }
     if (isScrap && !scrapReason.trim()) { alert('กรุณาระบุเหตุผลเศษเสีย'); return }
@@ -2090,6 +2115,12 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       } else {
         if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
         setGross(0)
+        // ต่อเครื่องชั่งจริง: ล็อกจนกว่าจะยกของออก (น้ำหนักตก) กันชั่งเบิ้ล
+        if (serialConnected) {
+          grossAtSaveRef.current = gross
+          awaitingClearRef.current = true
+          setAwaitingClear(true)
+        }
       }
     } catch (e: any) {
       alert('บันทึกไม่สำเร็จ: ' + (e?.message ?? JSON.stringify(e)))
@@ -2450,23 +2481,31 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                 </span>
               </div>
             )}
-            <button onClick={handleSave} disabled={saving || saveWeight <= 0 || !stable || (isBad && !badReason.trim()) || (isScrap && !scrapReason.trim()) || (isGood && isRework && !reworkCause.trim())}
+            <button onClick={handleSave} disabled={saving || awaitingClear || saveWeight <= 0 || !stable || (isBad && !badReason.trim()) || (isScrap && !scrapReason.trim()) || (isGood && isRework && !reworkCause.trim())}
               className={`flex-1 py-3 rounded-xl text-white font-black flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-40 ${
+                awaitingClear ? 'bg-slate-700 cursor-not-allowed' :
                 !stable ? 'bg-slate-700 cursor-not-allowed' :
                 isGood  ? 'bg-brand-600 hover:bg-brand-500' :
                 isBad   ? 'bg-orange-600 hover:bg-orange-500' :
                           'bg-amber-600 hover:bg-amber-500'
               }`}>
               <Save size={17}/>
-              {saving ? 'บันทึก...' : !stable ? 'รอค่านิ่ง...' :
+              {saving ? 'บันทึก...' : awaitingClear ? '⬆ ยกม้วนออกก่อน' : !stable ? 'รอค่านิ่ง...' :
                 isScrap ? `บันทึกเศษ ${fmt(gross,dec)} Kgs.` :
                 isBad   ? `กรอ ${badRollNo} · ${fmt(saveWeight,dec)} Kgs.` :
                           `Roll ${rollNo} · ${fmt(saveWeight,dec)} Kgs.`}
             </button>
           </div>
 
+          {/* แจ้งเตือนให้ยกของออก กันชั่งเบิ้ล */}
+          {awaitingClear && (
+            <p className="text-center text-amber-400 text-sm font-bold animate-pulse">
+              ⬆ ยกม้วนออกจากเครื่องชั่ง แล้วรอน้ำหนักตกลง ก่อนชั่งม้วนถัดไป
+            </p>
+          )}
+
           {/* hint ทำไมกดไม่ได้ */}
-          {(saveWeight <= 0 || !stable || (isBad && !badReason.trim()) || (isScrap && !scrapReason.trim()) || (isGood && isRework && !reworkCause.trim())) && (
+          {!awaitingClear && (saveWeight <= 0 || !stable || (isBad && !badReason.trim()) || (isScrap && !scrapReason.trim()) || (isGood && isRework && !reworkCause.trim())) && (
             <p className="text-center text-slate-600 text-xs">
               {!stable ? '⟳ รอค่าชั่งนิ่งก่อน' :
                saveWeight <= 0 ? '▲ พิมพ์น้ำหนักหรือกดสุ่มค่าก่อน' :

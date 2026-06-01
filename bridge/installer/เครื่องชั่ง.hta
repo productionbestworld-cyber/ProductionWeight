@@ -63,13 +63,34 @@
   var running = false;     // สถานะล่าสุด
   var busy = false;        // กันยิงซ้ำซ้อน
 
+  // ดักทุก error ไม่ให้เด้ง popup — โชว์ในหน้าต่างแทน
+  window.onerror = function(msg, url, line){
+    try{ document.getElementById("err").innerHTML = "ผิดพลาด: " + msg + " (บรรทัด " + line + ")"; }catch(e){}
+    return true;
+  };
+
+  // โฟลเดอร์ที่ไฟล์ .hta นี้อยู่ — รองรับ path ที่มีตัวอักษรไทย/ช่องว่าง
+  function htaDir(){
+    try{
+      var u = "" + location.href;          // file:///C:/.../เครื่องชั่ง.hta
+      u = u.replace(/^file:\/+/i, "");      // ตัด file:///
+      u = decodeURIComponent(u);            // %20/ไทย -> ปกติ
+      u = u.replace(/\//g, "\\");           // / -> \
+      return fso.GetParentFolderName(u);
+    }catch(e){ return ""; }
+  }
+
   // หา path ของ .exe — ติดตั้งแล้ว > โฟลเดอร์เดียวกับ hta > dist
   function findExe(){
-    var pf = shell.ExpandEnvironmentStrings("%ProgramFiles%") + "\\BWPScaleBridge\\" + EXE;
-    if (fso.FileExists(pf)) return pf;
-    var here = fso.GetParentFolderName(unescape(location.pathname.replace(/^\//,"")));
-    var p1 = here + "\\" + EXE;            if (fso.FileExists(p1)) return p1;
-    var p2 = here + "\\dist\\" + EXE;      if (fso.FileExists(p2)) return p2;
+    try{
+      var pf = shell.ExpandEnvironmentStrings("%ProgramFiles%") + "\\BWPScaleBridge\\" + EXE;
+      if (fso.FileExists(pf)) return pf;
+      var here = htaDir();
+      if (here){
+        var p1 = here + "\\" + EXE;          if (fso.FileExists(p1)) return p1;
+        var p2 = here + "\\dist\\" + EXE;    if (fso.FileExists(p2)) return p2;
+      }
+    }catch(e){}
     return "";
   }
 
@@ -151,8 +172,8 @@
   function openSettings(){ shell.Run(URL, 1, false); }
 
   function openFolder(){
-    var here = fso.GetParentFolderName(unescape(location.pathname.replace(/^\//,"")));
-    try{ shell.Run('explorer "'+here+'"', 1, false); }catch(e){}
+    var here = htaDir();
+    try{ if(here) shell.Run('explorer "'+here+'"', 1, false); }catch(e){}
   }
 
   // ปรับขนาดหน้าต่าง + ตรวจสถานะทุก 2.5 วิ

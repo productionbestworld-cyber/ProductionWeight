@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>คู่มือการใช้งาน — แผนกเป่า (BWP)</title>
+<style>
+  *{box-sizing:border-box}
+  body{font-family:'Sarabun','Segoe UI',Tahoma,sans-serif;color:#1e293b;background:#f1f5f9;
+       margin:0;padding:24px;line-height:1.6}
+  .page{max-width:860px;margin:0 auto;background:#fff;border-radius:16px;
+        box-shadow:0 4px 24px rgba(0,0,0,.08);padding:34px 40px}
+  .hdr{text-align:center;border-bottom:3px solid #2563eb;padding-bottom:16px;margin-bottom:24px}
+  .hdr .badge{display:inline-block;background:#2563eb;color:#fff;font-weight:800;font-size:13px;
+        padding:5px 16px;border-radius:20px;letter-spacing:.5px}
+  h1{font-size:25px;margin:12px 0 4px;color:#0f172a}
+  .sub{color:#64748b;font-size:14px}
+  h2{font-size:19px;color:#1d4ed8;margin:28px 0 10px;display:flex;align-items:center;gap:10px}
+  .num{background:#2563eb;color:#fff;width:30px;height:30px;border-radius:50%;display:inline-flex;
+       align-items:center;justify-content:center;font-size:15px;font-weight:800;flex:0 0 auto}
+  ol,ul{margin:8px 0;padding-left:24px}
+  li{margin-bottom:7px}
+  .step{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px 20px;margin:12px 0}
+  .btn{display:inline-block;background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;
+       padding:1px 9px;border-radius:7px;font-weight:700;font-size:13px;white-space:nowrap}
+  .btn.green{background:#dcfce7;color:#166534;border-color:#bbf7d0}
+  .btn.orange{background:#ffedd5;color:#9a3412;border-color:#fed7aa}
+  .btn.red{background:#fee2e2;color:#991b1b;border-color:#fecaca}
+  .btn.amber{background:#fef3c7;color:#92400e;border-color:#fde68a}
+  .tip{background:#ecfdf5;border-left:4px solid #10b981;padding:12px 16px;border-radius:0 10px 10px 0;margin:12px 0;font-size:14px}
+  .warn{background:#fff7ed;border-left:4px solid #f97316;padding:12px 16px;border-radius:0 10px 10px 0;margin:12px 0;font-size:14px}
+  .danger{background:#fef2f2;border-left:4px solid #ef4444;padding:12px 16px;border-radius:0 10px 10px 0;margin:12px 0;font-size:14px}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:14px}
+  th,td{border:1px solid #e2e8f0;padding:8px 12px;text-align:left}
+  th{background:#eff6ff;color:#1e40af;font-weight:700}
+  .q{color:#64748b;font-size:13px}
+  code{background:#f1f5f9;padding:1px 6px;border-radius:4px;font-size:13px;color:#b45309}
+  .flow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:10px 0;font-size:13.5px;font-weight:600}
+  .flow .b{background:#1e40af;color:#fff;padding:5px 11px;border-radius:8px}
+  .flow .b.g{background:#16a34a}.flow .b.o{background:#ea580c}.flow .b.r{background:#dc2626}
+  .flow .a{color:#94a3b8;font-weight:800}
+  @media print{body{background:#fff;padding:0}.page{box-shadow:none;max-width:none}}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="hdr">
+    <span class="badge">🌬 แผนกเป่า (BLOW)</span>
+    <h1>คู่มือการใช้งานระบบชั่งน้ำหนักม้วน</h1>
+    <div class="sub">บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด · BWP ProductionWeight</div>
+  </div>
+
+  <div class="tip"><b>ภาพรวมงานแผนกเป่า:</b> ชั่งม้วนที่ผลิตได้ → แยกเป็น <b>ม้วนดี / ม้วนกรอ / เศษ</b> → โอนม้วนดีเข้าคลัง · ส่งม้วนเสียไปกรอ</div>
+
+  <div class="flow">
+    <span class="b">🌬 ชั่งม้วน</span><span class="a">→</span>
+    <span class="b g">✅ ม้วนดี → คลัง → ส่งลูกค้า</span>
+  </div>
+  <div class="flow">
+    <span class="a" style="visibility:hidden">→</span>
+    <span class="b o">🔧 ม้วนกรอ → ส่งกรอ/รอพิจารณา</span><span class="a">→</span><span class="b">แผนกกรอ</span>
+  </div>
+  <div class="flow">
+    <span class="a" style="visibility:hidden">→</span>
+    <span class="b r">🗑 เศษ → รวมยอดเศษ</span>
+  </div>
+
+  <h2><span class="num">1</span> เข้าระบบ &amp; เลือกแผนก</h2>
+  <div class="step">
+    <ol>
+      <li>เปิดเว็บระบบ → จะเจอหน้า <b>เลือกแผนก</b></li>
+      <li>กดเลือก <span class="btn">🌬 ผลิต (เป่า)</span></li>
+      <li>ใส่ <b>PIN</b> ของแผนก → กดยืนยัน</li>
+      <li>มุมซ้ายบนจะแสดง <span class="btn">🌬 ผลิต(เป่า)</span> = อยู่แผนกเป่าถูกต้อง</li>
+    </ol>
+  </div>
+  <div class="tip">ถ้าเลือกแผนกผิด กดที่ชื่อแผนกมุมซ้ายบน → เลือกใหม่ได้ตลอด</div>
+
+  <h2><span class="num">2</span> เลือกงาน / เครื่อง (ก่อนชั่ง)</h2>
+  <div class="step">
+    <ol>
+      <li>ไปเมนู <span class="btn">⚖ ชั่งน้ำหนัก</span></li>
+      <li>เลือก <b>เครื่อง</b> ที่กำลังเดิน (เช่น BL01)</li>
+      <li>เลือกงาน (Lot / Sales Order) — หรือกด <span class="btn">📂 ดึงงานเก่า</span> ถ้าทำงานเดิมต่อ</li>
+      <li>ตรวจชื่อสินค้า / ลูกค้า / ขนาด ให้ตรงกับที่ผลิตจริง</li>
+    </ol>
+  </div>
+
+  <h2><span class="num">3</span> ชั่งม้วนดี (FG)</h2>
+  <div class="step">
+    <ol>
+      <li>เลือกประเภท <span class="btn green">ม้วนดี</span></li>
+      <li>วางม้วนบนตาชั่ง → รอตัวเลข <b>นิ่ง (stable)</b></li>
+      <li>ใส่ชื่อ <b>ผู้ตรวจ</b> (ครั้งแรกของกะ)</li>
+      <li>กด <span class="btn green">บันทึก</span> → ระบบให้เลขม้วนอัตโนมัติ + พิมพ์ป้าย</li>
+    </ol>
+  </div>
+  <div class="tip">เลขม้วนเริ่มที่ #1 ไล่ขึ้นเอง · ถ้าเลขชนระบบหาเลขใหม่ให้อัตโนมัติ ไม่ต้องกังวล</div>
+
+  <h2><span class="num">4</span> ชั่งม้วนกรอ (ม้วนเสีย/ต้องแก้)</h2>
+  <div class="step">
+    <p>เลือกประเภท <span class="btn orange">ม้วนกรอ</span> แล้ว <b>เลือก 1 ใน 2 แบบ</b>:</p>
+    <table>
+      <tr><th>เลือก</th><th>ใช้เมื่อ</th><th>ม้วนจะไป...</th></tr>
+      <tr>
+        <td><span class="btn green">✓ ส่งกรอ</span></td>
+        <td>มั่นใจว่ากรอแก้ได้</td>
+        <td>เข้าคิวแผนกกรอ (ผ่านการโอน)</td>
+      </tr>
+      <tr>
+        <td><span class="btn amber">รอพิจารณา</span></td>
+        <td>ไม่แน่ใจว่ากรอได้ไหม</td>
+        <td>ส่งให้ <b>ผจก</b> ตัดสิน</td>
+      </tr>
+    </table>
+    <p>ใส่ <b>เหตุผล</b> ที่ม้วนเสีย (จำเป็น) → กด <span class="btn orange">บันทึก</span></p>
+  </div>
+  <div class="warn"><b>สำคัญ:</b> ระบุเหตุผลทุกครั้ง — ใช้ดูสาเหตุเสียที่ Dashboard เพื่อแก้ปัญหาที่ต้นทาง</div>
+
+  <h2><span class="num">5</span> ชั่งเศษ</h2>
+  <div class="step">
+    <ol>
+      <li>เลือกประเภท <span class="btn red">เศษ</span> → เลือกชนิด: <b>เศษใส / เศษสี / เศษก้อน</b></li>
+      <li>ชั่งทั้งถุง (ระบบใช้น้ำหนักเต็ม ไม่หักแกน) → ใส่เหตุผล → บันทึก</li>
+    </ol>
+  </div>
+
+  <h2><span class="num">6</span> โอนม้วนดี + ม้วนกรอ เข้าคลัง</h2>
+  <div class="step">
+    <ol>
+      <li>ไปเมนู <span class="btn">📦 โอนเข้าคลัง</span></li>
+      <li>เลือกม้วนที่จะโอน (ม้วนดี + ม้วนกรอที่กด "ส่งกรอ")</li>
+      <li>กดยืนยันโอน → ม้วนดีเข้าสต็อกคลัง · ม้วนกรอเข้าคิวแผนกกรอ</li>
+    </ol>
+  </div>
+  <div class="danger"><b>ห้ามลืมขั้นนี้!</b> ถ้าไม่โอน ม้วนกรอ "ส่งกรอ" จะค้าง ไม่ไปถึงแผนกกรอ และจะขึ้นเป็น <b>"ยังไม่จัดการ"</b> ใน Dashboard</div>
+
+  <h2><span class="num">7</span> คลังสินค้า &amp; แจ้ง NC</h2>
+  <div class="step">
+    <ol>
+      <li>เมนู <span class="btn">🏬 คลังสินค้า</span> → แท็บ <b>สต็อกคงเหลือ</b> ดูม้วนดีที่พร้อมส่ง</li>
+      <li>กดที่ม้วน → ดูรายละเอียด → ถ้าเจอม้วนเสียในคลัง กด <span class="btn red">⚠ แจ้ง NC</span></li>
+      <li>แท็บ <b>เศษ</b> = ดูยอดเศษทั้งหมด · แท็บ <b>จัดส่ง</b> = ออกใบส่งของให้ลูกค้า</li>
+    </ol>
+  </div>
+  <div class="tip">ม้วนที่แจ้ง NC จะมี <b>แถบแดงเตือน</b> + ขีดคร่อมในตาราง บอกชัดว่าม้วนไหนถูกแจ้งออกไป</div>
+
+  <h2><span class="num">8</span> ดูภาพรวม (Dashboard)</h2>
+  <div class="step">
+    <ul>
+      <li>เมนู <span class="btn">📊 Dashboard</span> → <b>🎛 ศูนย์ควบคุม</b> เห็นครบในหน้าเดียว</li>
+      <li>การ์ด <b>ผลิตรวม / FG(ดี) / ม้วนกรอ / เศษรวม</b> + แตกรายละเอียดได้</li>
+      <li>การ์ด <b>🔧 ม้วนกรอ</b> → กดบรรทัด <b>"▼ ยังไม่จัดการ"</b> เพื่อเช็คม้วนตกค้างที่ต้องเคลียร์</li>
+    </ul>
+  </div>
+
+  <h2><span class="num">9</span> ปัญหาที่พบบ่อย</h2>
+  <table>
+    <tr><th>อาการ</th><th>ทำยังไง</th></tr>
+    <tr><td>ม้วนกรอไม่ไปถึงแผนกกรอ</td><td>เช็คว่า <b>โอนเข้าคลัง</b> แล้วหรือยัง (ข้อ 6)</td></tr>
+    <tr><td>ตัวเลขชั่งไม่นิ่ง บันทึกไม่ได้</td><td>รอจนตัวเลขนิ่ง (stable) ก่อนกดบันทึก</td></tr>
+    <tr><td>เน็ตหลุดตอนชั่ง</td><td>ระบบเก็บคิวออฟไลน์ให้ พอเน็ตกลับมาจะส่งเอง</td></tr>
+    <tr><td>มี badge แดงบนเมนู</td><td>มีม้วนรอพิจารณา/NC → กดเข้าไปเคลียร์</td></tr>
+    <tr><td>เลือกแผนกผิด</td><td>กดชื่อแผนกมุมซ้ายบน → เปลี่ยน</td></tr>
+  </table>
+
+  <div class="tip" style="margin-top:24px;text-align:center">
+    📌 <b>จำ 3 ข้อหลัก:</b> ① ชั่งให้ตรงประเภท (ดี/กรอ/เศษ) &nbsp;② ใส่เหตุผลม้วนกรอทุกครั้ง &nbsp;③ อย่าลืมโอนเข้าคลัง
+  </div>
+
+  <p style="text-align:center;color:#94a3b8;font-size:12px;margin-top:20px">
+    คู่มือนี้สำหรับแผนกเป่า · ปรับปรุงล่าสุด พ.ค. 2569 · กด Ctrl+P เพื่อพิมพ์
+  </p>
+
+</div>
+</body>
+</html>

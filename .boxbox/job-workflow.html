@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8"/>
+<title>BWP — จำลอง 1 งานผลิต</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700;800;900&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#05070f;font-family:'Sarabun',sans-serif;color:#fff;min-height:100vh;overflow-x:auto;overflow-y:auto}
+
+/* ── page layout ── */
+.page{min-width:1800px;padding:60px 60px 80px;position:relative}
+
+/* ── title ── */
+.page-title{
+  text-align:center;margin-bottom:48px;
+}
+.page-title h1{font-size:22px;font-weight:900;color:#fff;margin-bottom:4px}
+.page-title p{font-size:13px;color:#475569}
+.job-badge{
+  display:inline-flex;align-items:center;gap:20px;
+  background:#0f172a;border:1px solid #1e293b;border-radius:14px;
+  padding:10px 24px;margin-top:12px;font-size:12px;
+}
+.job-badge .jb{color:#64748b}
+.job-badge .jv{font-weight:700;color:#e2e8f0}
+
+/* ── timeline spine ── */
+.timeline{
+  position:relative;
+  display:flex;align-items:flex-start;gap:0;
+}
+.spine{
+  position:absolute;top:72px;left:0;right:0;height:3px;
+  background:linear-gradient(90deg,#1e293b,#334155 20%,#4f6ef760 50%,#334155 80%,#1e293b);
+  z-index:0;
+}
+
+/* ── step column ── */
+.step{
+  position:relative;z-index:1;
+  display:flex;flex-direction:column;align-items:center;
+  min-width:200px;flex:1;
+}
+
+/* ── step dot ── */
+.dot{
+  width:20px;height:20px;border-radius:50%;border:3px solid;
+  background:#05070f;margin-top:62px;flex-shrink:0;position:relative;z-index:2;
+}
+
+/* ── step card ── */
+.step-card{
+  width:100%;border-radius:18px;border:2px solid;
+  padding:14px 16px;margin-top:16px;
+  background:#0a0f1c;
+  transition:transform .15s;
+}
+.step-card:hover{transform:translateY(-3px)}
+
+.step-num{
+  font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;
+  margin-bottom:5px;opacity:.7;
+}
+.step-icon{font-size:22px;margin-bottom:4px}
+.step-title{font-size:13px;font-weight:800;color:#fff;margin-bottom:2px}
+.step-sub{font-size:10.5px;color:#64748b;line-height:1.5;margin-bottom:8px}
+
+/* ── details inside card ── */
+.detail-row{
+  display:flex;justify-content:space-between;align-items:baseline;
+  padding:3px 0;border-bottom:1px solid #ffffff08;font-size:10.5px;
+}
+.detail-row:last-child{border-bottom:none}
+.dk{color:#475569}
+.dv{font-weight:700;color:#e2e8f0;text-align:right}
+
+/* ── outcome branches ── */
+.branches{
+  display:flex;flex-direction:column;gap:10px;margin-top:16px;width:100%;
+}
+.branch{
+  border-radius:14px;border:1.5px solid;padding:12px 14px;
+  background:#07090f;
+}
+.branch-tag{
+  font-size:9px;font-weight:800;letter-spacing:1px;text-transform:uppercase;
+  margin-bottom:5px;
+}
+.branch-title{font-size:12px;font-weight:800;margin-bottom:4px}
+.branch-sub{font-size:10px;color:#64748b;line-height:1.5}
+.roll-list{margin-top:6px;display:flex;flex-direction:column;gap:2px}
+.roll-item{
+  display:flex;justify-content:space-between;align-items:center;
+  font-size:10px;padding:3px 0;border-bottom:1px solid #ffffff06;
+}
+.roll-item:last-child{border:none}
+.roll-no{font-weight:700;font-size:11px}
+.roll-kg{font-weight:800}
+
+/* ── result summary ── */
+.result-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;
+}
+.result-box{
+  border-radius:10px;padding:8px 10px;text-align:center;
+  background:#0f172a;border:1px solid #1e293b;
+}
+.result-box .rv{font-size:18px;font-weight:900;line-height:1}
+.result-box .rk{font-size:9px;color:#64748b;margin-top:2px}
+
+/* ── arrow between steps ── */
+.step-arrow{
+  width:48px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  margin-top:62px;position:relative;z-index:2;
+}
+.step-arrow svg{opacity:.5}
+
+/* ── yield bar ── */
+.yield-bar{height:8px;border-radius:4px;background:#1e293b;overflow:hidden;margin-top:6px}
+.yield-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,#22c55e,#16a34a)}
+
+/* ── legend at bottom ── */
+.legend{
+  display:flex;gap:20px;justify-content:center;margin-top:40px;flex-wrap:wrap;
+}
+.legend-item{
+  display:flex;align-items:center;gap:6px;font-size:11px;color:#64748b;
+}
+.legend-dot{width:10px;height:10px;border-radius:50%}
+
+/* ── step colors ── */
+.c-start{border-color:#6366f1;} .c-start .dot{border-color:#6366f1;} .c-start .step-num{color:#818cf8}
+.c-machine{border-color:#8b5cf6;} .c-machine .dot{border-color:#8b5cf6;} .c-machine .step-num{color:#a78bfa}
+.c-weigh{border-color:#a855f7;} .c-weigh .dot{border-color:#a855f7;} .c-weigh .step-num{color:#c084fc}
+.c-good{border-color:#22c55e;} .c-bad{border-color:#f97316;} .c-scrap{border-color:#f59e0b;}
+.c-label{border-color:#ec4899;} .c-label .dot{border-color:#ec4899;} .c-label .step-num{color:#f472b6}
+.c-transfer{border-color:#06b6d4;} .c-transfer .dot{border-color:#06b6d4;} .c-transfer .step-num{color:#22d3ee}
+.c-report{border-color:#f59e0b;} .c-report .dot{border-color:#f59e0b;} .c-report .step-num{color:#fbbf24}
+.c-close{border-color:#10b981;} .c-close .dot{border-color:#10b981;} .c-close .step-num{color:#34d399}
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- ── Page Title ── -->
+<div class="page-title">
+  <h1>🏭 จำลอง 1 งานผลิต — ครบทุกขั้นตอน</h1>
+  <p>ตัวอย่างงานผลิตจริง ตั้งแต่เปิดงาน → ชั่งม้วน → พิมพ์ label → โอนคลัง → ปิดงาน</p>
+  <div class="job-badge">
+    <span><span class="jb">เครื่อง </span><span class="jv">BL01</span></span>
+    <span><span class="jb">สินค้า </span><span class="jv">Plastic Shrink Film 36.9mm×35mc</span></span>
+    <span><span class="jb">ลูกค้า </span><span class="jv">บ.เอช แพคแคจจิ้ง จำกัด</span></span>
+    <span><span class="jb">WO </span><span class="jv">WO-680101</span></span>
+    <span><span class="jb">SO </span><span class="jv">SO-so001</span></span>
+    <span><span class="jb">เป้า </span><span class="jv" style="color:#4ade80">500 Kgs.</span></span>
+  </div>
+</div>
+
+<!-- ── Timeline ── -->
+<div class="timeline">
+<div class="spine"></div>
+
+<!-- ════════════ STEP 1: เลือกแผนก ════════════ -->
+<div class="step">
+  <div class="dot" style="border-color:#6366f1;background:#1e1b4b"></div>
+  <div class="step-card" style="border-color:#6366f150;background:linear-gradient(135deg,#0d0d1f,#0f0f2a)">
+    <div class="step-num" style="color:#818cf8">ขั้นที่ 1</div>
+    <div class="step-icon">🔐</div>
+    <div class="step-title">เลือกแผนก + PIN</div>
+    <div class="step-sub">เปิดแอป เลือกแผนก กรอก PIN เพื่อปลดล็อก</div>
+    <div class="detail-row"><span class="dk">แผนก</span><span class="dv" style="color:#818cf8">🌬️ ผลิต(เป่า)</span></div>
+    <div class="detail-row"><span class="dk">PIN</span><span class="dv">●●●●</span></div>
+    <div class="detail-row"><span class="dk">สถานะ</span><span class="dv" style="color:#4ade80">✓ ผ่าน</span></div>
+  </div>
+</div>
+
+<div class="step-arrow"><svg width="28" height="16"><path d="M0 8 L20 8 M14 2 L22 8 L14 14" stroke="#4f6ef7" stroke-width="2" fill="none"/></svg></div>
+
+<!-- ════════════ STEP 2: ตั้งค่าเครื่อง ════════════ -->
+<div class="step" style="min-width:220px">
+  <div class="dot" style="border-color:#8b5cf6;background:#2e1065"></div>
+  <div class="step-card" style="border-color:#8b5cf650;background:linear-gradient(135deg,#0d0a1f,#110d2a)">
+    <div class="step-num" style="color:#a78bfa">ขั้นที่ 2</div>
+    <div class="step-icon">⚙️</div>
+    <div class="step-title">ตั้งค่าเครื่อง BL01</div>
+    <div class="step-sub">กรอกข้อมูลงานใน QuickEdit</div>
+    <div class="detail-row"><span class="dk">Mat Code</span><span class="dv" style="font-size:9px">FILM-36935</span></div>
+    <div class="detail-row"><span class="dk">Lot No</span><span class="dv" style="font-size:9px">68BL010246</span></div>
+    <div class="detail-row"><span class="dk">Core Weight</span><span class="dv">1.25 Kgs.</span></div>
+    <div class="detail-row"><span class="dk">Decimal</span><span class="dv">2 ตำแหน่ง</span></div>
+    <div class="detail-row"><span class="dk">Inspector</span><span class="dv">สมชาย</span></div>
+    <div class="detail-row"><span class="dk">เป้าหมาย</span><span class="dv" style="color:#4ade80">500 Kgs.</span></div>
+  </div>
+</div>
+
+<div class="step-arrow"><svg width="28" height="16"><path d="M0 8 L20 8 M14 2 L22 8 L14 14" stroke="#4f6ef7" stroke-width="2" fill="none"/></svg></div>
+
+<!-- ════════════ STEP 3: ชั่งม้วน ════════════ -->
+<div class="step" style="min-width:240px">
+  <div class="dot" style="border-color:#a855f7;background:#4a1d96"></div>
+  <div class="step-card" style="border-color:#a855f750;background:linear-gradient(135deg,#0f0a1f,#130d2a)">
+    <div class="step-num" style="color:#c084fc">ขั้นที่ 3</div>
+    <div class="step-icon">⚖️</div>
+    <div class="step-title">ชั่งน้ำหนัก — 23 ม้วน</div>
+    <div class="step-sub">แต่ละม้วนเลือกประเภท → กด Save → พิมพ์ label ทันที</div>
+
+    <!-- 3 branch types -->
+    <div class="branches">
+
+      <!-- ม้วนดี -->
+      <div class="branch" style="border-color:#22c55e50;background:#052e1610">
+        <div class="branch-tag" style="color:#22c55e">✅ ม้วนดี — 18 ม้วน</div>
+        <div class="branch-title" style="color:#4ade80">Gross − Core = Net</div>
+        <div class="branch-sub">ชั่ง Gross → ลบ Core 1.25 → ได้ Net Weight<br>บันทึก → พิมพ์ label ยาว อัตโนมัติ</div>
+        <div class="roll-list">
+          <div class="roll-item">
+            <span class="roll-no" style="color:#4ade80">Roll 1</span>
+            <span style="color:#64748b;font-size:9px">25.43 − 1.25</span>
+            <span class="roll-kg" style="color:#4ade80">= 24.18 Kgs.</span>
+          </div>
+          <div class="roll-item">
+            <span class="roll-no" style="color:#4ade80">Roll 2</span>
+            <span style="color:#64748b;font-size:9px">24.94 − 1.25</span>
+            <span class="roll-kg" style="color:#4ade80">= 23.69 Kgs.</span>
+          </div>
+          <div class="roll-item">
+            <span class="roll-no" style="color:#4ade80">Roll 3</span>
+            <span style="color:#64748b;font-size:9px">23.14 − 1.25</span>
+            <span class="roll-kg" style="color:#4ade80">= 21.89 Kgs.</span>
+          </div>
+          <div class="roll-item" style="opacity:.5">
+            <span style="color:#334155;font-size:9px">... Roll 4–18 ...</span>
+            <span style="color:#334155;font-size:9px">ประมาณ 23–25 Kgs.</span>
+          </div>
+          <div class="roll-item" style="border-top:1px solid #22c55e20;margin-top:2px;padding-top:4px">
+            <span style="color:#64748b;font-size:9px">รวม 18 ม้วน</span>
+            <span class="roll-kg" style="color:#4ade80">432.60 Kgs.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ม้วนกรอ -->
+      <div class="branch" style="border-color:#f9731650;background:#43100210">
+        <div class="branch-tag" style="color:#f97316">🔁 ม้วนกรอ — 3 ม้วน</div>
+        <div class="branch-title" style="color:#fb923c">ม้วนที่ไม่ผ่านมาตรฐาน</div>
+        <div class="branch-sub">ต้องกรอกเหตุผล → บันทึก → พิมพ์ label สีส้ม<br>ส่งเข้า Rework Inbox แผนกกรอ</div>
+        <div class="roll-list">
+          <div class="roll-item">
+            <span class="roll-no" style="color:#fb923c">กรอ 1</span>
+            <span style="color:#64748b;font-size:9px">เหตุผล: สีไม่สม่ำเสมอ</span>
+            <span class="roll-kg" style="color:#fb923c">22.80 Kgs.</span>
+          </div>
+          <div class="roll-item">
+            <span class="roll-no" style="color:#fb923c">กรอ 2</span>
+            <span style="color:#64748b;font-size:9px">เหตุผล: ขนาดผิดพลาด</span>
+            <span class="roll-kg" style="color:#fb923c">24.10 Kgs.</span>
+          </div>
+          <div class="roll-item">
+            <span class="roll-no" style="color:#fb923c">กรอ 3</span>
+            <span style="color:#64748b;font-size:9px">เหตุผล: มีรอยขีดข่วน</span>
+            <span class="roll-kg" style="color:#fb923c">23.50 Kgs.</span>
+          </div>
+          <div class="roll-item" style="border-top:1px solid #f9731620;margin-top:2px;padding-top:4px">
+            <span style="color:#64748b;font-size:9px">รวม 3 ม้วน</span>
+            <span class="roll-kg" style="color:#fb923c">70.40 Kgs.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- เศษ -->
+      <div class="branch" style="border-color:#f59e0b50;background:#45160210">
+        <div class="branch-tag" style="color:#f59e0b">🗑 เศษเสีย — 2 ถุง</div>
+        <div class="branch-title" style="color:#fbbf24">ใช้ Gross ทั้งหมด (ไม่หักแกน)</div>
+        <div class="branch-sub">เลือกประเภทเศษ → ระบุเหตุผล → บันทึก<br>ไม่นับเป็นม้วน ไม่มีเลขม้วน</div>
+        <div class="roll-list">
+          <div class="roll-item">
+            <span style="color:#fbbf24;font-size:10px">เศษใส</span>
+            <span style="color:#64748b;font-size:9px">ฟิล์มเสียปลาย Lot</span>
+            <span class="roll-kg" style="color:#fbbf24">6.30 Kgs.</span>
+          </div>
+          <div class="roll-item">
+            <span style="color:#c084fc;font-size:10px">เศษสี</span>
+            <span style="color:#64748b;font-size:9px">ตอนเปลี่ยนสี</span>
+            <span class="roll-kg" style="color:#c084fc">5.20 Kgs.</span>
+          </div>
+          <div class="roll-item" style="border-top:1px solid #f59e0b20;margin-top:2px;padding-top:4px">
+            <span style="color:#64748b;font-size:9px">รวมเศษ 2 ถุง</span>
+            <span class="roll-kg" style="color:#fbbf24">11.50 Kgs.</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="step-arrow"><svg width="28" height="16"><path d="M0 8 L20 8 M14 2 L22 8 L14 14" stroke="#4f6ef7" stroke-width="2" fill="none"/></svg></div>
+
+<!-- ════════════ STEP 4: พิมพ์ Label ════════════ -->
+<div class="step" style="min-width:210px">
+  <div class="dot" style="border-color:#ec4899;background:#831843"></div>
+  <div class="step-card" style="border-color:#ec489950;background:linear-gradient(135deg,#120615,#1a0820)">
+    <div class="step-num" style="color:#f472b6">ขั้นที่ 4</div>
+    <div class="step-icon">🖨️</div>
+    <div class="step-title">พิมพ์ Label อัตโนมัติ</div>
+    <div class="step-sub">ทุกครั้งที่กด Save ระบบเปิดหน้าต่างพิมพ์ทันที</div>
+
+    <div class="branches">
+      <div class="branch" style="border-color:#ec489960;background:#4a00201a">
+        <div class="branch-tag" style="color:#f472b6">📄 ม้วนดี — ใบยาว 165×70mm</div>
+        <div class="branch-sub">ชื่อสินค้า · Mat Code · Lot No · Roll No<br>Gross / Net Weight · QR Code · Barcode<br>ผู้ตรวจสอบ · วันที่ผลิต</div>
+        <div style="margin-top:8px;background:#0a0510;border-radius:8px;padding:8px;border:1px solid #6b21a840">
+          <div style="font-size:9px;color:#475569;margin-bottom:4px">ตัวอย่าง label</div>
+          <div style="font-size:9.5px;color:#e2e8f0;font-weight:700;border-bottom:1px solid #1e293b;padding-bottom:3px;text-align:center">บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด</div>
+          <div style="display:flex;justify-content:space-between;font-size:8px;color:#94a3b8;padding:2px 0">
+            <span>Mat: FILM-36935</span><span>Roll: <b style="color:#fff">3</b></span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding-top:3px">
+            <div>
+              <div style="font-size:8px;color:#64748b">Net Weight</div>
+              <div style="font-size:20px;font-weight:900;color:#4f6ef7;line-height:1">21.89</div>
+              <div style="font-size:8px;color:#94a3b8">Kgs.</div>
+            </div>
+            <div style="width:28px;height:28px;background:#fff;border-radius:4px;display:flex;align-items:center;justify-content:center">
+              <div style="width:20px;height:20px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px">
+                <div style="background:#000;border-radius:1px"></div><div style="background:#000;border-radius:1px"></div><div style="background:#000;border-radius:1px"></div>
+                <div style="background:#000;border-radius:1px"></div><div style="background:#fff;border-radius:1px"></div><div style="background:#000;border-radius:1px"></div>
+                <div style="background:#000;border-radius:1px"></div><div style="background:#000;border-radius:1px"></div><div style="background:#000;border-radius:1px"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="branch" style="border-color:#f9731650;background:#43100210">
+        <div class="branch-tag" style="color:#fb923c">🏷️ ม้วนกรอ — label สีส้ม [ม้วนกรอ]</div>
+        <div class="branch-sub">เหมือน label ปกติ แต่มีป้าย [ม้วนกรอ]<br>เพื่อแยกแยะตอนส่งแผนกกรอ</div>
+      </div>
+
+      <div class="branch" style="border-color:#f59e0b50;background:#45160210">
+        <div class="branch-tag" style="color:#fbbf24">🏷️ เศษ — label ถุงเศษ</div>
+        <div class="branch-sub">ป้าย [เศษใส] / [เศษสี] / [เศษก้อน]<br>ไม่มีเลข Roll ระบุน้ำหนักรวมถุง</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="step-arrow"><svg width="28" height="16"><path d="M0 8 L20 8 M14 2 L22 8 L14 14" stroke="#4f6ef7" stroke-width="2" fill="none"/></svg></div>
+
+<!-- ════════════ STEP 5: Rework Inbox ════════════ -->
+<div class="step" style="min-width:195px">
+  <div class="dot" style="border-color:#f97316;background:#7c2d12"></div>
+  <div class="step-card" style="border-color:#f9731650;background:linear-gradient(135deg,#110600,#1a0c00)">
+    <div class="step-num" style="color:#fb923c">ขั้นที่ 5</div>
+    <div class="step-icon">🔁</div>
+    <div class="step-title">Rework Inbox</div>
+    <div class="step-sub">ม้วนกรอทั้ง 3 ม้วน<br>เข้า Inbox แผนกกรอ รอดำเนินการ</div>
+    <div class="branches">
+      <div class="branch" style="border-color:#f9731650;background:#43100215">
+        <div class="branch-tag" style="color:#fb923c">📥 รอกรอ 3 ม้วน</div>
+        <div class="roll-list">
+          <div class="roll-item">
+            <span style="color:#fb923c;font-size:10px">กรอ 1</span>
+            <span style="color:#64748b;font-size:9px">BL01 · 22.80 Kgs.</span>
+          </div>
+          <div class="roll-item">
+            <span style="color:#fb923c;font-size:10px">กรอ 2</span>
+            <span style="color:#64748b;font-size:9px">BL01 · 24.10 Kgs.</span>
+          </div>
+          <div class="roll-item">
+            <span style="color:#fb923c;font-size:10px">กรอ 3</span>
+            <span style="color:#64748b;font-size:9px">BL01 · 23.50 Kgs.</span>
+          </div>
+        </div>
+      </div>
+      <div class="branch" style="border-color:#22c55e50;background:#05160a15">
+        <div class="branch-tag" style="color:#4ade80">✅ แผนก S01 รับงาน</div>
+        <div class="branch-sub" style="font-size:9.5px">กรอม้วนใหม่ → ชั่งใหม่ → บันทึกเป็น ม้วนดี section=rewind</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="step-arrow"><svg width="28" height="16"><path d="M0 8 L20 8 M14 2 L22 8 L14 14" stroke="#4f6ef7" stroke-width="2" fill="none"/></svg></div>
+
+<!-- ════════════ STEP 6: โอนเข้าคลัง ════════════ -->
+<div class="step" style="min-width:195px">
+  <div class="dot" style="border-color:#06b6d4;background:#164e63"></div>
+  <div class="step-card" style="border-color:#06b6d450;background:linear-gradient(135deg,#020c10,#031218)">
+    <div class="step-num" style="color:#22d3ee">ขั้นที่ 6</div>
+    <div class="step-icon">📦</div>
+    <div class="step-title">โอนเข้าคลัง</div>
+    <div class="step-sub">เลือกม้วนดีทั้งหมด<br>กด "โอนเข้าคลัง" ยืนยัน batch</div>
+    <div class="branches">
+      <div class="branch" style="border-color:#06b6d450;background:#031a2015">
+        <div class="branch-tag" style="color:#22d3ee">📤 โอน 18 ม้วน</div>
+        <div class="roll-list">
+          <div class="roll-item">
+            <span style="color:#22d3ee;font-size:10px">Roll 1–18</span>
+            <span class="roll-kg" style="color:#22d3ee">432.60 Kgs.</span>
+          </div>
+          <div class="roll-item">
+            <span style="color:#64748b;font-size:9px">สถานะ transferred</span>
+            <span style="color:#4ade80;font-size:10px">✓ โอนแล้ว</span>
+          </div>
+        </div>
+      </div>
+      <div class="branch" style="border-color:#22c55e50;background:#05160a15">
+        <div class="branch-tag" style="color:#4ade80">🏭 คลังสินค้า</div>
+        <div class="branch-sub" style="font-size:9.5px">สต็อกเพิ่ม 432.60 Kgs.<br>ค้นหาด้วย QR/Barcode ได้ทันที</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="step-arrow"><svg width="28" height="16"><path d="M0 8 L20 8 M14 2 L22 8 L14 14" stroke="#4f6ef7" stroke-width="2" fill="none"/></svg></div>
+
+<!-- ════════════ STEP 7: ปิดงาน ════════════ -->
+<div class="step" style="min-width:215px">
+  <div class="dot" style="border-color:#10b981;background:#065f46"></div>
+  <div class="step-card" style="border-color:#10b98150;background:linear-gradient(135deg,#020d0a,#031510)">
+    <div class="step-num" style="color:#34d399">ขั้นที่ 7</div>
+    <div class="step-icon">🏁</div>
+    <div class="step-title">ปิดงาน</div>
+    <div class="step-sub">กดปุ่ม "ปิดงาน" ระบบพิมพ์<br>สรุปงานและล้างข้อมูลเครื่อง</div>
+    <div class="branches">
+      <div class="branch" style="border-color:#10b98160;background:#031a1015">
+        <div class="branch-tag" style="color:#34d399">📊 สรุปผลงาน WO-680101</div>
+        <div class="roll-list">
+          <div class="roll-item">
+            <span style="color:#64748b">ม้วนดี</span>
+            <span style="color:#4ade80;font-weight:700">432.60 Kgs. (18 ม้วน)</span>
+          </div>
+          <div class="roll-item">
+            <span style="color:#64748b">ม้วนกรอ</span>
+            <span style="color:#fb923c;font-weight:700">70.40 Kgs. (3 ม้วน)</span>
+          </div>
+          <div class="roll-item">
+            <span style="color:#64748b">เศษเสีย</span>
+            <span style="color:#fbbf24;font-weight:700">11.50 Kgs. (2 ถุง)</span>
+          </div>
+          <div class="roll-item" style="border-top:1px solid #10b98130;margin-top:3px;padding-top:5px">
+            <span style="color:#94a3b8;font-weight:700">รวมผลิต</span>
+            <span style="color:#fff;font-weight:900">514.50 Kgs.</span>
+          </div>
+        </div>
+
+        <!-- Yield bar -->
+        <div style="margin-top:10px">
+          <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:4px">
+            <span style="color:#64748b">% Yield (ของดี)</span>
+            <span style="color:#4ade80;font-weight:800">84.1%</span>
+          </div>
+          <div class="yield-bar">
+            <div class="yield-fill" style="width:84.1%"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:9px;margin-top:3px;color:#334155">
+            <span>432.60 ÷ 514.50</span>
+            <span>เป้า 500 Kgs. ✓ ครบ</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="branch" style="border-color:#6366f150;background:#0d0d1f15">
+        <div class="branch-tag" style="color:#818cf8">🖨️ พิมพ์ใบสรุปงาน</div>
+        <div class="branch-sub" style="font-size:9.5px">พิมพ์รายงานสรุป พร้อมกราฟผลผลิต ส่งหัวหน้า</div>
+      </div>
+      <div class="branch" style="border-color:#f59e0b50;background:#45160210">
+        <div class="branch-tag" style="color:#fbbf24">🧹 ล้างข้อมูลเครื่อง BL01</div>
+        <div class="branch-sub" style="font-size:9.5px">เครื่องกลับสู่สถานะ "ว่าง" รอรับงานใหม่</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="step-arrow"><svg width="28" height="16"><path d="M0 8 L20 8 M14 2 L22 8 L14 14" stroke="#4f6ef7" stroke-width="2" fill="none"/></svg></div>
+
+<!-- ════════════ STEP 8: Dashboard ════════════ -->
+<div class="step" style="min-width:210px">
+  <div class="dot" style="border-color:#f59e0b;background:#78350f"></div>
+  <div class="step-card" style="border-color:#f59e0b50;background:linear-gradient(135deg,#120900,#1c0e00)">
+    <div class="step-num" style="color:#fbbf24">ขั้นที่ 8</div>
+    <div class="step-icon">📊</div>
+    <div class="step-title">Dashboard & รายงาน</div>
+    <div class="step-sub">ดูผลผลิต วิเคราะห์ข้อมูล ย้อนประวัติ</div>
+    <div class="branches">
+      <div class="branch" style="border-color:#f59e0b60;background:#45160215">
+        <div class="branch-tag" style="color:#fbbf24">📈 Dashboard ภาพรวม</div>
+        <div class="roll-list">
+          <div class="roll-item"><span style="color:#64748b;font-size:9px">กราฟผลผลิตวันนี้</span><span style="color:#fbbf24;font-size:10px">432.60 Kgs.</span></div>
+          <div class="roll-item"><span style="color:#64748b;font-size:9px">กราฟตาม SO</span><span style="color:#fbbf24;font-size:10px">SO-so001</span></div>
+          <div class="roll-item"><span style="color:#64748b;font-size:9px">% Yield</span><span style="color:#4ade80;font-size:10px;font-weight:700">84.1%</span></div>
+          <div class="roll-item"><span style="color:#64748b;font-size:9px">ม้วนกรอ</span><span style="color:#fb923c;font-size:10px">70.40 Kgs.</span></div>
+        </div>
+      </div>
+      <div class="branch" style="border-color:#06b6d450;background:#03121815">
+        <div class="branch-tag" style="color:#22d3ee">📋 ประวัติผลิต</div>
+        <div class="branch-sub" style="font-size:9.5px">ดูม้วนทุกใบ ย้อนหลัง<br>ค้นหาตาม Lot/เครื่อง/วันที่<br>ลบม้วนผิดพร้อมบันทึก log</div>
+      </div>
+      <div class="branch" style="border-color:#a855f750;background:#0f0a1f15">
+        <div class="branch-tag" style="color:#c084fc">🔍 Roll Detail (QR)</div>
+        <div class="branch-sub" style="font-size:9.5px">สแกน QR บน label → เห็นข้อมูลม้วนทันที ทั้งน้ำหนัก วันผลิต ผู้ตรวจ</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /timeline -->
+
+<!-- ── Legend ── -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#6366f1"></div>เลือกแผนก/PIN</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#8b5cf6"></div>ตั้งค่าเครื่อง</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#a855f7"></div>ชั่งน้ำหนัก</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div>ม้วนดี (432.60 Kgs.)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f97316"></div>ม้วนกรอ (70.40 Kgs.)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div>เศษเสีย (11.50 Kgs.)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#ec4899"></div>พิมพ์ Label</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#06b6d4"></div>โอนคลัง</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#10b981"></div>ปิดงาน / สรุป</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div>Dashboard</div>
+</div>
+
+<!-- ── Summary bar ── -->
+<div style="max-width:900px;margin:32px auto 0;background:#0a0f1c;border:1.5px solid #1e293b;border-radius:20px;padding:20px 28px">
+  <div style="font-size:12px;font-weight:700;color:#475569;letter-spacing:1px;text-transform:uppercase;margin-bottom:14px">📦 สรุปผลงานทั้งหมด — WO-680101</div>
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;text-align:center">
+    <div style="background:#052e16;border:1px solid #16a34a40;border-radius:12px;padding:12px">
+      <div style="font-size:20px;font-weight:900;color:#4ade80">432.60</div>
+      <div style="font-size:9px;color:#64748b;margin-top:2px">ม้วนดี (Kgs.)</div>
+      <div style="font-size:9px;color:#22c55e">18 ม้วน</div>
+    </div>
+    <div style="background:#431002;border:1px solid #f9731640;border-radius:12px;padding:12px">
+      <div style="font-size:20px;font-weight:900;color:#fb923c">70.40</div>
+      <div style="font-size:9px;color:#64748b;margin-top:2px">ม้วนกรอ (Kgs.)</div>
+      <div style="font-size:9px;color:#f97316">3 ม้วน</div>
+    </div>
+    <div style="background:#451602;border:1px solid #f59e0b40;border-radius:12px;padding:12px">
+      <div style="font-size:20px;font-weight:900;color:#fbbf24">11.50</div>
+      <div style="font-size:9px;color:#64748b;margin-top:2px">เศษเสีย (Kgs.)</div>
+      <div style="font-size:9px;color:#f59e0b">2 ถุง</div>
+    </div>
+    <div style="background:#0f172a;border:1px solid #33415550;border-radius:12px;padding:12px">
+      <div style="font-size:20px;font-weight:900;color:#e2e8f0">514.50</div>
+      <div style="font-size:9px;color:#64748b;margin-top:2px">รวมผลิต (Kgs.)</div>
+      <div style="font-size:9px;color:#94a3b8">23 ม้วน</div>
+    </div>
+    <div style="background:#064e3b;border:1px solid #10b98150;border-radius:12px;padding:12px">
+      <div style="font-size:20px;font-weight:900;color:#4ade80">84.1%</div>
+      <div style="font-size:9px;color:#64748b;margin-top:2px">% Yield</div>
+      <div style="font-size:9px;color:#22c55e">✓ เป้า 500 Kgs.</div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /page -->
+</body>
+</html>

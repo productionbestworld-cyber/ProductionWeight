@@ -7,6 +7,7 @@ import { loadProfiles, saveProfiles, fmtSize, convertWidth, type MachineProfile 
 import ReworkJobList from './ReworkJobList'
 import { loadLongLayout, type FieldConfig } from './LabelDesigner'
 import { fetchProducts, type Product } from './Products'
+import { fetchFlag } from './Admin'
 import ReworkInbox from './ReworkInbox'
 
 function fmt(n: number | null | undefined, d: 1|2 = 2) {
@@ -1474,6 +1475,12 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
       })
   }, [initialProfile.machine_no])
   const [gross,        setGross]        = useState(0)
+  const [testRandomEnabled, setTestRandomEnabled] = useState(false)
+
+  // โหลด feature flag "ปุ่มสุ่มค่าทดสอบ" จาก Admin → app_settings
+  useEffect(() => {
+    fetchFlag('enable_test_random').then(setTestRandomEnabled)
+  }, [])
   // ── Scale Bridge (WebSocket) ─────────────────────────────────────────
   const [serialConnected, setSerialConnected] = useState(false)
   const [serialStable,    setSerialStable]    = useState(false)
@@ -2420,14 +2427,16 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
               </div>
             )}
 
-            <button onClick={readScale}
-              className={`w-full py-1.5 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors ${
-                simMode
-                  ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30'
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-500 hover:text-white'
-              }`}>
-              <RefreshCw size={11}/> {simMode ? '🎲 จำลองอยู่ — กดสุ่มใหม่' : 'สุ่มค่าทดสอบ'}
-            </button>
+            {testRandomEnabled && (
+              <button onClick={readScale}
+                className={`w-full py-1.5 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors ${
+                  simMode
+                    ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30'
+                    : 'bg-slate-800 hover:bg-slate-700 text-slate-500 hover:text-white'
+                }`}>
+                <RefreshCw size={11}/> {simMode ? '🎲 จำลองอยู่ — กดสุ่มใหม่' : 'สุ่มค่าทดสอบ'}
+              </button>
+            )}
           </div>
 
           {/* Roll No + Save */}

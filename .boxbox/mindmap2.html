@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8"/>
+<title>BWP — Mindmap ก้างปลา</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800;900&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;background:#060810;font-family:'Sarabun',sans-serif;overflow:hidden}
+
+#wrap{width:100vw;height:100vh;cursor:grab;user-select:none}
+#wrap.dragging{cursor:grabbing}
+svg{width:100%;height:100%}
+
+/* node foreignObject */
+.node{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;border-radius:14px;padding:8px 12px;
+  line-height:1.3;white-space:nowrap;
+}
+.node-center{
+  border-radius:20px;padding:14px 20px;
+  background:linear-gradient(135deg,#1e3a8a,#4c1d95);
+  border:2.5px solid #818cf8;
+  box-shadow:0 0 40px #6366f160;
+}
+.node-center .icon{font-size:28px;margin-bottom:4px}
+.node-center .label{font-size:15px;font-weight:900;color:#fff}
+.node-center .sub{font-size:10px;color:#a5b4fc;margin-top:2px}
+
+.node-main{
+  border-radius:14px;padding:9px 14px;
+  border:2px solid;
+}
+.node-main .icon{font-size:18px;margin-bottom:2px}
+.node-main .label{font-size:12px;font-weight:800;color:#fff}
+
+.node-leaf{
+  border-radius:10px;padding:6px 11px;
+  border:1.5px solid;
+}
+.node-leaf .label{font-size:10.5px;font-weight:600;color:#fff}
+.node-leaf .sub{font-size:9px;margin-top:1px}
+
+/* tooltip */
+#tooltip{
+  position:fixed;pointer-events:none;z-index:999;
+  background:#1e293b;border:1px solid #334155;
+  border-radius:10px;padding:8px 14px;
+  font-size:12px;color:#e2e8f0;max-width:200px;
+  line-height:1.5;display:none;
+  box-shadow:0 8px 24px #00000080;
+}
+
+/* legend */
+#legend{
+  position:fixed;bottom:20px;left:20px;
+  background:#0f172a;border:1px solid #1e293b;
+  border-radius:12px;padding:12px 16px;
+  font-size:11px;color:#64748b;
+  line-height:1.8;
+}
+#legend b{color:#94a3b8}
+
+/* controls */
+#controls{
+  position:fixed;bottom:20px;right:20px;
+  display:flex;flex-direction:column;gap:6px;
+}
+#controls button{
+  width:36px;height:36px;border-radius:10px;
+  background:#1e293b;border:1px solid #334155;
+  color:#94a3b8;font-size:18px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .15s;
+}
+#controls button:hover{background:#334155;color:#fff}
+
+/* title */
+#title{
+  position:fixed;top:16px;left:50%;transform:translateX(-50%);
+  background:#0f172a;border:1px solid #1e293b;
+  border-radius:999px;padding:6px 20px;
+  font-size:13px;font-weight:700;color:#e2e8f0;
+  pointer-events:none;
+}
+</style>
+</head>
+<body>
+
+<div id="title">🐟 ระบบชั่งน้ำหนักม้วน BWP — Mindmap</div>
+<div id="tooltip"></div>
+<div id="legend">
+  <b>สี = กลุ่มฟังก์ชัน</b><br>
+  🔵 การเข้าระบบ &nbsp; 🟣 การชั่ง<br>
+  🟢 คลัง/โอน &nbsp;&nbsp;&nbsp;&nbsp; 🟡 รายงาน<br>
+  🔴 Admin &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ⚫ ฐานข้อมูล
+</div>
+<div id="controls">
+  <button onclick="zoom(1.2)" title="ซูมเข้า">＋</button>
+  <button onclick="zoom(0.8)" title="ซูมออก">－</button>
+  <button onclick="resetView()" title="รีเซ็ต">⟲</button>
+</div>
+
+<div id="wrap">
+<svg id="svg" viewBox="0 0 1600 900">
+  <defs>
+    <!-- glow filters -->
+    <filter id="glow-blue"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="glow-purple"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <!-- grid bg -->
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0L0 0 0 40" fill="none" stroke="#ffffff06" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <!-- Background grid -->
+  <rect width="1600" height="900" fill="url(#grid)"/>
+
+  <!-- ═══════════════════════════════════════════
+       CONNECTION LINES (drawn first, below nodes)
+  ═══════════════════════════════════════════ -->
+  <g id="lines" stroke-linecap="round" fill="none">
+
+    <!-- CENTER → 1. เลือกแผนก (top-left) -->
+    <path d="M 800,450 C 800,350 580,310 500,280" stroke="#3b82f6" stroke-width="2.5" opacity=".7"/>
+    <!-- 1 → เป่า -->
+    <path d="M 500,280 C 440,260 390,230 350,215" stroke="#3b82f6" stroke-width="1.8" opacity=".5"/>
+    <!-- 1 → พิมพ์ -->
+    <path d="M 500,280 C 440,280 390,268 350,268" stroke="#3b82f6" stroke-width="1.8" opacity=".5"/>
+    <!-- 1 → กรอ -->
+    <path d="M 500,280 C 440,295 390,300 350,310" stroke="#3b82f6" stroke-width="1.8" opacity=".5"/>
+    <!-- เป่า→PIN -->
+    <path d="M 350,215 C 300,205 265,200 235,200" stroke="#3b82f6" stroke-width="1.2" opacity=".35"/>
+    <!-- พิมพ์→PIN -->
+    <path d="M 350,268 C 295,258 265,240 235,240" stroke="#3b82f6" stroke-width="1.2" opacity=".35"/>
+
+    <!-- CENTER → 2. เครื่องจักร (top) -->
+    <path d="M 800,450 C 800,370 800,330 800,295" stroke="#8b5cf6" stroke-width="2.5" opacity=".7"/>
+    <!-- 2 → Machine Profile -->
+    <path d="M 800,295 C 760,265 720,245 685,235" stroke="#8b5cf6" stroke-width="1.8" opacity=".5"/>
+    <!-- 2 → ตั้งค่างาน -->
+    <path d="M 800,295 C 800,265 800,250 800,230" stroke="#8b5cf6" stroke-width="1.8" opacity=".5"/>
+    <!-- 2 → จอดงาน -->
+    <path d="M 800,295 C 840,265 880,245 910,235" stroke="#8b5cf6" stroke-width="1.8" opacity=".5"/>
+    <!-- Machine Profile → label designer -->
+    <path d="M 685,235 C 645,215 620,205 595,200" stroke="#8b5cf6" stroke-width="1.2" opacity=".35"/>
+
+    <!-- CENTER → 3. ชั่งน้ำหนัก (right-top) -->
+    <path d="M 800,450 C 870,390 1000,340 1080,300" stroke="#a855f7" stroke-width="2.5" opacity=".7"/>
+    <!-- 3 → ม้วนดี -->
+    <path d="M 1080,300 C 1120,270 1160,250 1200,238" stroke="#a855f7" stroke-width="1.8" opacity=".5"/>
+    <!-- 3 → ม้วนกรอ -->
+    <path d="M 1080,300 C 1130,290 1170,278 1210,268" stroke="#a855f7" stroke-width="1.8" opacity=".5"/>
+    <!-- 3 → เศษเสีย -->
+    <path d="M 1080,300 C 1130,310 1170,308 1210,302" stroke="#a855f7" stroke-width="1.8" opacity=".5"/>
+    <!-- 3 → Scale Bridge -->
+    <path d="M 1080,300 C 1135,325 1165,330 1210,335" stroke="#a855f7" stroke-width="1.8" opacity=".5"/>
+    <!-- ม้วนดี → บันทึก -->
+    <path d="M 1200,238 C 1250,228 1290,225 1330,222" stroke="#a855f7" stroke-width="1.2" opacity=".35"/>
+    <!-- ม้วนดี → พิมพ์label -->
+    <path d="M 1200,238 C 1250,218 1295,208 1335,200" stroke="#a855f7" stroke-width="1.2" opacity=".35"/>
+
+    <!-- CENTER → 4. Label (far right) -->
+    <path d="M 800,450 C 920,450 1050,450 1140,450" stroke="#ec4899" stroke-width="2.5" opacity=".7"/>
+    <!-- 4 → ใบยาว -->
+    <path d="M 1140,450 C 1190,430 1240,420 1295,412" stroke="#ec4899" stroke-width="1.8" opacity=".5"/>
+    <!-- 4 → ใบสั้น -->
+    <path d="M 1140,450 C 1190,450 1240,450 1295,450" stroke="#ec4899" stroke-width="1.8" opacity=".5"/>
+    <!-- 4 → QR Code -->
+    <path d="M 1140,450 C 1190,468 1240,478 1295,485" stroke="#ec4899" stroke-width="1.8" opacity=".5"/>
+    <!-- QR→ Roll Detail -->
+    <path d="M 1295,485 C 1340,490 1375,490 1415,490" stroke="#ec4899" stroke-width="1.2" opacity=".35"/>
+
+    <!-- CENTER → 5. โอน+คลัง (right-bottom) -->
+    <path d="M 800,450 C 870,510 1000,565 1080,600" stroke="#22c55e" stroke-width="2.5" opacity=".7"/>
+    <!-- 5 → โอนเข้าคลัง -->
+    <path d="M 1080,600 C 1130,580 1170,563 1210,550" stroke="#22c55e" stroke-width="1.8" opacity=".5"/>
+    <!-- 5 → สต็อก -->
+    <path d="M 1080,600 C 1130,600 1170,600 1210,600" stroke="#22c55e" stroke-width="1.8" opacity=".5"/>
+    <!-- 5 → Realtime -->
+    <path d="M 1080,600 C 1130,620 1170,635 1210,645" stroke="#22c55e" stroke-width="1.8" opacity=".5"/>
+    <!-- โอน→ batch -->
+    <path d="M 1210,550 C 1260,538 1300,530 1340,525" stroke="#22c55e" stroke-width="1.2" opacity=".35"/>
+
+    <!-- CENTER → 6. รายงาน (bottom) -->
+    <path d="M 800,450 C 800,540 800,575 800,610" stroke="#f59e0b" stroke-width="2.5" opacity=".7"/>
+    <!-- 6 → Dashboard -->
+    <path d="M 800,610 C 760,640 720,660 685,672" stroke="#f59e0b" stroke-width="1.8" opacity=".5"/>
+    <!-- 6 → SO/WO -->
+    <path d="M 800,610 C 800,640 800,660 800,675" stroke="#f59e0b" stroke-width="1.8" opacity=".5"/>
+    <!-- 6 → ประวัติ -->
+    <path d="M 800,610 C 840,640 880,660 912,672" stroke="#f59e0b" stroke-width="1.8" opacity=".5"/>
+    <!-- Dashboard→กราฟ -->
+    <path d="M 685,672 C 645,688 615,695 585,700" stroke="#f59e0b" stroke-width="1.2" opacity=".35"/>
+    <!-- ประวัติ→ลบม้วน -->
+    <path d="M 912,672 C 950,688 985,695 1015,700" stroke="#f59e0b" stroke-width="1.2" opacity=".35"/>
+
+    <!-- CENTER → 7. Admin (left-bottom) -->
+    <path d="M 800,450 C 730,510 590,560 500,590" stroke="#ef4444" stroke-width="2.5" opacity=".7"/>
+    <!-- 7 → PIN แผนก -->
+    <path d="M 500,590 C 440,572 390,560 348,552" stroke="#ef4444" stroke-width="1.8" opacity=".5"/>
+    <!-- 7 → Deletion Log -->
+    <path d="M 500,590 C 440,595 390,598 348,600" stroke="#ef4444" stroke-width="1.8" opacity=".5"/>
+    <!-- 7 → ตั้งค่า -->
+    <path d="M 500,590 C 440,615 390,625 348,632" stroke="#ef4444" stroke-width="1.8" opacity=".5"/>
+
+    <!-- CENTER → 8. Database (left) -->
+    <path d="M 800,450 C 720,450 600,450 530,450" stroke="#10b981" stroke-width="2.5" opacity=".7"/>
+    <!-- 8 → production_rolls -->
+    <path d="M 530,450 C 490,430 450,416 415,408" stroke="#10b981" stroke-width="1.8" opacity=".5"/>
+    <!-- 8 → machine_profiles -->
+    <path d="M 530,450 C 490,448 450,447 415,447" stroke="#10b981" stroke-width="1.8" opacity=".5"/>
+    <!-- 8 → offline queue -->
+    <path d="M 530,450 C 490,468 450,478 415,485" stroke="#10b981" stroke-width="1.8" opacity=".5"/>
+    <!-- offline→sync -->
+    <path d="M 415,485 C 370,492 335,496 305,498" stroke="#10b981" stroke-width="1.2" opacity=".35"/>
+
+  </g>
+
+  <!-- ═══════════════════════════════════════════
+       NODES
+  ═══════════════════════════════════════════ -->
+  <g id="nodes">
+
+  <!-- ── CENTER ── -->
+  <g class="node-g" data-tip="ระบบหลักของโรงงาน BWP ใช้ชั่งน้ำหนักม้วนพลาสติก บันทึกข้อมูล และจัดการการผลิตครบวงจร">
+    <rect x="718" y="398" width="164" height="104" rx="20" fill="#1e1b4b" stroke="#818cf8" stroke-width="2.5"/>
+    <text x="800" y="432" text-anchor="middle" font-size="26" font-family="Sarabun">⚖️</text>
+    <text x="800" y="455" text-anchor="middle" font-size="13" font-weight="900" fill="white" font-family="Sarabun">ระบบชั่งน้ำหนัก</text>
+    <text x="800" y="472" text-anchor="middle" font-size="11" fill="#a5b4fc" font-family="Sarabun">BWP</text>
+    <text x="800" y="489" text-anchor="middle" font-size="9.5" fill="#6366f1" font-family="Sarabun">React + Supabase</text>
+  </g>
+
+  <!-- ══ BRANCH 1: เลือกแผนก (top-left) ══ -->
+  <g class="node-g" data-tip="ทุกครั้งที่เปิดแอป ต้องเลือกแผนกและใส่ PIN ก่อน เพื่อแยกสิทธิ์การใช้งาน">
+    <rect x="428" y="255" width="144" height="50" rx="13" fill="#1e3a8a" stroke="#3b82f6" stroke-width="2"/>
+    <text x="500" y="276" text-anchor="middle" font-size="14" font-family="Sarabun">🏭</text>
+    <text x="500" y="294" text-anchor="middle" font-size="11.5" font-weight="800" fill="white" font-family="Sarabun">เลือกแผนก + PIN</text>
+  </g>
+  <!-- leaf: เป่า -->
+  <g class="node-g" data-tip="แผนกผลิตเป่าฟิล์มพลาสติก ใช้เครื่อง BL">
+    <rect x="278" y="200" width="90" height="30" rx="9" fill="#1e3a8a88" stroke="#3b82f660" stroke-width="1.5"/>
+    <text x="323" y="219" text-anchor="middle" font-size="11" fill="white" font-family="Sarabun">🌬️ ผลิต(เป่า)</text>
+  </g>
+  <!-- leaf: พิมพ์ -->
+  <g class="node-g" data-tip="แผนกผลิตพิมพ์ฟิล์ม ใช้เครื่อง PM">
+    <rect x="278" y="253" width="90" height="30" rx="9" fill="#4c1d9588" stroke="#8b5cf660" stroke-width="1.5"/>
+    <text x="323" y="272" text-anchor="middle" font-size="11" fill="white" font-family="Sarabun">🖨️ ผลิต(พิมพ์)</text>
+  </g>
+  <!-- leaf: กรอ -->
+  <g class="node-g" data-tip="แผนกกรอ (Rework) ม้วนที่ไม่ผ่านจะถูกส่งมากรอใหม่">
+    <rect x="278" y="295" width="90" height="30" rx="9" fill="#14532d88" stroke="#22c55e60" stroke-width="1.5"/>
+    <text x="323" y="314" text-anchor="middle" font-size="11" fill="white" font-family="Sarabun">🔁 กรอ(Rework)</text>
+  </g>
+  <!-- sub-leaf: PIN -->
+  <g class="node-g" data-tip="แต่ละแผนกมี PIN แยกกัน เปลี่ยนแผนกต้องใส่ PIN ใหม่ทุกครั้ง">
+    <rect x="190" y="185" width="56" height="24" rx="7" fill="#172554" stroke="#1d4ed860" stroke-width="1"/>
+    <text x="218" y="200" text-anchor="middle" font-size="9.5" fill="#93c5fd" font-family="Sarabun">🔒 PIN</text>
+  </g>
+  <g class="node-g" data-tip="PIN แผนกพิมพ์">
+    <rect x="190" y="228" width="56" height="24" rx="7" fill="#2e1065" stroke="#7c3aed60" stroke-width="1"/>
+    <text x="218" y="243" text-anchor="middle" font-size="9.5" fill="#c4b5fd" font-family="Sarabun">🔒 PIN</text>
+  </g>
+
+  <!-- ══ BRANCH 2: เครื่องจักร (top-center) ══ -->
+  <g class="node-g" data-tip="แต่ละเครื่องมี Profile เก็บข้อมูลงาน ลูกค้า สินค้า Lot และเป้าหมายผลิต">
+    <rect x="728" y="265" width="144" height="50" rx="13" fill="#2e1065" stroke="#8b5cf6" stroke-width="2"/>
+    <text x="800" y="286" text-anchor="middle" font-size="14" font-family="Sarabun">⚙️</text>
+    <text x="800" y="304" text-anchor="middle" font-size="11.5" font-weight="800" fill="white" font-family="Sarabun">เลือกเครื่องจักร</text>
+  </g>
+  <!-- leaf: machine profile -->
+  <g class="node-g" data-tip="ตั้งค่าเครื่อง: ลูกค้า, สินค้า, Mat Code, Lot No, ขนาด, น้ำหนักแกน, ผู้ตรวจสอบ, เป้าหมาย">
+    <rect x="598" y="220" width="100" height="30" rx="9" fill="#2e106580" stroke="#8b5cf660" stroke-width="1.5"/>
+    <text x="648" y="239" text-anchor="middle" font-size="10.5" fill="white" font-family="Sarabun">📋 Machine Profile</text>
+  </g>
+  <!-- leaf: ตั้งค่างาน -->
+  <g class="node-g" data-tip="กรอกข้อมูลงาน: WO, SO, วันส่ง, แก้ไขได้ตลอด">
+    <rect x="748" y="215" width="104" height="30" rx="9" fill="#2e106580" stroke="#8b5cf660" stroke-width="1.5"/>
+    <text x="800" y="234" text-anchor="middle" font-size="10.5" fill="white" font-family="Sarabun">📝 ตั้งค่างาน</text>
+  </g>
+  <!-- leaf: จอดงาน -->
+  <g class="node-g" data-tip="จอดงานไว้ชั่วคราวเพื่อแทรกงานด่วน แล้วคืนงานเดิมได้">
+    <rect x="870" y="220" width="90" height="30" rx="9" fill="#2e106580" stroke="#8b5cf660" stroke-width="1.5"/>
+    <text x="915" y="239" text-anchor="middle" font-size="10.5" fill="white" font-family="Sarabun">🅿 จอดงาน</text>
+  </g>
+  <!-- sub: label designer -->
+  <g class="node-g" data-tip="ออกแบบหน้า label ที่พิมพ์ออกมา ลาก-วาง field ต่างๆ ได้">
+    <rect x="536" y="185" width="74" height="24" rx="7" fill="#1e1b4b" stroke="#6366f150" stroke-width="1"/>
+    <text x="573" y="200" text-anchor="middle" font-size="9" fill="#a5b4fc" font-family="Sarabun">✏️ Label Designer</text>
+  </g>
+
+  <!-- ══ BRANCH 3: ชั่งน้ำหนัก (right-top) ══ -->
+  <g class="node-g" data-tip="หัวใจของระบบ — ชั่งน้ำหนักม้วน เลือกประเภท บันทึก และพิมพ์ label ทันที">
+    <rect x="1008" y="270" width="144" height="60" rx="13" fill="#4a1d96" stroke="#a855f7" stroke-width="2"/>
+    <text x="1080" y="294" text-anchor="middle" font-size="14" font-family="Sarabun">⚖️</text>
+    <text x="1080" y="312" text-anchor="middle" font-size="11.5" font-weight="800" fill="white" font-family="Sarabun">ชั่งน้ำหนักม้วน</text>
+    <text x="1080" y="325" text-anchor="middle" font-size="9.5" fill="#d8b4fe" font-family="Sarabun">WeighStation</text>
+  </g>
+  <!-- leaf: ม้วนดี -->
+  <g class="node-g" data-tip="ม้วนพลาสติกที่ผ่านการตรวจสอบ หักน้ำหนักแกนออก ได้ Net Weight">
+    <rect x="1148" y="222" width="88" height="32" rx="9" fill="#4a1d9688" stroke="#a855f760" stroke-width="1.5"/>
+    <text x="1192" y="238" text-anchor="middle" font-size="10.5" fill="white" font-weight="700" font-family="Sarabun">✅ ม้วนดี</text>
+    <text x="1192" y="249" text-anchor="middle" font-size="9" fill="#d8b4fe" font-family="Sarabun">net = gross-core</text>
+  </g>
+  <!-- leaf: ม้วนกรอ -->
+  <g class="node-g" data-tip="ม้วนที่ไม่ผ่าน ต้องกรอใหม่ บันทึกเหตุผล">
+    <rect x="1150" y="258" width="88" height="28" rx="9" fill="#7c2d1288" stroke="#ea580c60" stroke-width="1.5"/>
+    <text x="1194" y="276" text-anchor="middle" font-size="10.5" fill="white" font-weight="700" font-family="Sarabun">🔁 ม้วนกรอ</text>
+  </g>
+  <!-- leaf: เศษเสีย -->
+  <g class="node-g" data-tip="เศษพลาสติก 3 ประเภท: ใส / สี / ก้อน บันทึกแยกประเภท">
+    <rect x="1150" y="288" width="88" height="28" rx="9" fill="#78350f88" stroke="#d9770660" stroke-width="1.5"/>
+    <text x="1194" y="306" text-anchor="middle" font-size="10.5" fill="white" font-weight="700" font-family="Sarabun">🗑 เศษเสีย</text>
+  </g>
+  <!-- leaf: Scale Bridge -->
+  <g class="node-g" data-tip="เชื่อมต่อเครื่องชั่งจริงผ่าน WebSocket bridge ที่ localhost:8080 รับค่าน้ำหนักอัตโนมัติ">
+    <rect x="1150" y="318" width="88" height="28" rx="9" fill="#0c4a6e88" stroke="#0ea5e960" stroke-width="1.5"/>
+    <text x="1194" y="336" text-anchor="middle" font-size="10.5" fill="white" font-family="Sarabun">📡 Scale Bridge</text>
+  </g>
+  <!-- sub: บันทึก -->
+  <g class="node-g" data-tip="บันทึกลง Supabase ทันที หรือ offline queue ถ้าไม่มีเน็ต">
+    <rect x="1282" y="208" width="72" height="24" rx="7" fill="#1e1b4b" stroke="#6366f150" stroke-width="1"/>
+    <text x="1318" y="223" text-anchor="middle" font-size="9" fill="#a5b4fc" font-family="Sarabun">💾 บันทึก DB</text>
+  </g>
+  <!-- sub: พิมพ์label -->
+  <g class="node-g" data-tip="พิมพ์ label อัตโนมัติหลังบันทึก">
+    <rect x="1282" y="186" width="72" height="24" rx="7" fill="#1e1b4b" stroke="#6366f150" stroke-width="1"/>
+    <text x="1318" y="201" text-anchor="middle" font-size="9" fill="#a5b4fc" font-family="Sarabun">🖨️ พิมพ์ label</text>
+  </g>
+
+  <!-- ══ BRANCH 4: Label (far right) ══ -->
+  <g class="node-g" data-tip="ระบบพิมพ์ label อัตโนมัติ มี 2 ขนาด ออกแบบ layout ได้">
+    <rect x="1068" y="425" width="144" height="50" rx="13" fill="#831843" stroke="#ec4899" stroke-width="2"/>
+    <text x="1140" y="447" text-anchor="middle" font-size="14" font-family="Sarabun">🖨️</text>
+    <text x="1140" y="465" text-anchor="middle" font-size="11.5" font-weight="800" fill="white" font-family="Sarabun">ระบบ Label</text>
+  </g>
+  <!-- leaf: ใบยาว -->
+  <g class="node-g" data-tip="ขนาด 165×70 mm แสดงข้อมูลครบ ออกแบบ layout ได้ใน Label Designer">
+    <rect x="1248" y="396" width="90" height="32" rx="9" fill="#83184388" stroke="#ec489960" stroke-width="1.5"/>
+    <text x="1293" y="412" text-anchor="middle" font-size="10.5" fill="white" font-family="Sarabun">📄 ใบยาว</text>
+    <text x="1293" y="424" text-anchor="middle" font-size="9" fill="#fbcfe8" font-family="Sarabun">165×70 mm</text>
+  </g>
+  <!-- leaf: ใบสั้น -->
+  <g class="node-g" data-tip="ขนาด 76×76 mm สำหรับเครื่องพิมพ์ thermal ขนาดเล็ก">
+    <rect x="1248" y="434" width="90" height="32" rx="9" fill="#83184388" stroke="#ec489960" stroke-width="1.5"/>
+    <text x="1293" y="450" text-anchor="middle" font-size="10.5" fill="white" font-family="Sarabun">🏷️ ใบสั้น</text>
+    <text x="1293" y="462" text-anchor="middle" font-size="9" fill="#fbcfe8" font-family="Sarabun">76×76 mm</text>
+  </g>
+  <!-- leaf: QR Code -->
+  <g class="node-g" data-tip="QR Code ลิงก์ไปหน้ารายละเอียดม้วน สแกนแล้วเห็นข้อมูลทันที">
+    <rect x="1248" y="470" width="90" height="30" rx="9" fill="#83184388" stroke="#ec489960" stroke-width="1.5"/>
+    <text x="1293" y="489" text-anchor="middle" font-size="10.5" fill="white" font-family="Sarabun">🔲 QR Code</text>
+  </g>
+  <!-- sub: Roll Detail -->
+  <g class="node-g" data-tip="หน้าแสดงรายละเอียดม้วนเดี่ยว เปิดผ่าน QR ได้จากมือถือ">
+    <rect x="1365" y="474" width="80" height="24" rx="7" fill="#1e1b4b" stroke="#6366f150" stroke-width="1"/>
+    <text x="1405" y="489" text-anchor="middle" font-size="9" fill="#a5b4fc" font-family="Sarabun">📱 Roll Detail</text>
+  </g>
+
+  <!-- ══ BRANCH 5: โอน + คลัง (right-bottom) ══ -->
+  <g class="node-g" data-tip="โอนม้วนเข้าคลัง และจัดการสต็อกสินค้า">
+    <rect x="1008" y="575" width="144" height="50" rx="13" fill="#14532d" stroke="#22c55e" stroke-width="2"/>
+    <text x="1080" y="597" text-anchor="middle" font-size="14" font-family="Sarabun">📦</text>
+    <text x="1080" y="615" text-anchor="middle" font-size="11.5" font-weight="800" fill="white" font-family="Sarabun">โอน & คลังสินค้า</text>
+  </g>
+  <!-- leaf: โอนเข้าคลัง -->
+  <g class="node-g" data-tip="เลือกม้วนที่ต้องการโอน กดยืนยัน สถานะเปลี่ยนทันที">
+    <rect x="1148" y="534" width="100" height="32" rx="9" fill="#14532d88" stroke="#22c55e60" stroke-width="1.5"/>
+    <text x="1198" y="550" text-anchor="middle" font-size="10.5" fill="white" font-weight="700" font-family="Sarabun">📤 โอนเข้าคลัง</text>
+    <text x="1198" y="562" text-anchor="middle" font-size="9" fill="#86efac" font-family="Sarabun">batch transfer</text>
+  </g>
+  <!-- leaf: สต็อก -->
+  <g class="node-g" data-tip="ดูสต็อกม้วนทั้งหมด กรองตามสินค้า ลูกค้า Lot">
+    <rect x="1148" y="584" width="100" height="32" rx="9" fill="#14532d88" stroke="#22c55e60" stroke-width="1.5"/>
+    <text x="1198" y="600" text-anchor="middle" font-size="10.5" fill="white" font-weight="700" font-family="Sarabun">🏭 สต็อกคลัง</text>
+    <text x="1198" y="612" text-anchor="middle" font-size="9" fill="#86efac" font-family="Sarabun">ค้นหา/กรอง</text>
+  </g>
+  <!-- leaf: Realtime -->
+  <g class="node-g" data-tip="อัปเดต Realtime ผ่าน Supabase Realtime ทุกหน้าจอเห็นพร้อมกัน">
+    <rect x="1148" y="628" width="100" height="28" rx="9" fill="#14532d88" stroke="#22c55e60" stroke-width="1.5"/>
+    <text x="1198" y="646" text-anchor="middle" font-size="10.5" fill="white" font-family="Sarabun">⚡ Realtime</text>
+  </g>
+  <!-- sub: batch -->
+  <g class="node-g" data-tip="โอนหลายม้วนพร้อมกันในครั้งเดียว">
+    <rect x="1290" y="518" width="82" height="24" rx="7" fill="#052e16" stroke="#16653350" stroke-width="1"/>
+    <text x="1331" y="533" text-anchor="middle" font-size="9" fill="#86efac" font-family="Sarabun">✅ Batch โอน</text>
+  </g>
+
+  <!-- ══ BRANCH 6: รายงาน (bottom-center) ══ -->
+  <g class="node-g" data-tip="รายงานและ Dashboard แสดงผลผลิต วิเคราะห์ข้อมูลรายวัน/รายเดือน">
+    <rect x="726" y="584" width="148" height="50" rx="13" fill="#78350f" stroke="#f59e0b" stroke-width="2"/>
+    <text x="800" y="606" text-anchor="middle" font-size="14" font-family="Sarabun">📊</text>
+    <text x="800" y="624" text-anchor="middle" font-size="11.5" font-weight="800" fill="white" font-family="Sarabun">รายงาน & Dashboard</text>
+  </g>
+  <!-- leaf: Dashboard -->
+  <g class="node-g" data-tip="กราฟผลผลิตรายวัน/รายเดือน, % Yield, เปรียบเทียบแผนก">
+    <rect x="600" y="656" width="100" height="32" rx="9" fill="#78350f88" stroke="#f59e0b60" stroke-width="1.5"/>
+    <text x="650" y="672" text-anchor="middle" font-size="10.5" fill="white" font-weight="700" font-family="Sarabun">📈 Dashboard</text>
+    <text x="650" y="684" text-anchor="middle" font-size="9" fill="#fcd34d" font-family="Sarabun">กราฟ/ภาพรวม</text>
+  </g>
+  <!-- leaf: SO/WO -->
+  <g class="node-g" data-tip="รายงานตาม Sale Order และ Work Order ดูยอดผลิตเทียบเป้า">
+    <rect x="748" y="658" width="104" height="30" rx="9" fill="#78350f88" stroke="#f59e0b60" stroke-width="1.5"/>
+    <text x="800" y="677" text-anchor="middle" font-size="10.5" fill="white" font-weight="700" font-family="Sarabun">📋 รายงาน SO/WO</text>
+  </g>
+  <!-- leaf: ประวัติ -->
+  <g class="node-g" data-tip="ย้อนดูม้วนทุกใบ ลบม้วนพร้อมเหตุผล บันทึก log การลบ">
+    <rect x="862" y="656" width="100" height="32" rx="9" fill="#78350f88" stroke="#f59e0b60" stroke-width="1.5"/>
+    <text x="912" y="672" text-anchor="middle" font-size="10.5" fill="white" font-weight="700" font-family="Sarabun">📅 ประวัติผลิต</text>
+    <text x="912" y="684" text-anchor="middle" font-size="9" fill="#fcd34d" font-family="Sarabun">ย้อนดู/ลบ</text>
+  </g>
+  <!-- sub: กราฟ -->
+  <g class="node-g" data-tip="กราฟแท่ง เส้น เปรียบเทียบช่วงเวลา">
+    <rect x="542" y="685" width="64" height="24" rx="7" fill="#451a03" stroke="#d9770650" stroke-width="1"/>
+    <text x="574" y="700" text-anchor="middle" font-size="9" fill="#fcd34d" font-family="Sarabun">📊 กราฟ</text>
+  </g>
+  <!-- sub: ลบม้วน -->
+  <g class="node-g" data-tip="ลบม้วนผิดพร้อมบันทึกผู้ลบและเหตุผล">
+    <rect x="968" y="685" width="72" height="24" rx="7" fill="#451a03" stroke="#d9770650" stroke-width="1"/>
+    <text x="1004" y="700" text-anchor="middle" font-size="9" fill="#fcd34d" font-family="Sarabun">🗑 ลบม้วน+log</text>
+  </g>
+
+  <!-- ══ BRANCH 7: Admin (left-bottom) ══ -->
+  <g class="node-g" data-tip="Admin Panel ต้องกรอก PIN พิเศษ จัดการสิทธิ์และตั้งค่าระบบ">
+    <rect x="428" y="565" width="144" height="50" rx="13" fill="#7f1d1d" stroke="#ef4444" stroke-width="2"/>
+    <text x="500" y="587" text-anchor="middle" font-size="14" font-family="Sarabun">🔐</text>
+    <text x="500" y="605" text-anchor="middle" font-size="11.5" font-weight="800" fill="white" font-family="Sarabun">Admin Panel</text>
+  </g>
+  <!-- leaf: PIN แผนก -->
+  <g class="node-g" data-tip="ตั้งค่า PIN แต่ละแผนก เปลี่ยนได้โดย Admin เท่านั้น">
+    <rect x="278" y="536" width="90" height="32" rx="9" fill="#7f1d1d88" stroke="#ef444460" stroke-width="1.5"/>
+    <text x="323" y="552" text-anchor="middle" font-size="10.5" fill="white" font-weight="700" font-family="Sarabun">🔑 PIN แผนก</text>
+    <text x="323" y="564" text-anchor="middle" font-size="9" fill="#fca5a5" font-family="Sarabun">ตั้งค่า/เปลี่ยน</text>
+  </g>
+  <!-- leaf: Deletion Log -->
+  <g class="node-g" data-tip="ดู log การลบม้วนทั้งหมด ว่าใครลบอะไร เมื่อไหร่ เหตุผลอะไร">
+    <rect x="278" y="584" width="90" height="32" rx="9" fill="#7f1d1d88" stroke="#ef444460" stroke-width="1.5"/>
+    <text x="323" y="600" text-anchor="middle" font-size="10.5" fill="white" font-weight="700" font-family="Sarabun">📋 Deletion Log</text>
+    <text x="323" y="612" text-anchor="middle" font-size="9" fill="#fca5a5" font-family="Sarabun">ตรวจสอบ</text>
+  </g>
+  <!-- leaf: ตั้งค่า -->
+  <g class="node-g" data-tip="ตั้งค่าระบบ เพิ่ม/ลบเครื่องจักร ดู log ต่างๆ">
+    <rect x="278" y="618" width="90" height="28" rx="9" fill="#7f1d1d88" stroke="#ef444460" stroke-width="1.5"/>
+    <text x="323" y="636" text-anchor="middle" font-size="10.5" fill="white" font-family="Sarabun">⚙️ ตั้งค่าระบบ</text>
+  </g>
+
+  <!-- ══ BRANCH 8: Database (left-center) ══ -->
+  <g class="node-g" data-tip="ฐานข้อมูล Supabase บน Cloud เก็บข้อมูลทั้งหมด รองรับ offline">
+    <rect x="458" y="425" width="144" height="50" rx="13" fill="#064e3b" stroke="#10b981" stroke-width="2"/>
+    <text x="530" y="447" text-anchor="middle" font-size="14" font-family="Sarabun">☁️</text>
+    <text x="530" y="465" text-anchor="middle" font-size="11.5" font-weight="800" fill="white" font-family="Sarabun">Supabase Database</text>
+  </g>
+  <!-- leaf: production_rolls -->
+  <g class="node-g" data-tip="ตาราง production_rolls เก็บข้อมูลม้วนทุกใบ น้ำหนัก ประเภท เครื่อง วันเวลา">
+    <rect x="296" y="392" width="126" height="32" rx="9" fill="#064e3b88" stroke="#10b98160" stroke-width="1.5"/>
+    <text x="359" y="408" text-anchor="middle" font-size="10" fill="white" font-weight="700" font-family="Sarabun">🗃 production_rolls</text>
+    <text x="359" y="420" text-anchor="middle" font-size="9" fill="#6ee7b7" font-family="Sarabun">ม้วนทุกใบ</text>
+  </g>
+  <!-- leaf: machine_profiles -->
+  <g class="node-g" data-tip="ตาราง machine_profiles เก็บข้อมูลงานปัจจุบันของแต่ละเครื่อง">
+    <rect x="296" y="432" width="126" height="32" rx="9" fill="#064e3b88" stroke="#10b98160" stroke-width="1.5"/>
+    <text x="359" y="448" text-anchor="middle" font-size="10" fill="white" font-weight="700" font-family="Sarabun">🗃 machine_profiles</text>
+    <text x="359" y="460" text-anchor="middle" font-size="9" fill="#6ee7b7" font-family="Sarabun">ข้อมูลงานเครื่อง</text>
+  </g>
+  <!-- leaf: offline queue -->
+  <g class="node-g" data-tip="offline queue เก็บข้อมูลใน localStorage ถ้าไม่มีเน็ต พอออนไลน์จะ sync อัตโนมัติ">
+    <rect x="296" y="470" width="126" height="32" rx="9" fill="#064e3b88" stroke="#10b98160" stroke-width="1.5"/>
+    <text x="359" y="486" text-anchor="middle" font-size="10" fill="white" font-weight="700" font-family="Sarabun">📶 Offline Queue</text>
+    <text x="359" y="498" text-anchor="middle" font-size="9" fill="#6ee7b7" font-family="Sarabun">ไม่มีเน็ตก็ชั่งได้</text>
+  </g>
+  <!-- sub: sync -->
+  <g class="node-g" data-tip="เมื่อออนไลน์ จะ sync ข้อมูลที่ค้างอยู่ขึ้น Supabase อัตโนมัติ">
+    <rect x="196" y="474" width="62" height="24" rx="7" fill="#052e16" stroke="#16653350" stroke-width="1"/>
+    <text x="227" y="489" text-anchor="middle" font-size="9" fill="#6ee7b7" font-family="Sarabun">🔄 Auto sync</text>
+  </g>
+
+  </g><!-- /nodes -->
+
+</svg>
+</div>
+
+<script>
+// ── Pan & Zoom ─────────────────────────────────────────────────────
+const svg = document.getElementById('svg')
+const wrap = document.getElementById('wrap')
+let vx=0,vy=0,vw=1600,vh=900
+let dragging=false,sx=0,sy=0,ox=0,oy=0
+let scale=1
+
+function setView(){svg.setAttribute('viewBox',`${vx} ${vy} ${vw} ${vh}`)}
+
+wrap.addEventListener('mousedown',e=>{
+  dragging=true;wrap.classList.add('dragging')
+  sx=e.clientX;sy=e.clientY;ox=vx;oy=vy
+})
+window.addEventListener('mousemove',e=>{
+  if(!dragging)return
+  const dx=(e.clientX-sx)*(vw/wrap.clientWidth)
+  const dy=(e.clientY-sy)*(vh/wrap.clientHeight)
+  vx=ox-dx;vy=oy-dy;setView()
+})
+window.addEventListener('mouseup',()=>{dragging=false;wrap.classList.remove('dragging')})
+
+wrap.addEventListener('wheel',e=>{
+  e.preventDefault()
+  const factor=e.deltaY>0?1.1:0.9
+  const mx=(e.clientX/wrap.clientWidth)*vw+vx
+  const my=(e.clientY/wrap.clientHeight)*vh+vy
+  vw*=factor;vh*=factor
+  vx=mx-(e.clientX/wrap.clientWidth)*vw
+  vy=my-(e.clientY/wrap.clientHeight)*vh
+  setView()
+},{passive:false})
+
+function zoom(f){
+  const cx=vx+vw/2,cy=vy+vh/2
+  vw*=f;vh*=f;vx=cx-vw/2;vy=cy-vh/2;setView()
+}
+function resetView(){vx=0;vy=0;vw=1600;vh=900;setView()}
+
+// ── Tooltip ────────────────────────────────────────────────────────
+const tip=document.getElementById('tooltip')
+document.querySelectorAll('.node-g').forEach(g=>{
+  const msg=g.dataset.tip
+  if(!msg)return
+  g.style.cursor='pointer'
+  g.addEventListener('mouseenter',e=>{
+    tip.textContent=msg;tip.style.display='block'
+    moveTip(e)
+  })
+  g.addEventListener('mousemove',moveTip)
+  g.addEventListener('mouseleave',()=>tip.style.display='none')
+})
+function moveTip(e){
+  let x=e.clientX+14,y=e.clientY+14
+  if(x+210>window.innerWidth)x=e.clientX-220
+  if(y+80>window.innerHeight)y=e.clientY-80
+  tip.style.left=x+'px';tip.style.top=y+'px'
+}
+</script>
+</body>
+</html>

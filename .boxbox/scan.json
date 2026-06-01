@@ -1,0 +1,131 @@
+{
+  "project_name": "scale-dashboard",
+  "stack": [
+    { "name": "React", "category": "frontend", "icon": "react" },
+    { "name": "TypeScript", "category": "frontend", "icon": "box" },
+    { "name": "Vite", "category": "frontend", "icon": "box" },
+    { "name": "Tailwind CSS", "category": "frontend", "icon": "box" },
+    { "name": "Recharts", "category": "frontend", "icon": "chart" },
+    { "name": "Supabase", "category": "database", "icon": "supabase" },
+    { "name": "Node.js (Bridge)", "category": "backend", "icon": "node" }
+  ],
+  "features": [
+    {
+      "id": "auth",
+      "name": "Authentication & Department Selection",
+      "layer": "frontend",
+      "plain_english": "This is where workers pick their department and enter a PIN to log in. Each department (Blow, Print, Rework) has its own PIN, and an admin master PIN can unlock everything.",
+      "files": [
+        "src/App.tsx",
+        "src/pages/Admin.tsx"
+      ],
+      "icon": "lock"
+    },
+    {
+      "id": "weigh",
+      "name": "Weigh Station",
+      "layer": "frontend",
+      "plain_english": "This is the main screen where workers weigh rolls of material on a scale. The weight reading comes in live from a connected scale machine.",
+      "files": [
+        "src/pages/WeighStation.tsx"
+      ],
+      "icon": "box"
+    },
+    {
+      "id": "dashboard",
+      "name": "Dashboard",
+      "layer": "frontend",
+      "plain_english": "This is a live summary screen showing production output, scrap rates, and quality breakdowns with charts — so supervisors can see how each department is performing.",
+      "files": [
+        "src/pages/Dashboard.tsx"
+      ],
+      "icon": "dashboard"
+    },
+    {
+      "id": "warehouse",
+      "name": "Warehouse & Inventory",
+      "layer": "frontend",
+      "plain_english": "This is where finished rolls are tracked in the warehouse. Workers can transfer rolls into inventory and see what stock is available.",
+      "files": [
+        "src/pages/Warehouse.tsx",
+        "src/pages/Transfer.tsx"
+      ],
+      "icon": "cart"
+    },
+    {
+      "id": "history",
+      "name": "Production History",
+      "layer": "frontend",
+      "plain_english": "This is a log of all past weighing and production events, so supervisors can review what was produced and when.",
+      "files": [
+        "src/pages/History.tsx",
+        "src/pages/RollDetail.tsx"
+      ],
+      "icon": "file"
+    },
+    {
+      "id": "rework",
+      "name": "Rework Inbox",
+      "layer": "frontend",
+      "plain_english": "This is where defective or rejected rolls are queued for rework. The Rework department picks them up here and processes them.",
+      "files": [
+        "src/pages/ReworkInbox.tsx"
+      ],
+      "icon": "settings"
+    },
+    {
+      "id": "labels",
+      "name": "Label Designer & QR Codes",
+      "layer": "frontend",
+      "plain_english": "This is where roll labels with QR codes are designed and printed, so each roll can be scanned and identified throughout the factory.",
+      "files": [
+        "src/pages/LabelDesigner.tsx"
+      ],
+      "icon": "file"
+    },
+    {
+      "id": "machine_settings",
+      "name": "Machine Settings",
+      "layer": "frontend",
+      "plain_english": "This is where machines and production profiles are configured — things like machine number, product type, and target weights per department.",
+      "files": [
+        "src/pages/MachineSettings.tsx"
+      ],
+      "icon": "settings"
+    },
+    {
+      "id": "bridge",
+      "name": "Scale Bridge (Hardware Connector)",
+      "layer": "backend",
+      "plain_english": "This is a small Windows background service that reads the physical weight scale over a serial (COM) port and streams the live weight value to the web app via WebSocket.",
+      "files": [
+        "bridge/server.js",
+        "BWPScaleBridge-Package/BWPScaleBridge.exe",
+        "BWPScaleBridge-Package/install.bat",
+        "BWPScaleBridge-Package/run-hidden.vbs",
+        "BWPScaleBridge-Package/uninstall.bat"
+      ],
+      "icon": "globe"
+    },
+    {
+      "id": "database",
+      "name": "Database Schema",
+      "layer": "database",
+      "plain_english": "This defines all the tables in the cloud database — rolls, products, customers, machine profiles, and production records.",
+      "files": [
+        "db/setup-all.sql",
+        "db/products.sql",
+        "db/customers.sql",
+        "src/lib/supabase.ts"
+      ],
+      "icon": "postgres"
+    }
+  ],
+  "external_services": [
+    {
+      "id": "supabase",
+      "name": "Supabase",
+      "purpose": "Cloud PostgreSQL database and real-time API — stores all production records, roll data, machine profiles, and inventory"
+    }
+  ]
+}

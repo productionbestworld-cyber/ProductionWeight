@@ -23,6 +23,16 @@ export async function setPin(key: keyof typeof PIN_DEFAULTS, value: string) {
 export const fetchAdminPin = () => fetchPin('admin_pin')
 export const setAdminPin   = (v: string) => setPin('admin_pin', v)
 
+// ─── Feature flags (ใน app_settings — เปิด/ปิดฟีเจอร์ผ่าน Admin) ──────
+export async function fetchFlag(key: string): Promise<boolean> {
+  const { data } = await supabase.from('app_settings').select('value').eq('key', key).maybeSingle()
+  return data?.value === '1'
+}
+export async function setFlag(key: string, value: boolean) {
+  await supabase.from('app_settings')
+    .upsert({ key, value: value ? '1' : '0', updated_at: new Date().toISOString() }, { onConflict: 'key' })
+}
+
 // ─── Session unlock ─────────────────────────────────────────────────────────
 const adminSess     = 'bwp_admin_unlocked'
 const deptSess      = (d: Dept) => `bwp_dept_${d}_unlocked`
@@ -206,10 +216,40 @@ function PinManager() {
         <PinChangeCard pinKey="pin_rewind" label="🔁 กรอ(Rework) — PIN" color="green" show={show}/>
       </div>
 
+      <div className="mt-6">
+        <h2 className="text-white font-bold text-base mb-2">⚙ ฟีเจอร์เพิ่มเติม</h2>
+        <FeatureFlagCard flagKey="enable_test_random" label="🎲 ปุ่มสุ่มค่าทดสอบ (หน้าชั่งน้ำหนัก)" desc="เปิดเฉพาะตอนทดสอบระบบ — ใช้งานจริงควรปิดเพื่อไม่ให้กดผิด"/>
+      </div>
+
       <div className="mt-4 text-xs text-slate-500 space-y-0.5">
         <p>💡 PIN เริ่มต้น: Admin <span className="font-mono text-amber-400">9999</span> · เป่า <span className="font-mono text-blue-400">1111</span> · พิมพ์ <span className="font-mono text-purple-400">2222</span> · กรอ <span className="font-mono text-green-400">3333</span></p>
         <p>💡 ผู้ใช้กรอก PIN ครั้งเดียวต่อ session (ปิด tab = ต้องใส่ใหม่)</p>
       </div>
+    </div>
+  )
+}
+
+function FeatureFlagCard({ flagKey, label, desc }: { flagKey: string; label: string; desc: string }) {
+  const [on, setOn] = useState(false)
+  const [saving, setSaving] = useState(false)
+  useEffect(() => { fetchFlag(flagKey).then(setOn) }, [flagKey])
+  async function toggle() {
+    setSaving(true)
+    const next = !on
+    await setFlag(flagKey, next)
+    setOn(next)
+    setSaving(false)
+  }
+  return (
+    <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 flex items-center justify-between">
+      <div className="flex-1 mr-3">
+        <p className="text-white font-bold text-sm">{label}</p>
+        <p className="text-slate-500 text-xs mt-0.5">{desc}</p>
+      </div>
+      <button onClick={toggle} disabled={saving}
+        className={`relative w-14 h-7 rounded-full transition-colors ${on ? 'bg-green-500' : 'bg-slate-700'} ${saving ? 'opacity-50' : ''}`}>
+        <span className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform ${on ? 'translate-x-7' : ''}`}/>
+      </button>
     </div>
   )
 }

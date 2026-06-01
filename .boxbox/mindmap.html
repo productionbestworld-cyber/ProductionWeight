@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ระบบชั่งน้ำหนักม้วน BWP — Workflow Map</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700;800;900&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:'Sarabun',sans-serif;
+    background:#07090f;
+    color:#fff;
+    min-height:100vh;
+    overflow-x:hidden;
+  }
+
+  /* ── Top bar ── */
+  .topbar{
+    position:fixed;top:0;left:0;right:0;z-index:100;
+    background:rgba(7,9,15,.9);
+    backdrop-filter:blur(12px);
+    border-bottom:1px solid #1e2535;
+    padding:12px 24px;
+    display:flex;align-items:center;gap:16px;
+  }
+  .logo{
+    width:36px;height:36px;border-radius:10px;
+    background:linear-gradient(135deg,#4f6ef7,#7c3aed);
+    display:flex;align-items:center;justify-content:center;
+    font-weight:900;font-size:12px;color:#fff;letter-spacing:-.5px;
+  }
+  .topbar h1{font-size:15px;font-weight:700;color:#fff}
+  .topbar p{font-size:12px;color:#64748b;margin-left:auto}
+
+  /* ── Scroll canvas ── */
+  .canvas{
+    margin-top:60px;
+    padding:48px 32px 80px;
+    min-width:1100px;
+  }
+
+  /* ── Section heading ── */
+  .sec-title{
+    font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+    color:#475569;margin-bottom:16px;padding-left:4px;
+  }
+
+  /* ── Flow arrow between sections ── */
+  .arrow-row{
+    display:flex;align-items:center;justify-content:center;
+    gap:0;margin:8px 0;
+  }
+  .arrow-line{
+    flex:1;height:2px;background:linear-gradient(90deg,transparent,#334155,transparent);
+  }
+  .arrow-down{
+    text-align:center;font-size:22px;color:#334155;
+    margin:4px 0;line-height:1;
+  }
+
+  /* ══════════════════════════════════
+     STEP 1: เลือกแผนก
+  ══════════════════════════════════ */
+  .step-dept{
+    display:flex;gap:16px;justify-content:center;margin-bottom:0;
+  }
+  .dept-card{
+    flex:1;max-width:280px;
+    border-radius:20px;
+    padding:20px;
+    border:2px solid transparent;
+    cursor:default;
+    transition:transform .2s;
+  }
+  .dept-card:hover{transform:translateY(-4px)}
+  .dept-blow{background:linear-gradient(135deg,#1e3a8a22,#1e40af33);border-color:#3b82f6aa}
+  .dept-print{background:linear-gradient(135deg,#4c1d9522,#6d28d933);border-color:#8b5cf6aa}
+  .dept-rewind{background:linear-gradient(135deg,#14532d22,#16653333);border-color:#22c55eaa}
+  .dept-card .emoji{font-size:36px;margin-bottom:8px}
+  .dept-card .name{font-size:17px;font-weight:800}
+  .dept-card .sub{font-size:12px;color:#94a3b8;margin-top:2px}
+  .dept-card .pin-badge{
+    display:inline-block;margin-top:10px;
+    font-size:10px;font-weight:700;
+    padding:3px 10px;border-radius:999px;
+    background:#ffffff10;border:1px solid #ffffff20;color:#94a3b8;
+  }
+
+  /* ══════════════════════════════════
+     STEP 2: เลือกเครื่อง
+  ══════════════════════════════════ */
+  .machine-row{
+    display:flex;gap:12px;justify-content:center;flex-wrap:wrap;
+  }
+  .machine-card{
+    width:130px;border-radius:14px;
+    background:#0f172a;border:1.5px solid #1e293b;
+    padding:14px 10px;text-align:center;
+  }
+  .machine-card .mno{
+    font-size:24px;font-weight:900;color:#4f6ef7;
+  }
+  .machine-card .mstatus{
+    font-size:10px;color:#22c55e;margin-top:4px;font-weight:600;
+  }
+  .machine-card .mprog{
+    margin-top:8px;height:4px;border-radius:2px;background:#1e293b;overflow:hidden;
+  }
+  .machine-card .mprog-fill{
+    height:100%;border-radius:2px;
+    background:linear-gradient(90deg,#4f6ef7,#7c3aed);
+  }
+  .machine-card .mlot{font-size:9px;color:#475569;margin-top:5px}
+
+  /* ══════════════════════════════════
+     STEP 3: หน้าชั่งน้ำหนัก (BIG)
+  ══════════════════════════════════ */
+  .weigh-box{
+    background:linear-gradient(135deg,#0f172a,#141d2e);
+    border:2px solid #4f6ef744;
+    border-radius:24px;
+    padding:28px 32px;
+    display:flex;gap:32px;
+    align-items:flex-start;
+    max-width:900px;
+    margin:0 auto;
+  }
+  .weigh-left{flex:1}
+  .weigh-right{width:240px}
+
+  .weigh-display{
+    background:#07090f;
+    border:2px solid #1e293b;
+    border-radius:16px;
+    padding:20px;
+    text-align:center;
+    margin-bottom:12px;
+  }
+  .weigh-num{font-size:56px;font-weight:900;color:#fff;line-height:1;letter-spacing:-2px}
+  .weigh-unit{font-size:13px;color:#64748b;font-weight:600}
+  .weigh-net{
+    display:flex;align-items:center;justify-content:center;gap:12px;
+    margin-top:10px;
+  }
+  .weigh-net .core-lbl{font-size:11px;color:#64748b}
+  .weigh-net .net-val{font-size:28px;font-weight:900;color:#4f6ef7}
+
+  .type-pills{display:flex;gap:8px;margin-bottom:12px}
+  .pill{
+    flex:1;text-align:center;padding:9px;border-radius:10px;
+    font-size:13px;font-weight:700;
+  }
+  .pill-good{background:#4f6ef7;color:#fff}
+  .pill-bad{background:#ea580c;color:#fff;opacity:.5}
+  .pill-scrap{background:#d97706;color:#fff;opacity:.5}
+
+  .save-btn{
+    width:100%;padding:14px;border-radius:14px;
+    background:linear-gradient(135deg,#4f6ef7,#7c3aed);
+    border:none;color:#fff;font-size:16px;font-weight:800;
+    cursor:pointer;font-family:'Sarabun',sans-serif;
+    box-shadow:0 8px 24px #4f6ef740;
+  }
+
+  /* right col */
+  .info-card{
+    background:#0a0f1e;border:1px solid #1e293b;border-radius:14px;
+    padding:14px;margin-bottom:10px;
+  }
+  .info-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0}
+  .info-row .k{font-size:11px;color:#475569}
+  .info-row .v{font-size:12px;font-weight:700;color:#e2e8f0}
+
+  .sim-btn{
+    width:100%;padding:8px;border-radius:10px;
+    background:#1e293b;border:1px solid #334155;
+    color:#64748b;font-size:12px;font-weight:600;
+    cursor:pointer;font-family:'Sarabun',sans-serif;
+    margin-bottom:8px;
+  }
+  .serial-badge{
+    display:inline-flex;align-items:center;gap:5px;
+    font-size:10px;padding:3px 10px;border-radius:999px;
+    background:#dc262610;border:1px solid #dc262630;color:#f87171;
+    margin-bottom:10px;
+  }
+
+  /* ══════════════════════════════════
+     STEP 4: LABEL
+  ══════════════════════════════════ */
+  .label-row{
+    display:flex;gap:20px;justify-content:center;flex-wrap:wrap;
+  }
+  .label-card{
+    background:#0f172a;border:1.5px solid #1e293b;border-radius:16px;
+    padding:16px 20px;width:240px;
+    display:flex;align-items:flex-start;gap:14px;
+  }
+  .label-card .icon{
+    width:44px;height:44px;border-radius:12px;
+    display:flex;align-items:center;justify-content:center;
+    font-size:22px;flex-shrink:0;
+  }
+  .label-card .title{font-size:14px;font-weight:700;margin-bottom:4px}
+  .label-card .desc{font-size:11px;color:#64748b;line-height:1.5}
+
+  /* ══════════════════════════════════
+     STEP 5: Transfer / Warehouse
+  ══════════════════════════════════ */
+  .tw-row{display:flex;gap:20px;justify-content:center;}
+  .tw-card{
+    flex:1;max-width:320px;
+    border-radius:20px;padding:20px;
+  }
+  .tw-transfer{background:linear-gradient(135deg,#0c1a38,#0f2040);border:1.5px solid #3b82f655}
+  .tw-warehouse{background:linear-gradient(135deg,#0c1f1a,#0f2820);border:1.5px solid #22c55e55}
+  .tw-card .t-icon{font-size:32px;margin-bottom:8px}
+  .tw-card .t-title{font-size:16px;font-weight:800;margin-bottom:6px}
+  .tw-card .t-desc{font-size:12px;color:#94a3b8;line-height:1.6}
+  .tw-card .feature-list{margin-top:10px;display:flex;flex-direction:column;gap:4px}
+  .feature-item{
+    font-size:11px;color:#94a3b8;
+    padding:5px 10px;border-radius:8px;background:#ffffff06;
+    display:flex;align-items:center;gap:6px;
+  }
+
+  /* ══════════════════════════════════
+     STEP 6: Dashboard + History
+  ══════════════════════════════════ */
+  .dash-row{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
+  .dash-card{
+    flex:1;min-width:200px;max-width:240px;
+    background:#0f172a;border:1.5px solid #1e293b;
+    border-radius:16px;padding:16px;
+  }
+  .dash-card .d-icon{font-size:28px;margin-bottom:6px}
+  .dash-card .d-title{font-size:14px;font-weight:700;margin-bottom:6px}
+  .dash-card .d-list{list-style:none;display:flex;flex-direction:column;gap:3px}
+  .dash-card .d-list li{font-size:11px;color:#64748b;padding:2px 0}
+  .dash-card .d-list li::before{content:'• ';color:#4f6ef7}
+
+  /* ══════════════════════════════════
+     STEP 7: Admin
+  ══════════════════════════════════ */
+  .admin-box{
+    background:linear-gradient(135deg,#1c1208,#2d1f0a);
+    border:2px solid #d9770644;
+    border-radius:20px;
+    padding:20px 28px;
+    max-width:600px;margin:0 auto;
+    display:flex;gap:24px;align-items:flex-start;
+  }
+  .admin-icon{font-size:40px;flex-shrink:0;margin-top:4px}
+  .admin-title{font-size:16px;font-weight:800;color:#fbbf24;margin-bottom:6px}
+  .admin-desc{font-size:12px;color:#92400e;line-height:1.6;margin-bottom:10px}
+  .admin-features{display:flex;flex-wrap:wrap;gap:6px}
+  .admin-badge{
+    font-size:10px;font-weight:600;padding:3px 10px;border-radius:999px;
+    background:#d9770615;border:1px solid #d9770640;color:#fbbf24;
+  }
+
+  /* ══════════════════════════════════
+     DATABASE
+  ══════════════════════════════════ */
+  .db-box{
+    background:linear-gradient(135deg,#0d1f1d,#0f2820);
+    border:2px solid #10b98144;
+    border-radius:20px;
+    padding:20px 28px;
+    max-width:800px;margin:0 auto;
+    display:flex;gap:20px;flex-wrap:wrap;
+    justify-content:center;
+  }
+  .db-table{
+    background:#07090f;border:1px solid #1e293b;
+    border-radius:12px;padding:12px 16px;min-width:160px;
+  }
+  .db-table .t-name{font-size:12px;font-weight:700;color:#10b981;margin-bottom:6px}
+  .db-table .t-cols{display:flex;flex-direction:column;gap:2px}
+  .db-table .t-col{font-size:10px;color:#475569}
+
+  /* ══════════════════════════════════
+     CONNECTOR LINES (CSS)
+  ══════════════════════════════════ */
+  .connector{
+    display:flex;flex-direction:column;align-items:center;
+    margin:4px 0;
+  }
+  .connector-line{
+    width:2px;height:28px;
+    background:linear-gradient(#4f6ef730,#4f6ef780);
+  }
+  .connector-arrow{
+    width:0;height:0;
+    border-left:6px solid transparent;
+    border-right:6px solid transparent;
+    border-top:8px solid #4f6ef7;
+  }
+
+  /* ══════════════════════════════════
+     SECTION WRAPPERS
+  ══════════════════════════════════ */
+  .section{margin-bottom:4px}
+  .section-inner{
+    background:#0b0f1c;
+    border:1px solid #12192e;
+    border-radius:24px;
+    padding:24px;
+    max-width:960px;
+    margin:0 auto;
+  }
+
+  /* ══════════════════════════════════
+     STEP BADGE
+  ══════════════════════════════════ */
+  .step-badge-row{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+  .step-num{
+    width:28px;height:28px;border-radius:50%;
+    background:linear-gradient(135deg,#4f6ef7,#7c3aed);
+    display:flex;align-items:center;justify-content:center;
+    font-size:13px;font-weight:800;flex-shrink:0;
+  }
+  .step-label{font-size:14px;font-weight:700;color:#e2e8f0}
+  .step-sub{font-size:11px;color:#475569;margin-top:1px}
+
+  /* responsive */
+  @media(max-width:768px){
+    .weigh-box{flex-direction:column}
+    .weigh-right{width:100%}
+    .tw-row,.dash-row{flex-direction:column;align-items:center}
+    .tw-card,.dash-card{max-width:100%}
+  }
+</style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div class="topbar">
+  <div class="logo">BWP</div>
+  <div>
+    <h1>ระบบชั่งน้ำหนักม้วน</h1>
+  </div>
+  <p>Workflow Map — ภาพรวมทั้งระบบ</p>
+</div>
+
+<div class="canvas">
+
+  <!-- ══ STEP 1: เลือกแผนก ══ -->
+  <div class="section">
+    <div class="section-inner">
+      <div class="step-badge-row">
+        <div class="step-num">1</div>
+        <div>
+          <div class="step-label">🏭 เลือกแผนก + ยืนยัน PIN</div>
+          <div class="step-sub">ทุกครั้งที่เปิดแอป จะต้องเลือกแผนกและกรอก PIN ก่อนเข้าใช้</div>
+        </div>
+      </div>
+      <div class="step-dept">
+        <div class="dept-card dept-blow">
+          <div class="emoji">🌬️</div>
+          <div class="name" style="color:#60a5fa">ผลิต (เป่า)</div>
+          <div class="sub">Blow Section</div>
+          <div class="pin-badge">🔒 ต้องกรอก PIN</div>
+        </div>
+        <div class="dept-card dept-print">
+          <div class="emoji">🖨️</div>
+          <div class="name" style="color:#a78bfa">ผลิต (พิมพ์)</div>
+          <div class="sub">Print Section</div>
+          <div class="pin-badge">🔒 ต้องกรอก PIN</div>
+        </div>
+        <div class="dept-card dept-rewind">
+          <div class="emoji">🔁</div>
+          <div class="name" style="color:#4ade80">กรอ (Rework)</div>
+          <div class="sub">Rework Section</div>
+          <div class="pin-badge">🔒 ต้องกรอก PIN</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"><div class="connector-line"></div><div class="connector-arrow"></div></div>
+
+  <!-- ══ STEP 2: เลือกเครื่อง ══ -->
+  <div class="section">
+    <div class="section-inner">
+      <div class="step-badge-row">
+        <div class="step-num">2</div>
+        <div>
+          <div class="step-label">⚙️ เลือกเครื่องจักร</div>
+          <div class="step-sub">แต่ละเครื่องแสดงสถานะ พร้อม/ว่าง, ยอดผลิต, และเป้าหมาย</div>
+        </div>
+      </div>
+      <div class="machine-row">
+        <div class="machine-card">
+          <div class="mno">BL01</div>
+          <div class="mstatus">● พร้อมใช้งาน</div>
+          <div class="mprog"><div class="mprog-fill" style="width:65%"></div></div>
+          <div class="mlot">Lot: 68BL01</div>
+        </div>
+        <div class="machine-card">
+          <div class="mno">BL02</div>
+          <div class="mstatus">● พร้อมใช้งาน</div>
+          <div class="mprog"><div class="mprog-fill" style="width:40%"></div></div>
+          <div class="mlot">Lot: 68BL02</div>
+        </div>
+        <div class="machine-card" style="border-color:#1e293b;opacity:.5">
+          <div class="mno" style="color:#334155">BL03</div>
+          <div class="mstatus" style="color:#334155">— ว่าง</div>
+          <div class="mprog"><div class="mprog-fill" style="width:0%"></div></div>
+          <div class="mlot">ยังไม่มีงาน</div>
+        </div>
+        <div class="machine-card">
+          <div class="mno">PM01</div>
+          <div class="mstatus">● พร้อมใช้งาน</div>
+          <div class="mprog"><div class="mprog-fill" style="width:80%"></div></div>
+          <div class="mlot">Lot: 68PM01</div>
+        </div>
+        <div class="machine-card">
+          <div class="mno">S01</div>
+          <div class="mstatus">● พร้อมใช้งาน</div>
+          <div class="mprog"><div class="mprog-fill" style="width:20%"></div></div>
+          <div class="mlot">Lot: 68S01</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"><div class="connector-line"></div><div class="connector-arrow"></div></div>
+
+  <!-- ══ STEP 3: ชั่งน้ำหนัก ══ -->
+  <div class="section">
+    <div class="section-inner">
+      <div class="step-badge-row">
+        <div class="step-num">3</div>
+        <div>
+          <div class="step-label">⚖️ หน้าชั่งน้ำหนัก (หัวใจของระบบ)</div>
+          <div class="step-sub">ชั่งม้วนพลาสติก บันทึก และพิมพ์ label ทันที</div>
+        </div>
+      </div>
+      <div class="weigh-box">
+
+        <!-- LEFT: เครื่องชั่ง -->
+        <div class="weigh-left">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+            <span class="serial-badge"><span style="width:6px;height:6px;border-radius:50%;background:#f87171;display:inline-block"></span> Bridge ไม่เชื่อมต่อ</span>
+            <span style="font-size:10px;color:#475569">หรือ</span>
+            <span style="font-size:10px;color:#22c55e;background:#22c55e10;padding:3px 10px;border-radius:999px;border:1px solid #22c55e30">● เชื่อมต่อเครื่องชั่ง</span>
+          </div>
+
+          <div class="type-pills">
+            <div class="pill pill-good">✓ ม้วนดี</div>
+            <div class="pill pill-bad">✗ ม้วนกรอ</div>
+            <div class="pill pill-scrap">🗑 เศษเสีย</div>
+          </div>
+
+          <div class="weigh-display">
+            <div style="font-size:10px;color:#475569;letter-spacing:1px;margin-bottom:6px">GROSS WEIGHT</div>
+            <div class="weigh-num">25.43</div>
+            <div class="weigh-unit">Kgs.</div>
+            <div class="weigh-net">
+              <div><span class="core-lbl">Core</span><br><span style="font-size:14px;font-weight:700;color:#64748b">1.25 Kgs.</span></div>
+              <span style="color:#334155;font-size:20px">−</span>
+              <div><span class="core-lbl">Net</span><br><span class="net-val">24.18</span><span style="font-size:12px;color:#4f6ef7"> Kgs.</span></div>
+            </div>
+          </div>
+
+          <button class="sim-btn">🎲 สุ่มค่าทดสอบ (จำลอง)</button>
+          <button class="save-btn">💾 Roll 6 · บันทึก 24.18 Kgs.</button>
+        </div>
+
+        <!-- RIGHT: ข้อมูลงาน -->
+        <div class="weigh-right">
+          <div class="info-card">
+            <div style="font-size:11px;color:#4f6ef7;font-weight:700;margin-bottom:8px">ข้อมูลงานปัจจุบัน</div>
+            <div class="info-row"><span class="k">เครื่อง</span><span class="v">BL01</span></div>
+            <div class="info-row"><span class="k">สินค้า</span><span class="v" style="max-width:130px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Plastic Shrink Film</span></div>
+            <div class="info-row"><span class="k">ลูกค้า</span><span class="v">บ.เอช แพคแคจจิ้ง</span></div>
+            <div class="info-row"><span class="k">Lot No</span><span class="v" style="font-size:10px">68BL010246</span></div>
+            <div class="info-row"><span class="k">ผู้ตรวจสอบ</span><span class="v" style="color:#22c55e">✓ test</span></div>
+          </div>
+          <div class="info-card">
+            <div style="font-size:11px;color:#10b981;font-weight:700;margin-bottom:8px">ความคืบหน้า</div>
+            <div class="info-row"><span class="k">ชั่งแล้ว</span><span class="v" style="color:#4f6ef7">472 Kgs.</span></div>
+            <div class="info-row"><span class="k">เป้า</span><span class="v">2,000 Kgs.</span></div>
+            <div style="margin-top:6px;height:6px;border-radius:3px;background:#1e293b">
+              <div style="width:24%;height:100%;border-radius:3px;background:linear-gradient(90deg,#4f6ef7,#7c3aed)"></div>
+            </div>
+            <div style="font-size:10px;color:#475569;text-align:right;margin-top:3px">20 ม้วน · 24%</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"><div class="connector-line"></div><div class="connector-arrow"></div></div>
+
+  <!-- ══ STEP 4: พิมพ์ Label ══ -->
+  <div class="section">
+    <div class="section-inner">
+      <div class="step-badge-row">
+        <div class="step-num">4</div>
+        <div>
+          <div class="step-label">🖨️ พิมพ์ Label อัตโนมัติ</div>
+          <div class="step-sub">หลังบันทึกม้วน ระบบพิมพ์ label ให้อัตโนมัติ พร้อม Barcode + QR Code</div>
+        </div>
+      </div>
+      <div class="label-row">
+        <div class="label-card">
+          <div class="icon" style="background:#1e3a8a22">📄</div>
+          <div>
+            <div class="title">ใบยาว (165×70 mm)</div>
+            <div class="desc">แสดงข้อมูลครบ: สินค้า, ลูกค้า, Mat Code, น้ำหนัก, QR Code ออกแบบ layout ได้เองใน Label Designer</div>
+          </div>
+        </div>
+        <div class="label-card">
+          <div class="icon" style="background:#14532d22">🏷️</div>
+          <div>
+            <div class="title">ใบสั้น (76×76 mm)</div>
+            <div class="desc">เหมาะกับเครื่องพิมพ์ thermal ขนาดเล็ก ข้อมูลสรุปย่อ + QR Code</div>
+          </div>
+        </div>
+        <div class="label-card">
+          <div class="icon" style="background:#1c1208">🔲</div>
+          <div>
+            <div class="title">QR Code</div>
+            <div class="desc">เมื่อสแกน QR จะเปิดหน้ารายละเอียดม้วนนั้นทันที — ใช้ตรวจสอบสินค้าได้ทุกที่</div>
+          </div>
+        </div>
+        <div class="label-card">
+          <div class="icon" style="background:#1a0c2e22">✏️</div>
+          <div>
+            <div class="title">Label Designer</div>
+            <div class="desc">ออกแบบตำแหน่ง field บน label ได้เอง ลาก-วาง ปรับขนาดตัวอักษร ตั้งค่าหัวกระดาษ</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"><div class="connector-line"></div><div class="connector-arrow"></div></div>
+
+  <!-- ══ STEP 5: โอน + คลัง ══ -->
+  <div class="section">
+    <div class="section-inner">
+      <div class="step-badge-row">
+        <div class="step-num">5</div>
+        <div>
+          <div class="step-label">📦 โอนเข้าคลัง & จัดการคลังสินค้า</div>
+          <div class="step-sub">ม้วนที่ชั่งแล้วจะถูกโอนเข้าคลังเพื่อรอจัดส่ง</div>
+        </div>
+      </div>
+      <div class="tw-row">
+        <div class="tw-card tw-transfer">
+          <div class="t-icon">📤</div>
+          <div class="t-title" style="color:#60a5fa">โอนเข้าคลัง</div>
+          <div class="t-desc">เลือกม้วนที่ต้องการโอน กดยืนยัน สถานะเปลี่ยนเป็น "โอนแล้ว" ทันที</div>
+          <div class="feature-list">
+            <div class="feature-item">📋 เลือกหลายม้วนพร้อมกัน</div>
+            <div class="feature-item">✅ ยืนยันการโอนแบบ batch</div>
+            <div class="feature-item">🔄 อัปเดต Realtime ทุกหน้าจอ</div>
+          </div>
+        </div>
+        <div class="tw-card tw-warehouse">
+          <div class="t-icon">🏭</div>
+          <div class="t-title" style="color:#4ade80">คลังสินค้า</div>
+          <div class="t-desc">ดูสต็อกม้วนทั้งหมดในคลัง กรองตามสินค้า ลูกค้า หรือ Lot No</div>
+          <div class="feature-list">
+            <div class="feature-item">🔍 ค้นหาม้วนด้วย Barcode/QR</div>
+            <div class="feature-item">📊 สรุปยอดตามสินค้า</div>
+            <div class="feature-item">📄 Export รายงาน</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"><div class="connector-line"></div><div class="connector-arrow"></div></div>
+
+  <!-- ══ STEP 6: Dashboard + History ══ -->
+  <div class="section">
+    <div class="section-inner">
+      <div class="step-badge-row">
+        <div class="step-num">6</div>
+        <div>
+          <div class="step-label">📊 รายงาน & Dashboard</div>
+          <div class="step-sub">ติดตามผลผลิต วิเคราะห์ข้อมูล ย้อนดูประวัติ</div>
+        </div>
+      </div>
+      <div class="dash-row">
+        <div class="dash-card" style="border-color:#4f6ef740">
+          <div class="d-icon">📊</div>
+          <div class="d-title">Dashboard ภาพรวม</div>
+          <ul class="d-list">
+            <li>กราฟผลผลิตรายวัน/รายเดือน</li>
+            <li>ยอดรวมแต่ละแผนก</li>
+            <li>% Yield (ของดี vs เสีย)</li>
+            <li>เปรียบเทียบช่วงเวลา</li>
+          </ul>
+        </div>
+        <div class="dash-card" style="border-color:#8b5cf640">
+          <div class="d-icon">📋</div>
+          <div class="d-title">รายงาน SO / WO</div>
+          <ul class="d-list">
+            <li>ผลผลิตตาม Sale Order</li>
+            <li>สถานะ Work Order</li>
+            <li>ยอดส่งมอบ vs เป้า</li>
+            <li>รายงานลูกค้า</li>
+          </ul>
+        </div>
+        <div class="dash-card" style="border-color:#22c55e40">
+          <div class="d-icon">📅</div>
+          <div class="d-title">ประวัติการผลิต</div>
+          <ul class="d-list">
+            <li>ย้อนดูม้วนทุกใบ</li>
+            <li>ลบม้วน + บันทึกเหตุผล</li>
+            <li>ค้นหาตาม Lot/เครื่อง</li>
+            <li>ดาวน์โหลด log</li>
+          </ul>
+        </div>
+        <div class="dash-card" style="border-color:#f5950040">
+          <div class="d-icon">🔧</div>
+          <div class="d-title">รายงานกรอ (Rework)</div>
+          <ul class="d-list">
+            <li>ม้วนที่ต้องกรอใหม่</li>
+            <li>สาเหตุและเหตุผล</li>
+            <li>ยอดเศษเสียแต่ละประเภท</li>
+            <li>Inbox งานรอกรอ</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"><div class="connector-line"></div><div class="connector-arrow"></div></div>
+
+  <!-- ══ ADMIN ══ -->
+  <div class="section">
+    <div class="section-inner">
+      <div class="step-badge-row">
+        <div class="step-num" style="background:linear-gradient(135deg,#d97706,#b45309)">🔐</div>
+        <div>
+          <div class="step-label">Admin Panel</div>
+          <div class="step-sub">ต้องกรอก PIN พิเศษเพื่อเข้าถึง — สำหรับผู้ดูแลระบบเท่านั้น</div>
+        </div>
+      </div>
+      <div class="admin-box">
+        <div class="admin-icon">🔐</div>
+        <div>
+          <div class="admin-title">ผู้ดูแลระบบ (Admin)</div>
+          <div class="admin-desc">จัดการการตั้งค่าระดับสูง ดูแล PIN แต่ละแผนก ตรวจสอบ log การลบข้อมูล และจัดการระบบทั้งหมด</div>
+          <div class="admin-features">
+            <span class="admin-badge">🔑 จัดการ PIN แผนก</span>
+            <span class="admin-badge">📋 ดู Deletion Logs</span>
+            <span class="admin-badge">⚙️ ตั้งค่าระบบ</span>
+            <span class="admin-badge">👤 สิทธิ์ผู้ใช้</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"><div class="connector-line"></div><div class="connector-arrow"></div></div>
+
+  <!-- ══ DATABASE ══ -->
+  <div class="section">
+    <div class="section-inner">
+      <div class="step-badge-row">
+        <div class="step-num" style="background:linear-gradient(135deg,#059669,#047857)">☁️</div>
+        <div>
+          <div class="step-label">☁️ ฐานข้อมูล Supabase (Cloud)</div>
+          <div class="step-sub">เก็บข้อมูลทั้งหมดบน cloud — อินเทอร์เน็ตขาด ยังชั่งได้ (offline queue)</div>
+        </div>
+      </div>
+      <div class="db-box">
+        <div class="db-table">
+          <div class="t-name">production_rolls</div>
+          <div class="t-cols">
+            <div class="t-col">• เลขม้วน, น้ำหนัก</div>
+            <div class="t-col">• ประเภท (ดี/กรอ/เศษ)</div>
+            <div class="t-col">• เครื่อง, Lot, สินค้า</div>
+            <div class="t-col">• วันเวลา, ผู้ตรวจ</div>
+          </div>
+        </div>
+        <div class="db-table">
+          <div class="t-name">machine_profiles</div>
+          <div class="t-cols">
+            <div class="t-col">• ข้อมูลงานแต่ละเครื่อง</div>
+            <div class="t-col">• ลูกค้า, สินค้า, Lot</div>
+            <div class="t-col">• น้ำหนักแกน, ขนาด</div>
+            <div class="t-col">• เป้าหมายผลผลิต</div>
+          </div>
+        </div>
+        <div class="db-table">
+          <div class="t-name">label_layouts</div>
+          <div class="t-cols">
+            <div class="t-col">• Layout ใบ label</div>
+            <div class="t-col">• ตำแหน่ง field ต่างๆ</div>
+            <div class="t-col">• ขนาด, font</div>
+          </div>
+        </div>
+        <div class="db-table">
+          <div class="t-name">parked_jobs</div>
+          <div class="t-cols">
+            <div class="t-col">• งานที่จอดไว้ชั่วคราว</div>
+            <div class="t-col">• สแนปชอตข้อมูลงาน</div>
+            <div class="t-col">• ผู้จอด + เวลา</div>
+          </div>
+        </div>
+        <div class="db-table">
+          <div class="t-name">roll_deletion_logs</div>
+          <div class="t-cols">
+            <div class="t-col">• log การลบม้วน</div>
+            <div class="t-col">• ผู้ลบ + เหตุผล</div>
+            <div class="t-col">• ข้อมูลม้วนเต็ม</div>
+          </div>
+        </div>
+        <div class="db-table">
+          <div class="t-name">weigh_logs</div>
+          <div class="t-cols">
+            <div class="t-col">• บันทึกทุกการชั่ง</div>
+            <div class="t-col">• gross/net/core</div>
+            <div class="t-col">• ตรวจสอบย้อนหลัง</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Offline badge -->
+      <div style="display:flex;justify-content:center;margin-top:16px">
+        <div style="display:inline-flex;align-items:center;gap:8px;background:#d9770610;border:1px solid #d9770630;border-radius:999px;padding:6px 16px;font-size:11px;color:#fbbf24">
+          <span>📶</span>
+          <span><b>Offline Mode:</b> ถ้าอินเทอร์เน็ตขาด ระบบบันทึกลง queue ชั่วคราว — เมื่อออนไลน์ sync อัตโนมัติ</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ FOOTER ══ -->
+  <div style="text-align:center;margin-top:48px;padding:24px;border-top:1px solid #12192e">
+    <div style="font-size:13px;color:#334155;margin-bottom:6px">Best World Interplus Co., Ltd.</div>
+    <div style="font-size:11px;color:#1e293b">ระบบชั่งน้ำหนักม้วน · React + TypeScript + Supabase</div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,197 @@
+{
+  "project_name": "scale-dashboard",
+  "stack": [
+    { "name": "React", "category": "frontend", "icon": "react" },
+    { "name": "TypeScript", "category": "frontend", "icon": "box" },
+    { "name": "Vite", "category": "frontend", "icon": "box" },
+    { "name": "Tailwind CSS", "category": "frontend", "icon": "box" },
+    { "name": "Recharts", "category": "frontend", "icon": "chart" },
+    { "name": "Supabase", "category": "database", "icon": "supabase" },
+    { "name": "Node.js (Bridge)", "category": "backend", "icon": "node" }
+  ],
+  "nodes": [
+    {
+      "id": "auth",
+      "name": "Authentication & Department Selection",
+      "plain_english": "Workers pick their department and enter a PIN to log in. An admin master PIN unlocks all departments.",
+      "layer": "frontend",
+      "rank": 0,
+      "icon": "lock",
+      "files": ["src/App.tsx", "src/pages/Admin.tsx"],
+      "external": false
+    },
+    {
+      "id": "weigh",
+      "name": "Weigh Station",
+      "plain_english": "The main screen where workers weigh rolls of material, receiving live weight readings from the connected scale.",
+      "layer": "frontend",
+      "rank": 0,
+      "icon": "box",
+      "files": ["src/pages/WeighStation.tsx"],
+      "external": false
+    },
+    {
+      "id": "dashboard",
+      "name": "Dashboard",
+      "plain_english": "Live summary of production output, scrap rates, and quality breakdowns with charts for supervisors.",
+      "layer": "frontend",
+      "rank": 0,
+      "icon": "dashboard",
+      "files": ["src/pages/Dashboard.tsx"],
+      "external": false
+    },
+    {
+      "id": "warehouse",
+      "name": "Warehouse & Inventory",
+      "plain_english": "Tracks finished rolls in the warehouse. Workers transfer rolls into inventory and check available stock.",
+      "layer": "frontend",
+      "rank": 0,
+      "icon": "cart",
+      "files": ["src/pages/Warehouse.tsx", "src/pages/Transfer.tsx"],
+      "external": false
+    },
+    {
+      "id": "history",
+      "name": "Production History",
+      "plain_english": "A log of all past weighing and production events so supervisors can review what was produced and when.",
+      "layer": "frontend",
+      "rank": 0,
+      "icon": "file",
+      "files": ["src/pages/History.tsx", "src/pages/RollDetail.tsx"],
+      "external": false
+    },
+    {
+      "id": "rework",
+      "name": "Rework Inbox",
+      "plain_english": "Defective or rejected rolls are queued here for the Rework department to pick up and process.",
+      "layer": "frontend",
+      "rank": 0,
+      "icon": "settings",
+      "files": ["src/pages/ReworkInbox.tsx"],
+      "external": false
+    },
+    {
+      "id": "labels",
+      "name": "Label Designer & QR Codes",
+      "plain_english": "Designs and prints QR-code labels for each roll so it can be scanned and identified across the factory.",
+      "layer": "frontend",
+      "rank": 0,
+      "icon": "file",
+      "files": ["src/pages/LabelDesigner.tsx"],
+      "external": false
+    },
+    {
+      "id": "machine_settings",
+      "name": "Machine Settings",
+      "plain_english": "Configures machines and production profiles — machine number, product type, and target weights per department.",
+      "layer": "frontend",
+      "rank": 0,
+      "icon": "settings",
+      "files": ["src/pages/MachineSettings.tsx"],
+      "external": false
+    },
+    {
+      "id": "bridge",
+      "name": "Scale Bridge (Hardware Connector)",
+      "plain_english": "A Windows background service that reads the physical scale over a COM port and streams the live weight via WebSocket.",
+      "layer": "backend",
+      "rank": 2,
+      "icon": "globe",
+      "files": ["bridge/server.js", "BWPScaleBridge-Package/BWPScaleBridge.exe"],
+      "external": false
+    },
+    {
+      "id": "database",
+      "name": "Database Schema",
+      "plain_english": "Defines all cloud database tables — rolls, products, customers, machine profiles, and production records.",
+      "layer": "database",
+      "rank": 3,
+      "icon": "postgres",
+      "files": ["db/setup-all.sql", "db/products.sql", "db/customers.sql", "src/lib/supabase.ts"],
+      "external": false
+    },
+    {
+      "id": "supabase",
+      "name": "Supabase",
+      "plain_english": "Cloud PostgreSQL database and real-time API that stores all production records, roll data, machine profiles, and inventory.",
+      "layer": "external",
+      "rank": 1,
+      "icon": "supabase",
+      "files": [],
+      "external": true
+    }
+  ],
+  "edges": [
+    {
+      "from": "auth",
+      "to": "supabase",
+      "label": "reads department and PIN settings",
+      "kind": "db_read"
+    },
+    {
+      "from": "weigh",
+      "to": "bridge",
+      "label": "receives live weight reading over WebSocket",
+      "kind": "event"
+    },
+    {
+      "from": "weigh",
+      "to": "supabase",
+      "label": "saves each weighed roll record",
+      "kind": "db_write"
+    },
+    {
+      "from": "weigh",
+      "to": "supabase",
+      "label": "reads machine profiles and product settings",
+      "kind": "db_read"
+    },
+    {
+      "from": "dashboard",
+      "to": "supabase",
+      "label": "reads production totals, scrap rates, and quality data",
+      "kind": "db_read"
+    },
+    {
+      "from": "warehouse",
+      "to": "supabase",
+      "label": "reads and updates roll inventory and transfer records",
+      "kind": "db_write"
+    },
+    {
+      "from": "history",
+      "to": "supabase",
+      "label": "reads past production and weighing event logs",
+      "kind": "db_read"
+    },
+    {
+      "from": "rework",
+      "to": "supabase",
+      "label": "reads rejected rolls queued for rework and updates their status",
+      "kind": "db_write"
+    },
+    {
+      "from": "labels",
+      "to": "supabase",
+      "label": "reads roll data to generate QR code labels",
+      "kind": "db_read"
+    },
+    {
+      "from": "machine_settings",
+      "to": "supabase",
+      "label": "saves and loads machine profiles and production settings",
+      "kind": "db_write"
+    },
+    {
+      "from": "database",
+      "to": "supabase",
+      "label": "connects the app to the cloud database using the Supabase client",
+      "kind": "external_call"
+    }
+  ],
+  "summary": {
+    "feature_count": 11,
+    "connection_count": 11,
+    "headline": "A factory floor app where workers weigh rolls on a physical scale, track production and defects in real time, and supervisors see live dashboards of output and quality."
+  }
+}

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>BWP เครื่องชั่ง</title>
+<hta:application
+  id="app"
+  applicationname="BWP Scale Bridge"
+  border="thin"
+  borderstyle="normal"
+  caption="yes"
+  maximizebutton="no"
+  minimizebutton="yes"
+  showintaskbar="yes"
+  singleinstance="yes"
+  scroll="no"
+  innerborder="no"
+  contextmenu="no"
+  selection="no"
+/>
+<style>
+  html,body{margin:0;padding:0;font-family:'Segoe UI','Sarabun',Tahoma,sans-serif;
+    background:#0a0f1e;color:#fff;-ms-user-select:none;user-select:none;overflow:hidden}
+  .wrap{padding:22px 22px 18px}
+  h1{margin:0 0 2px;font-size:20px;color:#3b82f6}
+  .sub{color:#64748b;font-size:12px;margin-bottom:16px}
+  .status{border-radius:14px;padding:16px;text-align:center;margin-bottom:18px;border:2px solid #334155;background:#0f172a}
+  .dot{font-size:15px;font-weight:bold}
+  .on{color:#10b981}.off{color:#ef4444}
+  .stbig{font-size:22px;font-weight:bold;margin-top:4px}
+  button{width:100%;border:0;border-radius:14px;cursor:pointer;font-weight:bold;color:#fff;
+    font-family:inherit;margin-bottom:12px;padding:18px 0;font-size:20px}
+  .open{background:#16a34a}.open:hover{background:#22c55e}
+  .close{background:#dc2626}.close:hover{background:#ef4444}
+  .set{background:#334155;font-size:15px;padding:12px 0}.set:hover{background:#475569}
+  .small{font-size:12px;color:#64748b;text-align:center;margin-top:6px}
+  .err{color:#f87171;font-size:12px;text-align:center;min-height:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>&#9878; เครื่องชั่ง BWP</h1>
+  <div class="sub">กดปุ่มเพื่อเปิด หรือ ปิด</div>
+
+  <div class="status" id="box">
+    <div class="dot off" id="dot">&#9711; กำลังตรวจสอบ...</div>
+    <div class="stbig" id="big">&mdash;</div>
+  </div>
+
+  <button class="open"  onclick="startBridge()">&#9654;&nbsp; เปิดเครื่องชั่ง</button>
+  <button class="close" onclick="stopBridge()">&#9632;&nbsp; ปิดเครื่องชั่ง</button>
+  <button class="set"   onclick="openSettings()">&#9881;&nbsp; ตั้งค่า / สลับเครื่องชั่ง</button>
+
+  <div class="err" id="err"></div>
+  <div class="small">หน้าต่างนี้ปิดได้ เครื่องชั่งยังทำงานต่อ</div>
+</div>
+
+<script language="javascript">
+  var EXE = "BWPScaleBridge.exe";
+  var shell = new ActiveXObject("WScript.Shell");
+  var fso   = new ActiveXObject("Scripting.FileSystemObject");
+
+  // หา path ของ .exe — ติดตั้งแล้ว > โฟลเดอร์เดียวกับ hta > dist
+  function findExe(){
+    var pf = shell.ExpandEnvironmentStrings("%ProgramFiles%") + "\\BWPScaleBridge\\" + EXE;
+    if (fso.FileExists(pf)) return pf;
+    var here = fso.GetParentFolderName(unescape(location.pathname.replace(/^\//,"")));
+    var p1 = here + "\\" + EXE;            if (fso.FileExists(p1)) return p1;
+    var p2 = here + "\\dist\\" + EXE;      if (fso.FileExists(p2)) return p2;
+    return "";
+  }
+
+  function isRunning(){
+    try{
+      var ex = shell.Exec('cmd /c tasklist /fi "imagename eq '+EXE+'" /nh');
+      var out = ex.StdOut.ReadAll();
+      return out.toLowerCase().indexOf(EXE.toLowerCase()) >= 0;
+    }catch(e){ return false; }
+  }
+
+  function refresh(){
+    var run = isRunning();
+    var dot = document.getElementById("dot");
+    var big = document.getElementById("big");
+    var box = document.getElementById("box");
+    if (run){
+      dot.className = "dot on";  dot.innerHTML = "&#9679; กำลังทำงาน";
+      big.innerHTML = "พร้อมชั่ง";
+      box.style.borderColor = "#10b981";
+    } else {
+      dot.className = "dot off"; dot.innerHTML = "&#9711; ปิดอยู่";
+      big.innerHTML = "&mdash;";
+      box.style.borderColor = "#334155";
+    }
+  }
+
+  function startBridge(){
+    document.getElementById("err").innerHTML = "";
+    if (isRunning()){ openSettings(); refresh(); return; }
+    var exe = findExe();
+    if (!exe){ document.getElementById("err").innerHTML = "ไม่พบ "+EXE+" — วาง .hta ไว้ข้างไฟล์ exe"; return; }
+    shell.Run('"'+exe+'"', 0, false);   // 0 = ซ่อนหน้าต่าง
+    setTimeout(function(){ refresh(); openSettings(); }, 1500);
+  }
+
+  function stopBridge(){
+    document.getElementById("err").innerHTML = "";
+    shell.Run('cmd /c taskkill /f /im '+EXE, 0, true);
+    setTimeout(refresh, 600);
+  }
+
+  function openSettings(){
+    shell.Run("http://localhost:8080", 1, false);
+  }
+
+  // ปรับขนาดหน้าต่าง + ตรวจสถานะทุก 2 วิ
+  window.resizeTo(360, 430);
+  refresh();
+  window.setInterval(refresh, 2000);
+</script>
+</body>
+</html>

@@ -78,6 +78,7 @@ if %errorlevel% neq 0 (
 
 REM แพ็คเฉพาะไฟล์ที่ผู้ใช้ต้องใช้: exe + แผงควบคุม + คู่มือ
 del /Q "dist\install.bat" "dist\uninstall.bat" "dist\README.txt" "dist\run-hidden.vbs" >nul 2>&1
+copy /Y "installer\เครื่องชั่ง.hta" "dist\เครื่องชั่ง.hta" >nul 2>&1
 copy /Y "installer\เปิดเครื่องชั่ง.bat" "dist\เปิดเครื่องชั่ง.bat" >nul 2>&1
 copy /Y "installer\ปิดเครื่องชั่ง.bat" "dist\ปิดเครื่องชั่ง.bat" >nul 2>&1
 copy /Y "installer\Bridge-Control.bat" "dist\Bridge-Control.bat" >nul 2>&1

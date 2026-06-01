@@ -547,7 +547,7 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
                       <div className="mt-auto">
                         <div className="flex justify-between text-xs mb-1">
                           <span className="text-green-400 font-bold">
-                            {prog.rolls} ม้วน · {prog.done.toFixed(1)} Kgs.
+                            {prog.rolls} ม้วน · {prog.done.toFixed(p.decimal ?? 2)} Kgs.
                           </span>
                           {planned > 0 && (
                             <span className={remaining <= 0 ? 'text-green-400 font-bold' : 'text-amber-400 font-bold'}>

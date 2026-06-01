@@ -57,8 +57,11 @@
 
 <script language="javascript">
   var EXE = "BWPScaleBridge.exe";
+  var URL = "http://localhost:8080";
   var shell = new ActiveXObject("WScript.Shell");
   var fso   = new ActiveXObject("Scripting.FileSystemObject");
+  var running = false;     // สถานะล่าสุด
+  var busy = false;        // กันยิงซ้ำซ้อน
 
   // หา path ของ .exe — ติดตั้งแล้ว > โฟลเดอร์เดียวกับ hta > dist
   function findExe(){
@@ -70,20 +73,11 @@
     return "";
   }
 
-  function isRunning(){
-    try{
-      var ex = shell.Exec('cmd /c tasklist /fi "imagename eq '+EXE+'" /nh');
-      var out = ex.StdOut.ReadAll();
-      return out.toLowerCase().indexOf(EXE.toLowerCase()) >= 0;
-    }catch(e){ return false; }
-  }
-
-  function refresh(){
-    var run = isRunning();
+  function paint(){
     var dot = document.getElementById("dot");
     var big = document.getElementById("big");
     var box = document.getElementById("box");
-    if (run){
+    if (running){
       dot.className = "dot on";  dot.innerHTML = "&#9679; กำลังทำงาน";
       big.innerHTML = "พร้อมชั่ง";
       box.style.borderColor = "#10b981";
@@ -94,9 +88,31 @@
     }
   }
 
+  // เช็คสถานะแบบ async ผ่าน HTTP — ไม่เปิด cmd ไม่บล็อก UI
+  function refresh(){
+    if (busy) return;
+    busy = true;
+    try{
+      var xhr = new ActiveXObject("Microsoft.XMLHTTP");
+      xhr.open("GET", URL + "/status?t=" + (new Date()).getTime(), true);
+      xhr.onreadystatechange = function(){
+        if (xhr.readyState == 4){
+          running = (xhr.status == 200);
+          busy = false;
+          paint();
+        }
+      };
+      xhr.send();
+      // กันค้างกรณีไม่ตอบ — เกิน 1.2 วิ ถือว่าปิด
+      setTimeout(function(){
+        if (busy){ try{ xhr.abort(); }catch(e){} running = false; busy = false; paint(); }
+      }, 1200);
+    }catch(e){ running = false; busy = false; paint(); }
+  }
+
   function startBridge(){
     document.getElementById("err").innerHTML = "";
-    if (isRunning()){ openSettings(); refresh(); return; }
+    if (running){ openSettings(); return; }
     var exe = findExe();
     if (!exe){ document.getElementById("err").innerHTML = "ไม่พบ "+EXE+" — วาง .hta ไว้ข้างไฟล์ exe"; return; }
     shell.Run('"'+exe+'"', 0, false);   // 0 = ซ่อนหน้าต่าง
@@ -105,18 +121,20 @@
 
   function stopBridge(){
     document.getElementById("err").innerHTML = "";
-    shell.Run('cmd /c taskkill /f /im '+EXE, 0, true);
-    setTimeout(refresh, 600);
+    shell.Run('taskkill /f /im '+EXE, 0, true);   // 0 = ซ่อนหน้าต่าง
+    running = false; paint();
+    setTimeout(refresh, 800);
   }
 
   function openSettings(){
-    shell.Run("http://localhost:8080", 1, false);
+    shell.Run(URL, 1, false);
   }
 
-  // ปรับขนาดหน้าต่าง + ตรวจสถานะทุก 2 วิ
+  // ปรับขนาดหน้าต่าง + ตรวจสถานะทุก 2.5 วิ
   window.resizeTo(360, 430);
+  paint();
   refresh();
-  window.setInterval(refresh, 2000);
+  window.setInterval(refresh, 2500);
 </script>
 </body>
 </html>

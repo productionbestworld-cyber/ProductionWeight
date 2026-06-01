@@ -5,3 +5,6 @@ dist
 
 # Bridge build output
 bridge/*.zip
+
+# ignore all build zips
+*.zip

@@ -1,10 +1,11 @@
-import { useEffect, useState, useMemo, Fragment } from 'react'
+import { useEffect, useState, useMemo, useRef, Fragment } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   BarChart as HBarChart,
 } from 'recharts'
+import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
-import { RotateCcw } from 'lucide-react'
+import { RotateCcw, Upload, X, Download, FileSpreadsheet } from 'lucide-react'
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 function fmtKg(n: number) {
@@ -96,6 +97,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   const [ctrlCloseJob,   setCtrlCloseJob]   = useState<any | null>(null)
   const [expandedJob,    setExpandedJob]    = useState<string | null>(null)
   const [showBadOther,   setShowBadOther]   = useState(false)
+  const [showImport,     setShowImport]     = useState(false)
 
   // filters
   const today = toDateStr(new Date())
@@ -496,12 +498,18 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                 ))}
               </div>
             </div>
-            <button onClick={resetFilters}
-              className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border transition-colors self-end ${
-                hasFilter ? 'bg-blue-50 border-blue-300 text-blue-600 hover:bg-blue-100' : 'border-gray-200 text-gray-400 hover:text-gray-600'
-              }`}>
-              <RotateCcw size={12}/> ล้างค่า (Reset)
-            </button>
+            <div className="flex items-center gap-2 self-end">
+              <button onClick={() => setShowImport(true)}
+                className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors">
+                <Upload size={12}/> นำเข้ายอดผลิต (Excel)
+              </button>
+              <button onClick={resetFilters}
+                className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border transition-colors ${
+                  hasFilter ? 'bg-blue-50 border-blue-300 text-blue-600 hover:bg-blue-100' : 'border-gray-200 text-gray-400 hover:text-gray-600'
+                }`}>
+                <RotateCcw size={12}/> ล้างค่า (Reset)
+              </button>
+            </div>
           </div>
           <div className="flex items-center gap-3 mt-2">
             {loading && <p className="text-xs text-blue-500">กำลังโหลด...</p>}
@@ -2207,6 +2215,12 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
           onClose={() => setCtrlCloseJob(null)}
           onDone={() => { setCtrlCloseJob(null); load() }} />
       )}
+      {/* ── นำเข้ายอดผลิตย้อนหลังจาก Excel ── */}
+      {showImport && (
+        <ImportProductionModal
+          onClose={() => setShowImport(false)}
+          onDone={() => { setShowImport(false); load() }} />
+      )}
     </div>
   )
 }
@@ -2334,6 +2348,236 @@ function CtrlCloseJobModal({ job, onClose, onDone }: { job: any; onClose: () => 
           <button onClick={save} disabled={saving}
             className="flex-[2] bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white py-2.5 rounded-xl font-bold text-sm">
             {saving ? 'ปิดงาน...' : '✕ ยืนยันปิดงาน'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── นำเข้ายอดผลิตย้อนหลังจาก Excel → production_rolls ───────────────────────
+type ImportRoll = {
+  created_at: string
+  roll_type: string
+  weight: number
+  gross_weight: number | null
+  core_weight: number | null
+  machine_no: string
+  section: string
+  product_name: string
+  customer: string
+  lot_no: string
+  product_code: string
+  item_code: string
+  width_cm: string | null
+  thick_mc: string | null
+  roll_no: number
+}
+
+// แปลงค่าวันที่จาก Excel (Date object / serial number / string) → ISO string
+function parseImportDate(v: any): string | null {
+  if (v === null || v === undefined || v === '') return null
+  if (v instanceof Date && !isNaN(v.getTime())) return v.toISOString()
+  if (typeof v === 'number') {
+    // Excel serial date (วันที่ 1 = 1900-01-01); 25569 = วันที่ระหว่าง epoch
+    const ms = Math.round((v - 25569) * 86400 * 1000)
+    const d = new Date(ms)
+    return isNaN(d.getTime()) ? null : d.toISOString()
+  }
+  const s = String(v).trim()
+  // dd/mm/yyyy หรือ dd-mm-yyyy
+  const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/)
+  if (m) {
+    let [, dd, mm, yy] = m
+    let year = parseInt(yy)
+    if (year < 100) year += 2000
+    if (year > 2400) year -= 543   // พ.ศ. → ค.ศ.
+    const d = new Date(year, parseInt(mm) - 1, parseInt(dd), 12)
+    return isNaN(d.getTime()) ? null : d.toISOString()
+  }
+  const d = new Date(s)
+  return isNaN(d.getTime()) ? null : d.toISOString()
+}
+
+function ImportProductionModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [rows, setRows]         = useState<ImportRoll[]>([])
+  const [errors, setErrors]     = useState<string[]>([])
+  const [fileName, setFileName] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  function mapRollType(v: string): string {
+    const s = v.toLowerCase().trim()
+    if (/good|ดี|ผ่าน|ok/.test(s)) return 'good'
+    if (/scrap|เศษ|ทิ้ง/.test(s)) return 'scrap'
+    if (/bad|กรอ|เสีย|ng|reject/.test(s)) return 'bad'
+    return s || 'good'
+  }
+  function mapSection(v: string): string {
+    const s = v.toLowerCase().trim()
+    if (/blow|เป่า/.test(s)) return 'blow'
+    if (/print|พิมพ์/.test(s)) return 'print'
+    if (/rewind|กรอ/.test(s)) return 'rewind'
+    return s || 'blow'
+  }
+
+  async function handleFile(file: File) {
+    setFileName(file.name)
+    const buf = await file.arrayBuffer()
+    const wb = XLSX.read(buf, { type: 'array', cellDates: true })
+    const ws = wb.Sheets[wb.SheetNames[0]]
+    const aoa: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+    if (aoa.length < 2) { setErrors(['ไฟล์ว่างเปล่า หรือไม่มีข้อมูล']); setRows([]); return }
+
+    const header = aoa[0].map(h => String(h).toLowerCase().trim())
+    type Key = keyof ImportRoll
+    const dict: Record<string, Key> = {
+      'created_at':'created_at','date':'created_at','วันที่':'created_at','วันที่ผลิต':'created_at',
+      'roll_type':'roll_type','type':'roll_type','ประเภท':'roll_type','ชนิด':'roll_type',
+      'weight':'weight','net':'weight','น้ำหนัก':'weight','น้ำหนักสุทธิ':'weight','net_weight':'weight',
+      'gross_weight':'gross_weight','gross':'gross_weight','น้ำหนักรวม':'gross_weight',
+      'core_weight':'core_weight','core':'core_weight','แกน':'core_weight','น้ำหนักแกน':'core_weight',
+      'machine_no':'machine_no','machine':'machine_no','เครื่อง':'machine_no','เลขเครื่อง':'machine_no',
+      'section':'section','ฝั่ง':'section','ฝั่งผลิต':'section','แผนก':'section',
+      'product_name':'product_name','product':'product_name','สินค้า':'product_name','ชื่อสินค้า':'product_name',
+      'customer':'customer','cust':'customer','ลูกค้า':'customer',
+      'lot_no':'lot_no','lot':'lot_no','ล็อต':'lot_no',
+      'product_code':'product_code','รหัสสินค้า':'product_code',
+      'item_code':'item_code','item':'item_code',
+      'width_cm':'width_cm','width':'width_cm','กว้าง':'width_cm','หน้ากว้าง':'width_cm',
+      'thick_mc':'thick_mc','thick':'thick_mc','หนา':'thick_mc','ความหนา':'thick_mc',
+      'roll_no':'roll_no','roll':'roll_no','เลขม้วน':'roll_no','ม้วนที่':'roll_no',
+    }
+    const colMap = header.map(h => dict[h] ?? null)
+
+    const out: ImportRoll[] = []
+    const errs: string[] = []
+    for (let i = 1; i < aoa.length; i++) {
+      const r = aoa[i]
+      if (!r || r.every(c => c === '' || c === null || c === undefined)) continue
+      const raw: any = {}
+      r.forEach((v, j) => { if (colMap[j]) raw[colMap[j]!] = v })
+
+      const rowNo = i + 1
+      const dateIso = parseImportDate(raw.created_at)
+      const weight  = parseFloat(String(raw.weight ?? '').replace(/,/g, ''))
+      if (!dateIso)            { errs.push(`แถว ${rowNo}: วันที่ไม่ถูกต้อง (${raw.created_at})`); continue }
+      if (isNaN(weight) || weight <= 0) { errs.push(`แถว ${rowNo}: น้ำหนักไม่ถูกต้อง (${raw.weight})`); continue }
+      if (!raw.machine_no)    { errs.push(`แถว ${rowNo}: ไม่มีเลขเครื่อง`); continue }
+
+      const gw = parseFloat(String(raw.gross_weight ?? '').replace(/,/g, ''))
+      const cw = parseFloat(String(raw.core_weight ?? '').replace(/,/g, ''))
+      out.push({
+        created_at:   dateIso,
+        roll_type:    mapRollType(String(raw.roll_type ?? 'good')),
+        weight:       weight,
+        gross_weight: isNaN(gw) ? null : gw,
+        core_weight:  isNaN(cw) ? null : cw,
+        machine_no:   String(raw.machine_no).trim(),
+        section:      mapSection(String(raw.section ?? 'blow')),
+        product_name: String(raw.product_name ?? '').trim(),
+        customer:     String(raw.customer ?? '').trim(),
+        lot_no:       String(raw.lot_no ?? '').trim(),
+        product_code: String(raw.product_code ?? '').trim(),
+        item_code:    String(raw.item_code ?? '').trim(),
+        width_cm:     raw.width_cm ? String(raw.width_cm).trim() : null,
+        thick_mc:     raw.thick_mc ? String(raw.thick_mc).trim() : null,
+        roll_no:      parseInt(String(raw.roll_no ?? '0')) || 0,
+      })
+    }
+    setRows(out)
+    setErrors(errs)
+  }
+
+  function downloadTemplate() {
+    const data = [
+      ['วันที่','ประเภท','น้ำหนัก','น้ำหนักรวม','แกน','เครื่อง','ฝั่ง','สินค้า','ลูกค้า','ล็อต','รหัสสินค้า','Item Code','กว้าง','หนา','เลขม้วน'],
+      ['2026-01-15','good','24.50','25.00','0.50','01','blow','PET 1.5L SHRINK FILM','ไทยน้ำทิพย์','L2601-001','P001','60001001','57','80','1'],
+      ['2026-01-15','good','23.80','24.30','0.50','01','blow','PET 1.5L SHRINK FILM','ไทยน้ำทิพย์','L2601-001','P001','60001001','57','80','2'],
+      ['2026-02-03','bad','5.20','5.70','0.50','02','print','PE BAG 50x70cm','เสริมสุข','L2602-010','P101','60002001','50','75','1'],
+      ['2026-03-20','scrap','2.10','2.10','0','03','rewind','SHRINK SLEEVE 65mm','โอสถสภา','L2603-005','P201','60003001','65','85','0'],
+    ]
+    const ws = XLSX.utils.aoa_to_sheet(data)
+    ws['!cols'] = [{wch:12},{wch:8},{wch:9},{wch:10},{wch:7},{wch:8},{wch:8},{wch:24},{wch:14},{wch:12},{wch:11},{wch:11},{wch:7},{wch:7},{wch:8}]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'ยอดผลิต')
+    XLSX.writeFile(wb, 'ตัวอย่าง-นำเข้ายอดผลิต.xlsx')
+  }
+
+  async function doImport() {
+    if (rows.length === 0) return
+    setImporting(true); setProgress(0)
+    const BATCH = 200
+    for (let i = 0; i < rows.length; i += BATCH) {
+      const batch = rows.slice(i, i + BATCH).map(r => ({ ...r, is_legacy: true, inspector: 'นำเข้า' }))
+      const { error } = await supabase.from('production_rolls').insert(batch)
+      if (error) { alert(`นำเข้าล้มเหลวที่แถว ~${i + 2}: ${error.message}`); setImporting(false); return }
+      setProgress(Math.min(rows.length, i + BATCH))
+    }
+    setImporting(false)
+    alert(`✓ นำเข้ายอดผลิต ${rows.length} รายการเรียบร้อย`)
+    onDone()
+  }
+
+  const good  = rows.filter(r => r.roll_type === 'good').length
+  const bad   = rows.filter(r => r.roll_type === 'bad').length
+  const scrap = rows.filter(r => r.roll_type === 'scrap').length
+  const totalKg = rows.reduce((s, r) => s + r.weight, 0)
+  const dates = rows.map(r => r.created_at.slice(0, 10)).sort()
+  const dateRange = dates.length ? `${dates[0]} → ${dates[dates.length - 1]}` : '—'
+
+  return (
+    <div className="fixed inset-0 bg-black/70 z-[70] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-3xl shadow-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+          <p className="text-gray-800 font-bold flex items-center gap-2"><Upload size={18}/> นำเข้ายอดผลิตย้อนหลัง</p>
+          <div className="flex items-center gap-2">
+            <button onClick={downloadTemplate}
+              className="bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-300 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5">
+              <Download size={12}/> ดาวน์โหลดตัวอย่าง
+            </button>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={18}/></button>
+          </div>
+        </div>
+
+        <div className="px-5 py-4 space-y-3 overflow-y-auto">
+          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }}/>
+          <button onClick={() => fileRef.current?.click()}
+            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 border-2 border-dashed border-emerald-300">
+            <FileSpreadsheet size={20}/>
+            {fileName ? `📄 ${fileName} — คลิกเพื่อเปลี่ยนไฟล์` : '📁 เลือกไฟล์ Excel (.xlsx, .csv)'}
+          </button>
+
+          <p className="text-[11px] text-gray-400 leading-relaxed">
+            คอลัมน์ที่ต้องมี: <b>วันที่</b>, <b>ประเภท</b> (good/bad/scrap), <b>น้ำหนัก</b>, <b>เครื่อง</b>, <b>ฝั่ง</b> (blow/print/rewind).
+            ที่เหลือ (สินค้า ลูกค้า ล็อต กว้าง หนา) มีก็ใส่ได้ — กดปุ่มดาวน์โหลดตัวอย่างเพื่อดูรูปแบบ
+          </p>
+
+          {rows.length > 0 && (
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+              <div><p className="text-2xl font-black text-gray-800">{rows.length}</p><p className="text-[10px] text-gray-400">รายการพร้อมนำเข้า</p></div>
+              <div><p className="text-2xl font-black text-emerald-600">{good}</p><p className="text-[10px] text-gray-400">ดี · กรอ {bad} · เศษ {scrap}</p></div>
+              <div><p className="text-2xl font-black text-blue-600">{num(totalKg, 0)}</p><p className="text-[10px] text-gray-400">รวม (kg)</p></div>
+              <div><p className="text-xs font-bold text-gray-700 mt-1.5">{dateRange}</p><p className="text-[10px] text-gray-400">ช่วงวันที่</p></div>
+            </div>
+          )}
+
+          {errors.length > 0 && (
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 max-h-32 overflow-y-auto">
+              <p className="text-xs font-bold text-rose-700 mb-1">⚠ ข้ามไป {errors.length} แถว (ข้อมูลไม่ครบ):</p>
+              {errors.slice(0, 10).map((e, i) => <p key={i} className="text-[11px] text-rose-600">{e}</p>)}
+              {errors.length > 10 && <p className="text-[11px] text-rose-400">…และอีก {errors.length - 10} แถว</p>}
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-4 border-t border-gray-200 flex gap-2">
+          <button onClick={onClose} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl text-sm font-semibold">ยกเลิก</button>
+          <button onClick={doImport} disabled={rows.length === 0 || importing}
+            className="flex-[2] bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white py-2.5 rounded-xl font-bold text-sm">
+            {importing ? `กำลังนำเข้า… ${progress}/${rows.length}` : `✓ นำเข้า ${rows.length} รายการ`}
           </button>
         </div>
       </div>

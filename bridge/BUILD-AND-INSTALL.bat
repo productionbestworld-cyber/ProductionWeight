@@ -78,6 +78,7 @@ if %errorlevel% neq 0 (
 
 copy /Y "installer\install.bat" "dist\install.bat" >nul 2>&1
 copy /Y "installer\uninstall.bat" "dist\uninstall.bat" >nul 2>&1
+copy /Y "installer\Bridge-Control.bat" "dist\Bridge-Control.bat" >nul 2>&1
 copy /Y "%VBS%" "dist\run-hidden.vbs" >nul 2>&1
 powershell -NoProfile -Command "Compress-Archive -Path 'dist\*' -DestinationPath 'BWPScaleBridge-Setup.zip' -Force" >nul 2>&1
 

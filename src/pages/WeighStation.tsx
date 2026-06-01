@@ -1518,7 +1518,8 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
           const now = Date.now()
           if (now - lastUpdate < 150) return
           lastUpdate = now
-          if (typeof d.value === 'number') setGross(parseFloat(d.value.toFixed(dec)))
+          // เก็บค่าเต็มจาก Bridge — ไม่ truncate ที่ state (จะ format ตอน display ด้วย fmt(x, dec))
+          if (typeof d.value === 'number') setGross(d.value)
           setSerialStable(!!d.stable)
           setStable(!!d.stable)
           if (d.raw) setRawSerial(d.raw)

@@ -30,13 +30,14 @@ function loadConfig() {
       return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'))
     }
   } catch (e) { console.warn('load config error', e.message) }
-  return { comPort: '', baudRate: 9600 }
+  return { comPort: '', baudRate: 9600, scales: [] }
 }
 function saveConfig(cfg) {
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2))
 }
 
 let config = loadConfig()
+if (!Array.isArray(config.scales)) config.scales = []
 let currentPort = null
 let lastWeight = { value: 0, stable: false, raw: '', timestamp: 0, connected: false }
 
@@ -148,48 +149,161 @@ app.post('/config', (req, res) => {
   }
 })
 
+// ── บันทึก/ลบ "เครื่องชั่ง" ที่จำไว้ ─────────────────────────
+app.post('/scales', (req, res) => {
+  try {
+    const { action, name, comPort, baudRate, index } = req.body
+    if (!Array.isArray(config.scales)) config.scales = []
+    if (action === 'add') {
+      if (!name || !comPort) return res.status(400).json({ error: 'ต้องมีชื่อและ COM port' })
+      // ถ้าชื่อซ้ำ → อัปเดตตัวเดิม
+      const exist = config.scales.findIndex(s => s.name === name)
+      const item = { name, comPort, baudRate: baudRate || 9600 }
+      if (exist >= 0) config.scales[exist] = item
+      else config.scales.push(item)
+    } else if (action === 'delete') {
+      if (typeof index === 'number') config.scales.splice(index, 1)
+    }
+    saveConfig(config)
+    res.json(config)
+  } catch (e) {
+    console.error('[bridge] /scales error:', e)
+    res.status(500).json({ error: e.message })
+  }
+})
+
 // Config UI (เปิดที่ http://localhost:8080)
 app.get('/', async (req, res) => {
   const ports = await SerialPort.list().catch(() => [])
   res.send(`<!DOCTYPE html><html><head>
-    <meta charset="utf-8"/><title>BWP Scale Bridge</title>
+    <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <title>BWP Scale Bridge</title>
     <style>
-      body{font-family:Sarabun,Arial,sans-serif;background:#0a0f1e;color:#fff;padding:20px;max-width:600px;margin:auto}
-      h1{color:#3b82f6}
-      .card{background:#1e293b;padding:20px;border-radius:12px;margin-bottom:16px}
+      body{font-family:Sarabun,Arial,sans-serif;background:#0a0f1e;color:#fff;padding:20px;max-width:640px;margin:auto}
+      h1{color:#3b82f6;font-size:22px}
+      .card{background:#1e293b;padding:18px;border-radius:14px;margin-bottom:16px}
       label{display:block;margin:8px 0 4px;color:#94a3b8;font-size:13px}
-      select,input{width:100%;padding:8px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#fff;font-size:14px}
-      button{background:#3b82f6;color:#fff;border:0;padding:10px 20px;border-radius:8px;cursor:pointer;font-weight:bold}
-      .status{font-family:monospace;color:#10b981;font-size:24px;font-weight:bold;text-align:center;padding:20px}
+      select,input{width:100%;padding:9px;background:#0f172a;border:1px solid #334155;border-radius:8px;color:#fff;font-size:14px;box-sizing:border-box}
+      button{background:#3b82f6;color:#fff;border:0;padding:10px 18px;border-radius:8px;cursor:pointer;font-weight:bold;font-size:14px}
+      .status{font-family:monospace;color:#10b981;font-size:30px;font-weight:bold;text-align:center;padding:16px}
       .raw{font-family:monospace;background:#020617;padding:8px;border-radius:6px;font-size:11px;color:#64748b;word-break:break-all}
       .ok{color:#10b981}.bad{color:#ef4444}
+      h2{font-size:15px;color:#cbd5e1;margin:0 0 12px}
+      .scaleBtn{display:flex;align-items:center;justify-content:space-between;width:100%;padding:14px 16px;margin-bottom:8px;border-radius:12px;
+        background:#0f172a;border:2px solid #334155;color:#fff;cursor:pointer;text-align:left}
+      .scaleBtn:hover{border-color:#3b82f6}
+      .scaleBtn.active{border-color:#10b981;background:#0d2a1f}
+      .scaleBtn .nm{font-size:17px;font-weight:bold}
+      .scaleBtn .meta{font-size:12px;color:#94a3b8}
+      .scaleBtn .badge{font-size:11px;color:#10b981;font-weight:bold}
+      .del{background:#7f1d1d;padding:6px 10px;font-size:12px;border-radius:6px;margin-left:8px}
+      .muted{color:#64748b;font-size:12px}
+      .row{display:flex;gap:8px}.row>*{flex:1}
+      details summary{cursor:pointer;color:#94a3b8;font-size:13px;padding:4px 0}
     </style></head><body>
     <h1>⚖ BWP Scale Bridge</h1>
+
+    <!-- น้ำหนักสด + สถานะ -->
     <div class="card">
-      <label>COM Port</label>
-      <select id="comPort">
-        <option value="">— เลือก —</option>
-        ${ports.map(p => `<option value="${p.path}" ${p.path===config.comPort?'selected':''}>${p.path} ${p.friendlyName ? `(${p.friendlyName})` : ''}</option>`).join('')}
-      </select>
-      <label>Baud Rate</label>
-      <select id="baudRate">
-        ${[1200,2400,4800,9600,19200,38400,57600,115200].map(b => `<option value="${b}" ${b===config.baudRate?'selected':''}>${b}</option>`).join('')}
-      </select>
-      <p style="margin-top:16px"><button onclick="save()">💾 บันทึก + เชื่อมต่อ</button></p>
-    </div>
-    <div class="card">
-      <p style="color:#94a3b8;font-size:12px">สถานะ: <span id="status" class="bad">ยังไม่เชื่อมต่อ</span></p>
+      <p class="muted">สถานะ: <span id="status" class="bad">ยังไม่เชื่อมต่อ</span> · ใช้อยู่: <b id="curName">—</b></p>
       <div class="status" id="weight">— Kgs.</div>
-      <p style="color:#64748b;font-size:11px;margin-bottom:6px">Raw data:</p>
+      <p class="muted" style="margin-bottom:6px">Raw data:</p>
       <div class="raw" id="raw">—</div>
     </div>
+
+    <!-- ปุ่มสลับเครื่องชั่งคลิกเดียว -->
+    <div class="card">
+      <h2>🔀 สลับเครื่องชั่ง (คลิกเดียว)</h2>
+      <div id="scaleList"></div>
+      <p id="noScale" class="muted" style="display:none">ยังไม่มีเครื่องชั่งที่บันทึกไว้ — เพิ่มด้านล่าง</p>
+    </div>
+
+    <!-- เพิ่ม/ตั้งค่าเครื่องชั่ง -->
+    <details class="card">
+      <summary>➕ เพิ่ม / ตั้งค่าเครื่องชั่ง</summary>
+      <label>ชื่อเครื่องชั่ง (เช่น เครื่องชั่ง 1)</label>
+      <input id="name" placeholder="เครื่องชั่ง 1"/>
+      <div class="row">
+        <div>
+          <label>COM Port</label>
+          <select id="comPort">
+            <option value="">— เลือก —</option>
+            ${ports.map(p => `<option value="${p.path}" ${p.path===config.comPort?'selected':''}>${p.path} ${p.friendlyName ? `(${p.friendlyName})` : ''}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label>Baud Rate</label>
+          <select id="baudRate">
+            ${[1200,2400,4800,9600,19200,38400,57600,115200].map(b => `<option value="${b}" ${b===config.baudRate?'selected':''}>${b}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <p class="row" style="margin-top:14px">
+        <button onclick="addScale()">💾 บันทึกเป็นเครื่องชั่ง</button>
+        <button onclick="connectNow()" style="background:#475569">⚡ เชื่อมต่อทันที (ไม่บันทึก)</button>
+      </p>
+      <p class="muted">บันทึกครั้งเดียว ครั้งต่อไปกดปุ่มสลับด้านบนได้เลย</p>
+    </details>
+
     <script>
-      async function save() {
+      let cfg = { comPort:'', baudRate:9600, scales:[] }
+
+      async function refresh() {
+        const r = await fetch('/status'); const s = await r.json()
+        cfg = s.config || cfg
+        renderScales(s.connected)
+      }
+      function renderScales(connected) {
+        const list = document.getElementById('scaleList')
+        const scales = cfg.scales || []
+        document.getElementById('noScale').style.display = scales.length ? 'none' : 'block'
+        list.innerHTML = scales.map((sc, i) => {
+          const active = sc.comPort === cfg.comPort
+          const cur = active ? (connected ? ' · ● ทำงาน' : ' · ○ ไม่ติด') : ''
+          return '<div class="scaleBtn '+(active?'active':'')+'">'
+            + '<div onclick="switchTo('+i+')" style="flex:1">'
+            +   '<div class="nm">'+escapeHtml(sc.name)+(active?' <span class="badge">(ใช้อยู่'+cur+')</span>':'')+'</div>'
+            +   '<div class="meta">'+escapeHtml(sc.comPort)+' @ '+sc.baudRate+' baud</div>'
+            + '</div>'
+            + '<button class="del" onclick="delScale('+i+')">ลบ</button>'
+            + '</div>'
+        }).join('')
+        const cs = (cfg.scales||[]).find(x => x.comPort === cfg.comPort)
+        document.getElementById('curName').textContent = cs ? cs.name : (cfg.comPort || '—')
+      }
+      function escapeHtml(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+
+      async function switchTo(i) {
+        const sc = cfg.scales[i]; if (!sc) return
+        await fetch('/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({comPort:sc.comPort, baudRate:sc.baudRate}) })
+        await refresh()
+      }
+      async function delScale(i) {
+        if (!confirm('ลบเครื่องชั่งนี้?')) return
+        await fetch('/scales', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'delete', index:i}) })
+        await refresh()
+      }
+      async function addScale() {
+        const name = document.getElementById('name').value.trim()
         const comPort = document.getElementById('comPort').value
         const baudRate = parseInt(document.getElementById('baudRate').value)
+        if (!name) { alert('กรุณาตั้งชื่อเครื่องชั่ง'); return }
+        if (!comPort) { alert('กรุณาเลือก COM port'); return }
+        await fetch('/scales', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'add', name, comPort, baudRate}) })
+        // เชื่อมต่อเครื่องที่เพิ่งบันทึกเลย
         await fetch('/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({comPort, baudRate}) })
-        alert('บันทึกแล้ว')
+        document.getElementById('name').value = ''
+        await refresh()
+        alert('บันทึกแล้ว — ครั้งต่อไปกดปุ่มสลับด้านบนได้เลย')
       }
+      async function connectNow() {
+        const comPort = document.getElementById('comPort').value
+        const baudRate = parseInt(document.getElementById('baudRate').value)
+        if (!comPort) { alert('กรุณาเลือก COM port'); return }
+        await fetch('/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({comPort, baudRate}) })
+        await refresh()
+      }
+
       const ws = new WebSocket('ws://' + location.host)
       ws.onmessage = e => {
         const d = JSON.parse(e.data)
@@ -198,6 +312,8 @@ app.get('/', async (req, res) => {
         document.getElementById('status').className = d.connected ? 'ok' : 'bad'
         document.getElementById('raw').textContent = d.raw || '—'
       }
+      refresh()
+      setInterval(refresh, 5000)
     </script>
   </body></html>`)
 })

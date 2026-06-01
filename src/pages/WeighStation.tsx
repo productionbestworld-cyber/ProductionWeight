@@ -2394,7 +2394,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
             </div>
             <input
               type="number" step="0.01" inputMode="decimal"
-              value={gross || ''}
+              value={serialConnected && !simMode ? (gross ? gross.toFixed(dec) : '') : (gross || '')}
               onChange={e => { setGross(parseFloat(e.target.value)||0); setStable(true) }}
               placeholder="0.00"
               readOnly={serialConnected && !simMode}

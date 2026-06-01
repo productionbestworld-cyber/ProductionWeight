@@ -88,50 +88,75 @@
     }
   }
 
-  // เช็คสถานะแบบ async ผ่าน HTTP — ไม่เปิด cmd ไม่บล็อก UI
-  function refresh(){
-    if (busy) return;
-    busy = true;
+  function setErr(html){ document.getElementById("err").innerHTML = html; }
+
+  // เช็คครั้งเดียวว่าบริดตอบที่ port 8080 ไหม → cb(true/false)
+  function checkOnce(cb){
     try{
       var xhr = new ActiveXObject("Microsoft.XMLHTTP");
       xhr.open("GET", URL + "/status?t=" + (new Date()).getTime(), true);
+      var done = false;
       xhr.onreadystatechange = function(){
-        if (xhr.readyState == 4){
-          running = (xhr.status == 200);
-          busy = false;
-          paint();
-        }
+        if (xhr.readyState == 4 && !done){ done = true; cb(xhr.status == 200); }
       };
       xhr.send();
-      // กันค้างกรณีไม่ตอบ — เกิน 1.2 วิ ถือว่าปิด
-      setTimeout(function(){
-        if (busy){ try{ xhr.abort(); }catch(e){} running = false; busy = false; paint(); }
-      }, 1200);
-    }catch(e){ running = false; busy = false; paint(); }
+      setTimeout(function(){ if(!done){ done=true; try{xhr.abort();}catch(e){} cb(false); } }, 1200);
+    }catch(e){ cb(false); }
+  }
+
+  // ตรวจสถานะตามรอบ (ไม่ทับช่วงกำลังเปิด)
+  function refresh(){
+    if (busy) return;
+    busy = true;
+    checkOnce(function(up){ running = up; busy = false; paint(); });
   }
 
   function startBridge(){
-    document.getElementById("err").innerHTML = "";
+    setErr("");
     if (running){ openSettings(); return; }
     var exe = findExe();
-    if (!exe){ document.getElementById("err").innerHTML = "ไม่พบ "+EXE+" — วาง .hta ไว้ข้างไฟล์ exe"; return; }
-    shell.Run('"'+exe+'"', 0, false);   // 0 = ซ่อนหน้าต่าง
-    setTimeout(function(){ refresh(); openSettings(); }, 1500);
+    if (!exe){
+      setErr("ไม่พบไฟล์ <b>"+EXE+"</b><br>ต้องก๊อป <b>"+EXE+"</b> มาวางโฟลเดอร์เดียวกับไฟล์นี้");
+      return;
+    }
+    document.getElementById("big").innerHTML = "กำลังเปิด...";
+    // ปลดบล็อกไฟล์ที่ก๊อปมาจากเครื่องอื่น (Mark of the Web) แล้วค่อยรัน
+    try{ shell.Run('powershell -NoProfile -ExecutionPolicy Bypass -Command "Unblock-File -LiteralPath \'' + exe + '\'"', 0, true); }catch(e){}
+    try{ shell.Run('"'+exe+'"', 0, false); }catch(e){
+      setErr("เปิดไม่สำเร็จ: " + e.message);
+      return;
+    }
+    pollStart(0, exe);
+  }
+
+  // รอจนบริดขึ้น (ลองได้ ~7 วิ) แล้วเด้งหน้าตั้งค่า; ถ้าไม่ขึ้นบอกวิธีแก้
+  function pollStart(n, exe){
+    checkOnce(function(up){
+      if (up){ running = true; paint(); setErr(""); openSettings(); return; }
+      if (n < 7){ setTimeout(function(){ pollStart(n+1, exe); }, 1000); return; }
+      running = false; paint();
+      setErr("เปิดเครื่องชั่งไม่ขึ้น &mdash; อาจถูก Windows บล็อก<br>"
+        + "วิธีแก้: คลิกขวา <b>"+EXE+"</b> &rarr; Properties &rarr; ติ๊ก <b>Unblock</b> &rarr; OK แล้วลองใหม่<br>"
+        + "<a href='#' onclick='openFolder();return false;' style='color:#60a5fa'>เปิดโฟลเดอร์ไฟล์</a>");
+    });
   }
 
   function stopBridge(){
-    document.getElementById("err").innerHTML = "";
-    shell.Run('taskkill /f /im '+EXE, 0, true);   // 0 = ซ่อนหน้าต่าง
+    setErr("");
+    try{ shell.Run('taskkill /f /im '+EXE, 0, true); }catch(e){}
     running = false; paint();
     setTimeout(refresh, 800);
   }
 
-  function openSettings(){
-    shell.Run(URL, 1, false);
+  function openSettings(){ shell.Run(URL, 1, false); }
+
+  function openFolder(){
+    var here = fso.GetParentFolderName(unescape(location.pathname.replace(/^\//,"")));
+    try{ shell.Run('explorer "'+here+'"', 1, false); }catch(e){}
   }
 
   // ปรับขนาดหน้าต่าง + ตรวจสถานะทุก 2.5 วิ
-  window.resizeTo(360, 430);
+  window.resizeTo(360, 460);
   paint();
   refresh();
   window.setInterval(refresh, 2500);

@@ -76,38 +76,42 @@ async function printLabel(p: MachineProfile, rollNo: number, gross: number, net:
     meta:        `Mat&nbsp;<b>${p.matCode}</b>&nbsp;&nbsp;&nbsp;MFG&nbsp;<b>${mfgDate}</b>&nbsp;&nbsp;&nbsp;Roll&nbsp;<b>${rollNo === 0 ? '—' : rollNo}</b>`,
   }
 
-  function renderLongField(f: FieldConfig): string {
-    if (!f.visible) return ''
+  // factory: สร้าง renderer จาก data map + qr size — ใช้ได้ทั้งใบยาว/ใบสั้น
+  function makeFieldRenderer(dataMap: Record<string, string>, qrSize: 72|56) {
+    return function renderField(f: FieldConfig): string {
+      if (!f.visible) return ''
 
-    // separator: ถ้า h > w → เส้นตั้ง (vsep), ถ้า h ≈ 0 → เส้นนอน
-    if (f.type === 'separator') {
-      if (f.h > f.w) {
-        // เส้นตั้ง
-        return `<div style="position:absolute;left:${f.x}mm;top:${f.y}mm;width:0;height:${f.h}mm;border-left:1px solid #000;box-sizing:border-box"></div>`
+      // separator: ถ้า h > w → เส้นตั้ง, ถ้า h ≈ 0 → เส้นนอน
+      if (f.type === 'separator') {
+        if (f.h > f.w) {
+          return `<div style="position:absolute;left:${f.x}mm;top:${f.y}mm;width:0;height:${f.h}mm;border-left:1px solid #000;box-sizing:border-box"></div>`
+        }
+        return `<div style="position:absolute;left:${f.x}mm;top:${f.y}mm;width:${f.w}mm;height:0;border-top:1px solid #000;box-sizing:border-box"></div>`
       }
-      return `<div style="position:absolute;left:${f.x}mm;top:${f.y}mm;width:${f.w}mm;height:0;border-top:1px solid #000;box-sizing:border-box"></div>`
+
+      if (f.type === 'qr') {
+        const px = Math.round(f.h * 3.78)
+        return `<img src="${qrUrl(qrSize)}" width="${px}" height="${px}" style="position:absolute;left:${f.x}mm;top:${f.y}mm;width:${f.w}mm;height:${f.h}mm;image-rendering:pixelated"/>`
+      }
+
+      const value   = dataMap[f.id] ?? f.sampleValue
+      const border  = f.border ? 'border:1px solid #000;' : ''
+      const justify = f.align === 'center' ? 'justify-content:center;' : f.align === 'right' ? 'justify-content:flex-end;' : ''
+      const italic  = f.italic ? 'font-style:italic;' : ''
+
+      if (f.type === 'weight') {
+        return `<div style="position:absolute;left:${f.x}mm;top:${f.y}mm;width:${f.w}mm;height:${f.h}mm;${border}box-sizing:border-box;overflow:hidden;padding:0 1mm">
+          <div style="font-size:7.5pt;font-weight:700;line-height:1.4">Net Weight</div>
+          <div style="font-size:${f.fontSize}pt;font-weight:900;line-height:1;color:#003087">${value}</div>
+          <div style="font-size:8pt;font-weight:700;line-height:1.3">Kgs.</div>
+        </div>`
+      }
+
+      return `<div style="position:absolute;left:${f.x}mm;top:${f.y}mm;width:${f.w}mm;height:${f.h}mm;font-size:${f.fontSize}pt;font-weight:${f.fontWeight};text-align:${f.align};${italic}${border}box-sizing:border-box;overflow:hidden;display:flex;align-items:center;${justify}padding:0 0.5mm">${value}</div>`
     }
-
-    if (f.type === 'qr') {
-      const px = Math.round(f.h * 3.78)
-      return `<img src="${qrUrl(72)}" width="${px}" height="${px}" style="position:absolute;left:${f.x}mm;top:${f.y}mm;width:${f.w}mm;height:${f.h}mm;image-rendering:pixelated"/>`
-    }
-
-    const value   = longFieldData[f.id] ?? f.sampleValue
-    const border  = f.border ? 'border:1px solid #000;' : ''
-    const justify = f.align === 'center' ? 'justify-content:center;' : f.align === 'right' ? 'justify-content:flex-end;' : ''
-    const italic  = f.italic ? 'font-style:italic;' : ''
-
-    if (f.type === 'weight') {
-      return `<div style="position:absolute;left:${f.x}mm;top:${f.y}mm;width:${f.w}mm;height:${f.h}mm;${border}box-sizing:border-box;overflow:hidden;padding:0 1mm">
-        <div style="font-size:7.5pt;font-weight:700;line-height:1.4">Net Weight</div>
-        <div style="font-size:${f.fontSize}pt;font-weight:900;line-height:1;color:#003087">${value}</div>
-        <div style="font-size:8pt;font-weight:700;line-height:1.3">Kgs.</div>
-      </div>`
-    }
-
-    return `<div style="position:absolute;left:${f.x}mm;top:${f.y}mm;width:${f.w}mm;height:${f.h}mm;font-size:${f.fontSize}pt;font-weight:${f.fontWeight};text-align:${f.align};${italic}${border}box-sizing:border-box;overflow:hidden;display:flex;align-items:center;${justify}padding:0 0.5mm">${value}</div>`
   }
+
+  const renderLongField = makeFieldRenderer(longFieldData, 72)
 
   const longHtmlFromLayout = `
 <style>
@@ -119,6 +123,7 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
 <div style="position:relative;width:${savedLayout.labelW}mm;height:${savedLayout.labelH}mm;border:1.5px solid #000;overflow:hidden">
 ${savedLayout.fields.map(renderLongField).join('\n')}
 </div>`
+
 
   // ═══════════════════════════════════════════════════════
   // ใบยาว 165 × 70 mm (fallback default — ไม่ถูกใช้แล้ว เก็บไว้เผื่อ)
@@ -297,8 +302,8 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
 
 </div>`
 
-  const W   = size === 'long' ? 165  : 76.2
-  const H   = size === 'long' ? 70   : 76.2
+  const W   = size === 'long' ? savedLayout.labelW : 76.2
+  const H   = size === 'long' ? savedLayout.labelH : 76.2
   const win = window.open('', '_blank', `width=${Math.round(W*3.78)},height=${Math.round(H*3.78)},menubar=no,toolbar=no`)
   if (!win) {
     // popup ถูก browser block — แจ้งผู้ใช้ + แนะนำให้ allow popup

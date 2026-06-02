@@ -111,6 +111,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   const [reworkSource, setReworkSource]       = useState<'all'|'internal'|'external'>('all')
   const [compDim, setCompDim] = useState<'machine'|'day'|'wo'|'so'|'customer'|'product'|'size'|'reason'|'inspector'|'section'>('machine')
   const [compPeriod, setCompPeriod] = useState<'1d'|'7d'|'15d'|'1m'|'3m'|'6m'|'1y'>('7d')
+  const [compMetric, setCompMetric] = useState<'volume'|'quality'>('volume')
   const [compRolls,  setCompRolls]  = useState<Roll[]>([])
 
   const [loading, setLoading] = useState(true)
@@ -438,6 +439,28 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
         scPct:  tot ? (scKg  / tot * 100) : 0,
       }
     })
+  }, [filtered])
+
+  // ── สรุปตามใบสั่งผลิต (WO) × วันที่ × กะ × เครื่อง ────────────────────────────
+  // งานที่วิ่งหลายวันจะเห็นแต่ละวัน/แต่ละกะแยกแถว
+  const shiftSummary = useMemo(() => {
+    const map = new Map<string, { wo: string; day: string; shift: string; machine: string; fgKg: number; fgRolls: number; badKg: number; scKg: number }>()
+    for (const r of filtered) {
+      const wo      = ((r as any).work_order ?? '').trim() || '(ไม่ระบุ WO)'
+      const day     = (r.created_at ?? '').slice(0, 10)
+      const shift   = ((r as any).inspector ?? '').trim() || '(ไม่ระบุกะ)'
+      const machine = r.machine_no || '—'
+      const key = `${wo}|||${day}|||${shift}|||${machine}`
+      const v = map.get(key) ?? { wo, day, shift, machine, fgKg: 0, fgRolls: 0, badKg: 0, scKg: 0 }
+      const w = r.weight ?? 0
+      if (r.roll_type === 'good')      { v.fgKg += w; v.fgRolls += 1 }
+      else if (r.roll_type === 'bad')  v.badKg += w
+      else if (String(r.roll_type).startsWith('scrap')) v.scKg += w
+      map.set(key, v)
+    }
+    return [...map.values()]
+      .map(v => ({ ...v, tot: v.fgKg + v.badKg + v.scKg }))
+      .sort((a, b) => a.wo.localeCompare(b.wo) || a.day.localeCompare(b.day) || a.shift.localeCompare(b.shift))
   }, [filtered])
 
   function resetFilters() {
@@ -1147,6 +1170,65 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
             </div>
           </div>
 
+          {/* ── สมดุลมวล: Input = Output = 100% ── */}
+          {(() => {
+            const inputKg = totalKg                       // รับเข้ารวม = FG + ซ่อม + เศษ
+            const fgP   = inputKg ? fgKg / inputKg * 100 : 0
+            const rwP   = inputKg ? badKg / inputKg * 100 : 0
+            const scP   = inputKg ? allScrapKg / inputKg * 100 : 0
+            const pct = (v: number) => inputKg ? (v / inputKg * 100) : 0
+            return (
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+                  <p className="font-bold text-gray-700 flex items-center gap-2"><span>⚖</span> สมดุลมวล (Input = Output = 100%)</p>
+                  <p className="text-xs text-gray-400">รับเข้ารวม <b className="text-gray-700">{fmtKg(inputKg)} kg</b></p>
+                </div>
+                <div className="p-5 space-y-4">
+                  {/* แถบสัดส่วน */}
+                  <div className="h-7 w-full rounded-lg overflow-hidden flex text-[10px] font-bold text-white">
+                    {fgP > 0 && <div className="bg-blue-500 flex items-center justify-center" style={{ width: `${fgP}%` }} title={`FG ${fgP.toFixed(1)}%`}>{fgP >= 8 ? `FG ${fgP.toFixed(0)}%` : ''}</div>}
+                    {rwP > 0 && <div className="bg-orange-500 flex items-center justify-center" style={{ width: `${rwP}%` }} title={`ซ่อม ${rwP.toFixed(1)}%`}>{rwP >= 8 ? `ซ่อม ${rwP.toFixed(0)}%` : ''}</div>}
+                    {scP > 0 && <div className="bg-red-500 flex items-center justify-center" style={{ width: `${scP}%` }} title={`เศษ ${scP.toFixed(1)}%`}>{scP >= 8 ? `เศษ ${scP.toFixed(0)}%` : ''}</div>}
+                  </div>
+
+                  {/* 5 หมวด (มาตรฐาน In=Out): FG / RW / WIP / SCRAP / LOSS */}
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    <div className="rounded-lg border-l-4 border-blue-500 bg-blue-50 p-3">
+                      <p className="text-[10px] text-blue-700 font-bold uppercase">1 · FG (ผลิตดี)</p>
+                      <p className="text-xl font-black text-blue-700 mt-0.5">{fmtKg(fgKg)} <span className="text-xs font-normal text-gray-500">kg</span></p>
+                      <p className="text-blue-600 text-xs">{fgP.toFixed(2)}% · {fg.length.toLocaleString()} ม้วน</p>
+                    </div>
+                    <div className="rounded-lg border-l-4 border-orange-500 bg-orange-50 p-3">
+                      <p className="text-[10px] text-orange-700 font-bold uppercase">2 · RW (ซ่อม/กรอ)</p>
+                      <p className="text-xl font-black text-orange-700 mt-0.5">{fmtKg(badKg)} <span className="text-xs font-normal text-gray-500">kg</span></p>
+                      <p className="text-orange-600 text-xs">{rwP.toFixed(2)}%</p>
+                    </div>
+                    <div className="rounded-lg border-l-4 border-gray-300 bg-gray-50 p-3">
+                      <p className="text-[10px] text-gray-500 font-bold uppercase">3 · WIP (ค้างผลิต)</p>
+                      <p className="text-xl font-black text-gray-400 mt-0.5">—</p>
+                      <p className="text-gray-400 text-xs">ยังไม่บันทึกแยก</p>
+                    </div>
+                    <div className="rounded-lg border-l-4 border-red-500 bg-red-50 p-3">
+                      <p className="text-[10px] text-red-700 font-bold uppercase">4 · SCRAP (เศษเสีย)</p>
+                      <p className="text-xl font-black text-red-700 mt-0.5">{fmtKg(allScrapKg)} <span className="text-xs font-normal text-gray-500">kg</span></p>
+                      <p className="text-red-600 text-xs">{scP.toFixed(2)}%</p>
+                    </div>
+                    <div className="rounded-lg border-l-4 border-amber-400 bg-amber-50 p-3">
+                      <p className="text-[10px] text-amber-700 font-bold uppercase">5 · LOSS (สูญเสีย)</p>
+                      <p className="text-xl font-black text-amber-600 mt-0.5">—</p>
+                      <p className="text-amber-600 text-xs">ยังไม่บันทึกแยก</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs bg-gray-50 rounded-lg px-4 py-2.5">
+                    <span className="text-gray-500">Output (1+2+4) = <b className="text-gray-800">{(fgP + rwP + scP).toFixed(2)}%</b> ของรับเข้า</span>
+                    <span className="text-green-600 font-bold">Yield (FG) = {pct(fgKg).toFixed(2)}%</span>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
+
           {/* สรุปต่อเครื่องจักร */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="px-5 py-3 border-b border-gray-100">
@@ -1156,7 +1238,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200 text-[11px] text-gray-500 uppercase tracking-wider">
-                    {['เครื่อง','FG (kg)','ม้วน','กรอ (kg)','กรอ%','เศษใส','เศษสี','เศษก้อน','เศษรวม%','Total (kg)'].map(h => (
+                    {['เครื่อง','FG (kg)','นน.รวม (kg)','ม้วน','กรอ (kg)','กรอ%','เศษใส','เศษสี','เศษก้อน','เศษรวม%'].map(h => (
                       <th key={h} className="px-3 py-2.5 text-left font-semibold">{h}</th>
                     ))}
                   </tr>
@@ -1170,6 +1252,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                           <span className="bg-blue-100 text-blue-700 font-bold text-xs px-2 py-0.5 rounded">{row.machine}</span>
                         </td>
                         <td className="px-3 py-2.5 font-bold text-blue-600">{num(row.fgKg, 1)}</td>
+                        <td className="px-3 py-2.5 font-bold text-gray-700">{num(row.tot, 1)}</td>
                         <td className="px-3 py-2.5 text-gray-500">{row.fgRolls}</td>
                         <td className="px-3 py-2.5 text-orange-500">{num(row.badKg, 1)}</td>
                         <td className="px-3 py-2.5">
@@ -1185,7 +1268,6 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                             {row.scPct.toFixed(1)}%
                           </span>
                         </td>
-                        <td className="px-3 py-2.5 font-bold text-gray-700">{num(row.tot, 1)}</td>
                       </tr>
                     ))
                   }
@@ -1195,6 +1277,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                     <tr className="bg-gray-100 border-t-2 border-gray-300 font-bold text-sm">
                       <td className="px-3 py-2.5 text-gray-700">รวม</td>
                       <td className="px-3 py-2.5 text-blue-600">{num(fgKg, 1)}</td>
+                      <td className="px-3 py-2.5 text-gray-800">{num(totalKg, 1)}</td>
                       <td className="px-3 py-2.5 text-gray-600">{fg.length}</td>
                       <td className="px-3 py-2.5 text-orange-500">{num(badKg, 1)}</td>
                       <td className="px-3 py-2.5 text-gray-500">{totalKg ? (badKg/totalKg*100).toFixed(1) : 0}%</td>
@@ -1202,10 +1285,61 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                       <td className="px-3 py-2.5 text-purple-500">{num(scrapColorKg, 1)}</td>
                       <td className="px-3 py-2.5 text-amber-600">{num(scrapLumpKg, 1)}</td>
                       <td className="px-3 py-2.5 text-gray-500">{totalKg ? (allScrapKg/totalKg*100).toFixed(1) : 0}%</td>
-                      <td className="px-3 py-2.5 text-gray-800">{num(totalKg, 1)}</td>
                     </tr>
                   </tfoot>
                 )}
+              </table>
+            </div>
+          </div>
+
+          {/* ── ผลงานตามกะ (ผู้ตรวจสอบ) ── */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+              <p className="font-bold text-gray-700 flex items-center gap-2"><span>👷</span> ผลงานตามใบสั่งผลิต × วันที่ × กะ × เครื่อง</p>
+              <p className="text-xs text-gray-400">{shiftSummary.length} แถว · งานหลายวันเห็นแต่ละกะ</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200 text-[11px] text-gray-500 uppercase tracking-wider">
+                    {['ใบสั่งผลิต (WO)','วันที่','กะ (ผู้ตรวจ)','เครื่อง','ม้วนผลิตได้','นน.ผลิตได้ (kg)','กรอ (kg)','เศษ (kg)','นน.รวม (kg)','Yield'].map(h => (
+                      <th key={h} className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {shiftSummary.length === 0
+                    ? <tr><td colSpan={10} className="px-4 py-10 text-center text-gray-400">ไม่มีข้อมูล</td></tr>
+                    : shiftSummary.map((row, i) => {
+                      const yieldP = row.tot ? (row.fgKg / row.tot * 100) : 0
+                      const firstOfWo = i === 0 || shiftSummary[i - 1].wo !== row.wo
+                      return (
+                        <tr key={row.wo + row.day + row.shift + row.machine} className={`hover:bg-gray-50 transition-colors ${firstOfWo ? 'border-t-2 border-amber-200' : ''}`}>
+                          <td className="px-3 py-2.5">
+                            {firstOfWo && <span className="bg-amber-100 text-amber-700 font-bold text-xs px-2 py-0.5 rounded font-mono">{row.wo}</span>}
+                          </td>
+                          <td className="px-3 py-2.5 text-gray-500 text-xs whitespace-nowrap">{row.day ? new Date(row.day).toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit' }) : '—'}</td>
+                          <td className="px-3 py-2.5">
+                            <span className="bg-indigo-100 text-indigo-700 font-bold text-xs px-2 py-0.5 rounded">{row.shift}</span>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <span className="bg-blue-100 text-blue-700 font-bold text-xs px-2 py-0.5 rounded">{row.machine}</span>
+                          </td>
+                          <td className="px-3 py-2.5 font-bold text-blue-600">{row.fgRolls.toLocaleString()}</td>
+                          <td className="px-3 py-2.5 font-bold text-blue-600">{num(row.fgKg, 1)}</td>
+                          <td className="px-3 py-2.5 text-orange-500">{num(row.badKg, 1)}</td>
+                          <td className="px-3 py-2.5 text-red-500">{num(row.scKg, 1)}</td>
+                          <td className="px-3 py-2.5 font-bold text-gray-700">{num(row.tot, 1)}</td>
+                          <td className="px-3 py-2.5">
+                            <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${yieldP >= 95 ? 'bg-green-100 text-green-700' : yieldP >= 85 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-600'}`}>
+                              {yieldP.toFixed(1)}%
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  }
+                </tbody>
               </table>
             </div>
           </div>
@@ -2125,11 +2259,24 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
             b.rolls += 1
           }
 
-          const data = [...bucketMap.values()].sort((a, b) => b.total - a.total).slice(0, 30)
-          // ถ้าเป็น day → เรียง chronologically
+          // เพิ่มสัดส่วน % (normalized) ให้เทียบกันอย่างเป็นธรรม ไม่ขึ้นกับปริมาณ
+          type BucketQ = Bucket & { yieldPct: number; badPctN: number; scrapPctN: number; scrapKg: number }
+          const dataAll: BucketQ[] = [...bucketMap.values()].map(b => {
+            const scrapKg = b.เศษใส + b.เศษสี + b.เศษก้อน
+            return {
+              ...b, scrapKg,
+              yieldPct:  b.total ? b.FG / b.total * 100 : 0,
+              badPctN:   b.total ? b.ม้วนกรอ / b.total * 100 : 0,
+              scrapPctN: b.total ? scrapKg / b.total * 100 : 0,
+            }
+          })
+          // เรียง: โหมดปริมาณ→ตามน้ำหนัก, โหมดคุณภาพ→ตาม Yield สูงสุด
+          const data = dataAll
+            .sort((a, b) => compMetric === 'quality' ? b.yieldPct - a.yieldPct : b.total - a.total)
+            .slice(0, 30)
           if (compDim === 'day') data.sort((a, b) => a.key.localeCompare(b.key))
 
-          const dimLabel = compDim === 'machine' ? 'เครื่องจักร' : compDim === 'day' ? 'วัน' : compDim === 'so' ? 'Sale Order' : compDim === 'wo' ? 'Work Order' : compDim === 'customer' ? 'ลูกค้า' : compDim === 'product' ? 'สินค้า' : compDim === 'size' ? 'ขนาด' : compDim === 'reason' ? 'สาเหตุของเสีย' : compDim === 'inspector' ? 'ผู้ตรวจสอบ' : 'แผนก'
+          const dimLabel = compDim === 'machine' ? 'เครื่องจักร' : compDim === 'day' ? 'วัน' : compDim === 'so' ? 'Sale Order' : compDim === 'wo' ? 'ใบสั่งผลิต (WO)' : compDim === 'customer' ? 'ลูกค้า' : compDim === 'product' ? 'สินค้า' : compDim === 'size' ? 'ขนาด' : compDim === 'reason' ? 'สาเหตุของเสีย' : compDim === 'inspector' ? 'กะ (ผู้ตรวจ)' : 'แผนก'
           const periodLabel = compPeriod === '1d' ? '1 วัน' : compPeriod === '7d' ? '7 วัน' : compPeriod === '15d' ? '15 วัน' : compPeriod === '1m' ? '1 เดือน' : compPeriod === '3m' ? '3 เดือน' : compPeriod === '6m' ? '6 เดือน' : '1 ปี'
 
           return (
@@ -2137,22 +2284,37 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
             {/* Controls */}
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 space-y-3">
               <div>
-                <p className="text-[10px] text-gray-400 mb-1.5 font-semibold uppercase tracking-wider">📐 มิติเปรียบเทียบ</p>
+                <p className="text-[10px] text-gray-400 mb-1.5 font-semibold uppercase tracking-wider">📐 เทียบตาม</p>
                 <div className="flex flex-wrap gap-1.5">
                   {([
                     { k:'machine',  label:'🏭 เครื่อง' },
-                    { k:'day',      label:'📅 รายวัน' },
-                    { k:'wo',       label:'📋 WO' },
+                    { k:'inspector',label:'👷 กะ' },
+                    { k:'wo',       label:'📋 ใบสั่งผลิต' },
                     { k:'so',       label:'📝 SO' },
+                    { k:'day',      label:'📅 รายวัน' },
                     { k:'customer', label:'👥 ลูกค้า' },
                     { k:'product',  label:'📦 สินค้า' },
                     { k:'size',     label:'📏 ขนาด' },
                     { k:'reason',   label:'⚠ สาเหตุของเสีย' },
-                    { k:'inspector',label:'👤 ผู้ตรวจสอบ' },
-                    { k:'section',  label:'🏗 แผนก' },
                   ] as const).map(t => (
                     <button key={t.k} onClick={() => setCompDim(t.k)}
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${compDim===t.k ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-gray-500 border-gray-300 hover:border-gray-400'}`}>
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* โหมดเทียบ: ปริมาณ (kg) vs คุณภาพ (%) */}
+              <div>
+                <p className="text-[10px] text-gray-400 mb-1.5 font-semibold uppercase tracking-wider">⚖ วิธีเทียบ</p>
+                <div className="flex gap-1.5">
+                  {([
+                    { k:'volume',  label:'📦 ปริมาณ (kg)',  desc:'ใครผลิตได้มากสุด' },
+                    { k:'quality', label:'✨ คุณภาพ (%)',   desc:'เทียบเป็นธรรม — Yield/เสีย ไม่ขึ้นกับปริมาณ' },
+                  ] as const).map(t => (
+                    <button key={t.k} onClick={() => setCompMetric(t.k)} title={t.desc}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${compMetric===t.k ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-500 border-gray-300 hover:border-gray-400'}`}>
                       {t.label}
                     </button>
                   ))}
@@ -2204,10 +2366,32 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
 
             {/* Chart */}
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-              <p className="font-bold text-gray-700 mb-4">📈 เปรียบเทียบ {dimLabel} — ช่วง {periodLabel}</p>
+              <p className="font-bold text-gray-700 mb-1">📈 เปรียบเทียบ {dimLabel} — ช่วง {periodLabel}</p>
+              <p className="text-xs text-gray-400 mb-4">
+                {compMetric === 'quality'
+                  ? '✨ โหมดคุณภาพ: แต่ละแท่ง = 100% แยกเป็น FG / กรอ / เศษ → เทียบประสิทธิภาพได้แม้ปริมาณต่างกัน (เรียงตาม Yield สูงสุด)'
+                  : '📦 โหมดปริมาณ: ความยาวแท่ง = น้ำหนักจริง (kg) → ดูว่าใครผลิตได้มากสุด'}
+              </p>
               {data.length === 0
                 ? <div className="h-80 flex items-center justify-center text-gray-400">ไม่มีข้อมูลในช่วงนี้</div>
-                : (
+                : compMetric === 'quality' ? (
+                <ResponsiveContainer width="100%" height={Math.max(380, data.length * 32)}>
+                  <BarChart data={data} layout="vertical" margin={{ top: 10, right: 50, left: 10, bottom: 5 }}
+                    stackOffset="expand">
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false}/>
+                    <XAxis type="number" tickFormatter={(v) => `${Math.round(v * 100)}%`} domain={[0, 1]} tick={{ fontSize: 10 }}/>
+                    <YAxis type="category" dataKey="key" width={130} tick={{ fontSize: 11 }}/>
+                    <Tooltip formatter={(v: any, n: any, p: any) => {
+                      const tot = p.payload.total || 1
+                      return [`${(Number(v) / tot * 100).toFixed(1)}% (${num(Number(v),1)} kg)`, n]
+                    }}/>
+                    <Legend wrapperStyle={{ fontSize: 11 }}/>
+                    <Bar dataKey="FG"       name="FG (ดี)" fill="#22c55e" stackId="a"/>
+                    <Bar dataKey="ม้วนกรอ" name="กรอ"     fill="#f97316" stackId="a"/>
+                    <Bar dataKey="scrapKg"  name="เศษ"     fill="#ef4444" stackId="a"/>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
                 <ResponsiveContainer width="100%" height={Math.max(380, data.length * 32)}>
                   <BarChart data={data} layout="vertical" margin={{ top: 10, right: 80, left: 10, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false}/>
@@ -2237,12 +2421,11 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                 <div className="overflow-x-auto max-h-[500px]">
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50 text-[11px] text-gray-500 uppercase sticky top-0">
-                      <tr>{['#', dimLabel, 'ม้วน', 'FG (kg)', 'กรอ (kg)', 'เศษใส', 'เศษสี', 'เศษก้อน', 'รวม (kg)', '% ของรวม', 'Yield%'].map(h => <th key={h} className="px-3 py-2 text-left font-semibold whitespace-nowrap">{h}</th>)}</tr>
+                      <tr>{['#', dimLabel, 'ม้วน', 'FG (kg)', 'กรอ (kg)', 'เศษ (kg)', 'รวม (kg)', '%กรอ', '%เศษ', 'Yield%'].map(h => <th key={h} className="px-3 py-2 text-left font-semibold whitespace-nowrap">{h}</th>)}</tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {data.map((row, i) => {
-                        const grandTotal = data.reduce((s, x) => s + x.total, 0)
-                        const yieldPct = row.total ? (row.FG / row.total * 100) : 0
+                        const yieldPct = row.yieldPct
                         return (
                           <tr key={row.key} className="hover:bg-gray-50">
                             <td className="px-3 py-2 text-gray-500">{i + 1}</td>
@@ -2250,11 +2433,10 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                             <td className="px-3 py-2 text-gray-500">{row.rolls}</td>
                             <td className="px-3 py-2 text-blue-600 font-bold">{num(row.FG, 1)}</td>
                             <td className="px-3 py-2 text-orange-500">{num(row.ม้วนกรอ, 1)}</td>
-                            <td className="px-3 py-2 text-red-400">{num(row.เศษใส, 1)}</td>
-                            <td className="px-3 py-2 text-purple-500">{num(row.เศษสี, 1)}</td>
-                            <td className="px-3 py-2 text-amber-600">{num(row.เศษก้อน, 1)}</td>
+                            <td className="px-3 py-2 text-red-500">{num(row.scrapKg, 1)}</td>
                             <td className="px-3 py-2 font-bold text-gray-700">{num(row.total, 1)}</td>
-                            <td className="px-3 py-2 text-gray-500 text-xs">{grandTotal ? (row.total / grandTotal * 100).toFixed(1) : 0}%</td>
+                            <td className="px-3 py-2 text-orange-500 text-xs">{row.badPctN.toFixed(1)}%</td>
+                            <td className="px-3 py-2 text-red-500 text-xs">{row.scrapPctN.toFixed(1)}%</td>
                             <td className="px-3 py-2">
                               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${yieldPct >= 90 ? 'bg-green-100 text-green-700' : yieldPct >= 80 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
                                 {yieldPct.toFixed(1)}%

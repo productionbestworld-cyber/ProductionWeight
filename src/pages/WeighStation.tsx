@@ -5,7 +5,7 @@ import QRCodeLib from 'qrcode'
 import { supabase } from '../lib/supabase'
 import { loadProfiles, saveProfiles, fmtSize, convertWidth, type MachineProfile } from './MachineSettings'
 import ReworkJobList from './ReworkJobList'
-import { loadLongLayout, type FieldConfig } from './LabelDesigner'
+import { loadLongLayout, loadShortLayout, type FieldConfig } from './LabelDesigner'
 import { fetchProducts, type Product } from './Products'
 import { fetchFlag } from './Admin'
 import ReworkInbox from './ReworkInbox'
@@ -122,6 +122,40 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
 </style>
 <div style="position:relative;width:${savedLayout.labelW}mm;height:${savedLayout.labelH}mm;border:1.5px solid #000;overflow:hidden">
 ${savedLayout.fields.map(renderLongField).join('\n')}
+</div>`
+
+  // ═══════════════════════════════════════════════════════
+  // ใบสั้น — สร้างจาก LabelDesigner layout (เหมือนใบยาว → ปริ้น=หน้าแก้ไข, แก้ไขได้)
+  // ═══════════════════════════════════════════════════════
+  const shortLayout  = await loadShortLayout()
+  const shortHeader  = p.blankHeader ? '' : ((p.headerText || '').trim() || 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด')
+  const rollWord     = rollType.startsWith('scrap') ? 'ถุง' : rollType === 'bad' ? 'กรอ' : 'Roll'
+  const shortFieldData: Record<string, string> = {
+    header:    shortHeader + (rollTypeLabelLong ? `${shortHeader ? '&nbsp;' : ''}[${rollTypeLabelLong}]` : ''),
+    mat:       `Mat&nbsp;&nbsp;<b>${p.matCode}</b>`,
+    mfg:       `MFG&nbsp;&nbsp;<b>${mfgDate}</b>`,
+    rollno:    `${rollWord}&nbsp;<b>${rollNo === 0 ? '—' : rollNo}</b>`,
+    prodname:  p.productName,
+    itemcode:  p.itemCode || '—',
+    size:      `${p.widthCm} ${p.widthUnit ?? 'cm'} × ${p.thickMc} mc`,
+    lotno:     p.lotNo,
+    length:    `${p.length || '—'} M.${p.pcs ? ` · ${p.pcs} Pcs.` : ''}`,
+    machine:   `เครื่อง&nbsp;&nbsp;<b>${p.machine_no}</b>`,
+    core:      `Core&nbsp;&nbsp;<b>${fmt(core, dec)}</b>&nbsp;Kg`,
+    net:       fmt(net, dec),
+    gross:     `Gross ${fmt(gross, dec)} Kgs.`,
+    inspector: `ผู้ตรวจ: <b>${p.inspector || '—'}</b>`,
+  }
+  const renderShortField = makeFieldRenderer(shortFieldData, 56)
+  const shortHtmlFromLayout = `
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800;900&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;width:${shortLayout.labelW}mm;height:${shortLayout.labelH}mm}
+@media print{@page{size:${shortLayout.labelW}mm ${shortLayout.labelH}mm;margin:0}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+<div style="position:relative;width:${shortLayout.labelW}mm;height:${shortLayout.labelH}mm;border:1.5px solid #000;overflow:hidden">
+${shortLayout.fields.map(renderShortField).join('\n')}
 </div>`
 
 
@@ -302,8 +336,8 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
 
 </div>`
 
-  const W   = size === 'long' ? savedLayout.labelW : 76.2
-  const H   = size === 'long' ? savedLayout.labelH : 76.2
+  const W   = size === 'long' ? savedLayout.labelW : shortLayout.labelW
+  const H   = size === 'long' ? savedLayout.labelH : shortLayout.labelH
   const win = window.open('', '_blank', `width=${Math.round(W*3.78)},height=${Math.round(H*3.78)},menubar=no,toolbar=no`)
   if (!win) {
     // popup ถูก browser block — แจ้งผู้ใช้ + แนะนำให้ allow popup
@@ -313,7 +347,7 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
   }
 
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
-  ${size === 'long' ? longHtmlFromLayout : shortHtml}
+  ${size === 'long' ? longHtmlFromLayout : shortHtmlFromLayout}
   </head><body><script>
     var imgs=document.images,n=0
     function doPrint(){

@@ -307,9 +307,59 @@ export default function LabelDesigner() {
   const fields        = layout.fields
   const selectedField = fields.find(f => f.id === selected) ?? null
 
+  // ── Undo / Redo history ───────────────────────────────────────────────────
+  const layoutRef = useRef(layout)
+  layoutRef.current = layout
+  const [past, setPast]     = useState<LabelLayout[]>([])
+  const [future, setFuture] = useState<LabelLayout[]>([])
+
+  // เรียกก่อนแก้ไขทุกครั้ง — เก็บสถานะปัจจุบันลง history
+  const snapshot = useCallback(() => {
+    setPast(p => [...p.slice(-49), layoutRef.current])
+    setFuture([])
+  }, [])
+
+  const undo = useCallback(() => {
+    setPast(p => {
+      if (p.length === 0) return p
+      const prev = p[p.length - 1]
+      setFuture(f => [layoutRef.current, ...f].slice(0, 50))
+      setLayout(prev)
+      setSelected(null)
+      return p.slice(0, -1)
+    })
+  }, [])
+
+  const redo = useCallback(() => {
+    setFuture(f => {
+      if (f.length === 0) return f
+      const next = f[0]
+      setPast(p => [...p, layoutRef.current].slice(-50))
+      setLayout(next)
+      setSelected(null)
+      return f.slice(1)
+    })
+  }, [])
+
+  // คีย์ลัด Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      const ctrl = e.ctrlKey || e.metaKey
+      if (!ctrl) return
+      const k = e.key.toLowerCase()
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo() }
+      else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redo() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [undo, redo])
+
   // โหลด layout ตามขนาดที่เลือก
   useEffect(() => {
     setLoading(true); setSelected(null)
+    setPast([]); setFuture([])
     loadLayoutBySize(size).then(l => { setLayout(l); setLoading(false) })
   }, [size])
 
@@ -328,6 +378,7 @@ export default function LabelDesigner() {
   async function doReset() {
     if (!confirm('รีเซ็ตกลับค่าเริ่มต้น? (layout ที่บันทึกไว้จะหายไป)')) return
     const def = size === 'short' ? DEFAULT_LAYOUT_SHORT : DEFAULT_LAYOUT
+    snapshot()
     setLayout(def)
     setSelected(null)
     const ok = await saveLayoutToDB(def, size)
@@ -347,22 +398,26 @@ export default function LabelDesigner() {
       fontSize: 8, fontWeight: '700', align: 'left',
       visible: true, type, border: false, italic: false,
     }
+    snapshot()
     setLayout(prev => ({ ...prev, fields: [...prev.fields, base] }))
     setSelected(id)
     setShowAddMenu(false)
   }
 
   function deleteField(id: string) {
+    snapshot()
     setLayout(prev => ({ ...prev, fields: prev.fields.filter(f => f.id !== id) }))
     setSelected(null)
   }
 
   // ── field update helpers ──────────────────────────────────────────────────
   const updateField = useCallback((id: string, patch: Partial<FieldConfig>) => {
+    snapshot()
     setLayout(prev => ({ ...prev, fields: prev.fields.map(f => f.id === id ? { ...f, ...patch } : f) }))
-  }, [])
+  }, [snapshot])
 
   function moveOrder(id: string, dir: -1 | 1) {
+    snapshot()
     setLayout(prev => {
       const arr = [...prev.fields]
       const i   = arr.findIndex(f => f.id === id)
@@ -379,8 +434,9 @@ export default function LabelDesigner() {
     e.stopPropagation()
     setSelected(id)
     const f = fields.find(f => f.id === id)!
+    snapshot()  // เก็บสถานะก่อนเริ่มลาก → Ctrl+Z ย้อนการลากได้
     dragging.current = { id, sx: e.clientX, sy: e.clientY, ox: f.x, oy: f.y }
-  }, [fields])
+  }, [fields, snapshot])
 
   const onFieldClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()  // กันไม่ให้ bubble ขึ้น canvas แล้ว clear selected
@@ -397,8 +453,8 @@ export default function LabelDesigner() {
         fields: prev.fields.map(field =>
           field.id !== f.id ? field : {
             ...field,
-            x: Math.max(0, Math.min(LABEL_W - field.w, Math.round((f.ox + dx) * 2) / 2)),
-            y: Math.max(0, Math.min(LABEL_H - (field.type === 'separator' ? 0 : field.h), Math.round((f.oy + dy) * 2) / 2)),
+            x: Math.max(0, Math.min(prev.labelW - field.w, Math.round((f.ox + dx) * 2) / 2)),
+            y: Math.max(0, Math.min(prev.labelH - (field.type === 'separator' ? 0 : field.h), Math.round((f.oy + dy) * 2) / 2)),
           }
         ),
       }))
@@ -577,6 +633,17 @@ export default function LabelDesigner() {
             </button>
           </div>
           <span className="text-xs text-slate-500 mr-2">· ลากเพื่อจัดตำแหน่ง</span>
+          {/* Undo / Redo */}
+          <div className="flex gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800">
+            <button onClick={undo} disabled={past.length === 0} title="ย้อนกลับ (Ctrl+Z)"
+              className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-transparent">
+              ↶ ย้อน
+            </button>
+            <button onClick={redo} disabled={future.length === 0} title="ทำซ้ำ (Ctrl+Y)"
+              className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-transparent">
+              ↷ ทำซ้ำ
+            </button>
+          </div>
           <button onClick={doSave}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
               savedFlash ? 'bg-green-600 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'

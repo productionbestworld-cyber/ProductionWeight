@@ -308,10 +308,11 @@ export default function LabelDesigner() {
   const selectedField = fields.find(f => f.id === selected) ?? null
 
   // ── Undo / Redo history ───────────────────────────────────────────────────
-  const layoutRef = useRef(layout)
-  layoutRef.current = layout
+  const layoutRef = useRef(layout); layoutRef.current = layout
   const [past, setPast]     = useState<LabelLayout[]>([])
   const [future, setFuture] = useState<LabelLayout[]>([])
+  const pastRef   = useRef(past);   pastRef.current   = past
+  const futureRef = useRef(future); futureRef.current = future
 
   // เรียกก่อนแก้ไขทุกครั้ง — เก็บสถานะปัจจุบันลง history
   const snapshot = useCallback(() => {
@@ -320,40 +321,38 @@ export default function LabelDesigner() {
   }, [])
 
   const undo = useCallback(() => {
-    setPast(p => {
-      if (p.length === 0) return p
-      const prev = p[p.length - 1]
-      setFuture(f => [layoutRef.current, ...f].slice(0, 50))
-      setLayout(prev)
-      setSelected(null)
-      return p.slice(0, -1)
-    })
+    const p = pastRef.current
+    if (p.length === 0) return
+    const prev = p[p.length - 1]
+    setFuture(f => [layoutRef.current, ...f].slice(0, 50))
+    setPast(p.slice(0, -1))
+    setLayout(prev)
+    setSelected(null)
   }, [])
 
   const redo = useCallback(() => {
-    setFuture(f => {
-      if (f.length === 0) return f
-      const next = f[0]
-      setPast(p => [...p, layoutRef.current].slice(-50))
-      setLayout(next)
-      setSelected(null)
-      return f.slice(1)
-    })
+    const f = futureRef.current
+    if (f.length === 0) return
+    const next = f[0]
+    setPast(p => [...p, layoutRef.current].slice(-50))
+    setFuture(f.slice(1))
+    setLayout(next)
+    setSelected(null)
   }, [])
 
-  // คีย์ลัด Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y
+  // คีย์ลัด Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y (รองรับทั้ง e.key และ e.code)
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const tag = (e.target as HTMLElement)?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
-      const ctrl = e.ctrlKey || e.metaKey
-      if (!ctrl) return
-      const k = e.key.toLowerCase()
-      if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo() }
-      else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redo() }
+      if (!(e.ctrlKey || e.metaKey)) return
+      const isZ = e.key === 'z' || e.key === 'Z' || e.code === 'KeyZ'
+      const isY = e.key === 'y' || e.key === 'Y' || e.code === 'KeyY'
+      if (isZ && !e.shiftKey)      { e.preventDefault(); undo() }
+      else if (isY || (isZ && e.shiftKey)) { e.preventDefault(); redo() }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [undo, redo])
 
   // โหลด layout ตามขนาดที่เลือก
@@ -523,7 +522,7 @@ export default function LabelDesigner() {
           height: f.h * SCALE,
           border:  f.border ? '1px solid #000' : (isSel ? 'none' : '1px dashed transparent'),
           boxSizing: 'border-box',
-          overflow: 'hidden',
+          overflow: 'visible',
           display: 'flex',
           flexDirection: isWeight ? 'column' : 'row',
           alignItems: isWeight ? 'flex-start' : 'center',
@@ -540,7 +539,9 @@ export default function LabelDesigner() {
           </>
         ) : (
           <span style={{ fontSize: pxSize, fontWeight: f.fontWeight, fontStyle: f.italic ? 'italic' : 'normal',
-            textAlign: f.align, width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            textAlign: f.align, width: '100%',
+            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+            overflow: 'hidden', lineHeight: 1.1, wordBreak: 'break-word' }}>
             {f.sampleValue}
           </span>
         )}

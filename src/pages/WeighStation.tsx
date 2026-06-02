@@ -107,7 +107,8 @@ async function printLabel(p: MachineProfile, rollNo: number, gross: number, net:
         </div>`
       }
 
-      return `<div style="position:absolute;left:${f.x}mm;top:${f.y}mm;width:${f.w}mm;height:${f.h}mm;font-size:${f.fontSize}pt;font-weight:${f.fontWeight};text-align:${f.align};${italic}${border}box-sizing:border-box;overflow:hidden;display:flex;align-items:center;${justify}padding:0 0.5mm">${value}</div>`
+      // ข้อความยาวเกิน → ขึ้นบรรทัดที่ 2 (clamp 2 บรรทัด)
+      return `<div style="position:absolute;left:${f.x}mm;top:${f.y}mm;width:${f.w}mm;height:${f.h}mm;font-size:${f.fontSize}pt;font-weight:${f.fontWeight};text-align:${f.align};${italic}${border}box-sizing:border-box;overflow:visible;display:flex;align-items:center;${justify}padding:0 0.5mm"><span style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.1;width:100%;word-break:break-word">${value}</span></div>`
     }
   }
 

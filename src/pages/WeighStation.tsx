@@ -5,7 +5,7 @@ import QRCodeLib from 'qrcode'
 import { supabase } from '../lib/supabase'
 import { loadProfiles, saveProfiles, fmtSize, convertWidth, type MachineProfile } from './MachineSettings'
 import ReworkJobList from './ReworkJobList'
-import { loadLongLayout, loadShortLayout, type FieldConfig } from './LabelDesigner'
+import { loadLongLayout, loadShortLayout, loadWasteLayout, type FieldConfig } from './LabelDesigner'
 import { fetchProducts, type Product } from './Products'
 import { fetchFlag } from './Admin'
 import ReworkInbox from './ReworkInbox'
@@ -337,8 +337,160 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
 
 </div>`
 
-  const W   = size === 'long' ? savedLayout.labelW : shortLayout.labelW
-  const H   = size === 'long' ? savedLayout.labelH : shortLayout.labelH
+  // ═══════════════════════════════════════════════════════
+  // Waste Label — 100×100 mm (ใบปะหน้าเศษเสีย/สิ่งปฏิกูล)
+  // หน้าตาตาม DF Waste Label — ไม่มีสี พิมพ์ขาวดำ
+  // ═══════════════════════════════════════════════════════
+  const isScrapRoll = rollType.startsWith('scrap')
+  const wasteName = rollType === 'scrap_clear' ? 'เศษพลาสติก (ใส)' : rollType === 'scrap_color' ? 'เศษพลาสติก (สี)' : rollType === 'scrap_lump' ? 'เศษพลาสติก (ก้อน)' : 'เศษพลาสติก'
+  const wasteHtml = `
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800;900&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;width:100mm;height:100mm}
+.page{width:100mm;height:100mm;border:1.5px solid #000;display:flex;flex-direction:column;overflow:hidden}
+
+/* ── หัว ── */
+.co{text-align:center;font-size:11pt;font-weight:900;padding:1.5mm 2mm 1mm;border-bottom:1.5px solid #000;line-height:1.2}
+.wl-tag{display:flex;align-items:center;justify-content:space-between;padding:.8mm 2mm;border-bottom:1.5px solid #000;font-size:7.5pt;font-weight:700}
+.wl-badge{background:#000;color:#fff;font-size:7.5pt;font-weight:900;padding:.3mm 1.5mm;letter-spacing:.5px}
+.wl-roll{font-size:8pt;font-weight:700}
+.wl-rollval{font-size:8pt;font-weight:900}
+
+/* ── ตาราง 2 คอลัมน์ ── */
+.grid2{display:grid;grid-template-columns:1fr 1fr;border-bottom:1.5px solid #000}
+.cell{padding:.8mm 1.5mm;border-right:1px solid #000}
+.cell:last-child{border-right:none}
+.cell-lbl{font-size:6.5pt;font-weight:700;color:#333;margin-bottom:.2mm}
+.cell-val{font-size:10pt;font-weight:900;line-height:1.1}
+
+/* ── แถวเดี่ยว ── */
+.row1{display:flex;align-items:center;gap:2mm;padding:.8mm 1.5mm;border-bottom:1.5px solid #000}
+.row1-lbl{font-size:6.5pt;font-weight:700;color:#333;min-width:18mm}
+.row1-val{font-size:8pt;font-weight:700;flex:1;border-bottom:1px solid #000;padding-bottom:.2mm}
+
+/* ── นน + QR ── */
+.wt-row{display:flex;gap:2mm;padding:.8mm 1.5mm;border-bottom:1.5px solid #000;min-height:22mm}
+.wt-left{flex:1}
+.wt-lbl{font-size:7pt;font-weight:700;color:#333;margin-bottom:.2mm}
+.wt-num{font-size:22pt;font-weight:900;line-height:1}
+.wt-unit{font-size:8.5pt;font-weight:900}
+.wt-gross{font-size:6.5pt;font-weight:700;margin-top:.5mm}
+.wt-right{width:22mm;display:flex;flex-direction:column;align-items:center;justify-content:flex-start}
+.wt-qrlbl{font-size:6pt;font-weight:700;text-align:center;margin-bottom:.5mm;border:1px solid #000;width:100%;text-align:center;padding:.2mm}
+.wt-qr img{width:20mm;height:20mm;image-rendering:pixelated}
+
+/* ── footer ── */
+.ft{display:flex;border-bottom:1.5px solid #000;min-height:6mm}
+.ft-cell{flex:1;padding:.5mm 1.5mm;border-right:1px solid #000}
+.ft-cell:last-child{border-right:none}
+.ft-lbl{font-size:6pt;font-weight:700;color:#333}
+.ft-line{border-bottom:1px solid #000;margin-top:1mm;min-height:3mm}
+.note{font-size:6pt;font-weight:700;padding:.5mm 1.5mm;text-align:center;line-height:1.4}
+
+@media print{@page{size:100mm 100mm;margin:0}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+<div class="page">
+  <div class="co">บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด</div>
+  <div class="wl-tag">
+    <span><span class="wl-badge">WASTE LABEL</span>&nbsp;&nbsp;ใบปะหน้า สิ่งปฏิกูล / ของเสียอุตสาหกรรม</span>
+    <span class="wl-roll">Roll #&nbsp;<span class="wl-rollval">${rollNo === 0 ? '—' : rollNo}</span></span>
+  </div>
+  <div class="grid2">
+    <div class="cell">
+      <div class="cell-lbl">ชื่อสิ่งปฏิกูล</div>
+      <div class="cell-val">${wasteName}</div>
+    </div>
+    <div class="cell">
+      <div class="cell-lbl">Lot No</div>
+      <div class="cell-val" style="font-size:8.5pt">${p.lotNo}</div>
+    </div>
+  </div>
+  <div class="grid2">
+    <div class="cell" style="border-bottom:1.5px solid #000">
+      <div class="cell-lbl">เครื่อง / แผนก</div>
+      <div class="cell-val" style="font-size:9pt">${p.machine_no}</div>
+    </div>
+    <div class="cell" style="border-bottom:1.5px solid #000">
+      <div class="cell-lbl">ผู้ตรวจสอบ</div>
+      <div class="cell-val" style="font-size:9pt">${p.inspector || '—'}</div>
+    </div>
+  </div>
+  <div class="row1">
+    <span class="row1-lbl">เหตุผล</span>
+    <span class="row1-val" style="font-weight:900">${(p as any).scrapReason || reason || '—'}</span>
+  </div>
+  <div class="row1">
+    <span class="row1-lbl">วันที่จัดเก็บ</span>
+    <span class="row1-val">${new Date().toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit', year:'numeric' })}</span>
+  </div>
+  <div class="wt-row">
+    <div class="wt-left">
+      <div class="wt-lbl">น้ำหนักสุทธิ (Net Weight)</div>
+      <div class="wt-num">${fmt(gross, dec)}</div>
+      <div class="wt-unit">Kg.</div>
+      <div class="wt-gross">น้ำหนักรวม (Gross Weight) ${fmt(gross, dec)} Kg.</div>
+    </div>
+    <div class="wt-right">
+      <div class="wt-qrlbl">QR CODE</div>
+      <div class="wt-qr"><img src="${qrUrl(56)}" width="72" height="72"/></div>
+    </div>
+  </div>
+  <div class="ft">
+    <div class="ft-cell" style="flex:1.5">
+      <div class="ft-lbl">แผนกต้นกำเนิด</div>
+      <div class="ft-line"></div>
+    </div>
+    <div class="ft-cell">
+      <div class="ft-lbl">วันที่</div>
+      <div class="ft-line"></div>
+    </div>
+  </div>
+  <div class="note">หมายเหตุ : ห้ามผสมของเสียต่างประเภทกัน และห้ามนำของเสียออกนอกพื้นที่โดยไม่ได้รับอนุญาต</div>
+</div>`
+
+  // ── Waste layout — โหลดจาก LabelDesigner (แก้ไขได้) ──
+  const wasteLayout = await loadWasteLayout()
+  // 4 ค่าคงที่ → อ่านจาก layout ที่แก้ไขใน designer (sampleValue คือค่าจริง)
+  const getWasteConst = (id: string) => wasteLayout.fields.find(f => f.id === id)?.sampleValue ?? ''
+  const sectionLabel = (p as any).section === 'rewind' ? 'แผนกกรอ' : (p as any).section === 'print' ? 'แผนกพิมพ์' : 'แผนกเป่า'
+  const wasteDate    = new Date().toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit', year:'numeric' })
+  const wasteFieldData: Record<string, string> = {
+    header:         p.blankHeader ? '' : ((p.headerText || '').trim() || 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด'),
+    waste_tag:      'WASTE LABEL  ใบปะหน้า สิ่งปฏิกูล / ของเสียอุตสาหกรรม',
+    rollno:         `Roll #${rollNo === 0 ? '—' : rollNo}`,
+    // ── ข้อมูลจากการชั่ง ──
+    waste_name_lbl: 'ชื่อสิ่งปฏิกูล',
+    wastename:      rollType === 'scrap_clear' ? 'เศษพลาสติก (ใส)' : rollType === 'scrap_color' ? 'เศษพลาสติก (สี)' : rollType === 'scrap_lump' ? 'เศษพลาสติก (ก้อน)' : 'เศษพลาสติก',
+    // ── 4 ค่าคงที่ (อ่านจาก layout → แก้ใน designer) ──
+    waste_code_lbl:     'รหัสสิ่งปฏิกูล',
+    waste_code:         getWasteConst('waste_code'),
+    waste_mgmt_lbl:     'รหัสการจัดการ',
+    waste_mgmt:         getWasteConst('waste_mgmt'),
+    waste_operator_lbl: 'ผู้รับดำเนินการ',
+    waste_operator:     getWasteConst('waste_operator'),
+    // ── ข้อมูลจากงาน ──
+    date:     `วันที่จัดเก็บ:  ${wasteDate}`,
+    reason:   `เหตุผล: ${reason || '—'}`,
+    net:      fmt(gross, dec),
+    origin:   `แผนกต้นกำเนิด: ${sectionLabel}   เครื่อง: ${p.machine_no}`,
+    inspector:`ผู้ตรวจสอบ: ${p.inspector || '—'}   วันที่: ${wasteDate}`,
+    footer:   getWasteConst('footer') || 'หมายเหตุ : ห้ามผสมของเสียต่างประเภทกัน และห้ามนำของเสียออกนอกพื้นที่โดยไม่ได้รับอนุญาต',
+  }
+  const renderWasteField = makeFieldRenderer(wasteFieldData, 72)  // 72px QR
+  const wasteHtmlFromLayout = `
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800;900&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;width:${wasteLayout.labelW}mm;height:${wasteLayout.labelH}mm}
+@media print{@page{size:${wasteLayout.labelW}mm ${wasteLayout.labelH}mm;margin:0}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+<div style="position:relative;width:${wasteLayout.labelW}mm;height:${wasteLayout.labelH}mm;border:1.5px solid #000;overflow:hidden">
+${wasteLayout.fields.map(renderWasteField).join('\n')}
+</div>`
+
+  const W = isScrapRoll ? wasteLayout.labelW : size === 'long' ? savedLayout.labelW : shortLayout.labelW
+  const H = isScrapRoll ? wasteLayout.labelH : size === 'long' ? savedLayout.labelH : shortLayout.labelH
   const win = window.open('', '_blank', `width=${Math.round(W*3.78)},height=${Math.round(H*3.78)},menubar=no,toolbar=no`)
   if (!win) {
     // popup ถูก browser block — แจ้งผู้ใช้ + แนะนำให้ allow popup
@@ -348,7 +500,7 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
   }
 
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
-  ${size === 'long' ? longHtmlFromLayout : shortHtmlFromLayout}
+  ${isScrapRoll ? wasteHtmlFromLayout : size === 'long' ? longHtmlFromLayout : shortHtmlFromLayout}
   </head><body><script>
     var imgs=document.images,n=0
     function doPrint(){

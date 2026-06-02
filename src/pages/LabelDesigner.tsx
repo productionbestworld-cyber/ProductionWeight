@@ -262,11 +262,113 @@ export const DEFAULT_LAYOUT_SHORT: LabelLayout = {
 }
 
 // ── Persistence — Supabase ────────────────────────────────────────────────────
-type LabelSize = 'long' | 'short'
-const layoutId = (size: LabelSize) => size === 'short' ? 'short' : 'long'
+// ── DEFAULT — Waste Label 100×100 mm ──────────────────────────────────────────
+const WASTE_W = 76
+const WASTE_H = 76
+export const DEFAULT_LAYOUT_WASTE: LabelLayout = {
+  labelW: WASTE_W,
+  labelH: WASTE_H,
+  fields: [
+    // ── หัว ──
+    // ── หัว ──
+    { id:'header', label:'หัวกระดาษ (ชื่อบริษัท)',
+      sampleValue:'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด',
+      x:2, y:1.5, w:72, h:5, fontSize:9, fontWeight:'900', align:'center',
+      visible:true, type:'text', border:true, italic:false },
+    { id:'waste_tag', label:'WASTE LABEL tag',
+      sampleValue:'WASTE LABEL  ใบปะหน้า สิ่งปฏิกูล',
+      x:2, y:7.5, w:54, h:3.5, fontSize:7, fontWeight:'700', align:'left',
+      visible:true, type:'text', border:false, italic:false },
+    { id:'rollno', label:'Roll No',
+      sampleValue:'Roll #1',
+      x:56, y:7.5, w:18, h:3.5, fontSize:7.5, fontWeight:'900', align:'right',
+      visible:true, type:'text', border:false, italic:false },
+    { id:'sep_top', label:'เส้นคั่น หัว', sampleValue:'', x:2, y:11.5, w:72, h:0, fontSize:8, fontWeight:'400', align:'left', visible:true, type:'separator', border:false, italic:false },
+
+    // ── 4 ช่อง (2×2) ──
+    { id:'waste_name_lbl', label:'ป้าย: ชื่อสิ่งปฏิกูล',
+      sampleValue:'ชื่อสิ่งปฏิกูล',
+      x:2, y:12.5, w:35, h:3, fontSize:6.5, fontWeight:'700', align:'left',
+      visible:true, type:'text', border:false, italic:false },
+    { id:'wastename', label:'ชื่อสิ่งปฏิกูล (จากการชั่ง)',
+      sampleValue:'เศษพลาสติก',
+      x:2, y:15, w:35, h:5.5, fontSize:11, fontWeight:'900', align:'left',
+      visible:true, type:'text', border:false, italic:false },
+    { id:'sep_v1', label:'เส้นตั้ง 1', sampleValue:'', x:38, y:12.5, w:0, h:9, fontSize:8, fontWeight:'400', align:'left', visible:true, type:'separator', border:false, italic:false },
+    { id:'waste_code_lbl', label:'ป้าย: รหัสสิ่งปฏิกูล',
+      sampleValue:'รหัสสิ่งปฏิกูล',
+      x:40, y:12.5, w:34, h:3, fontSize:6.5, fontWeight:'700', align:'left',
+      visible:true, type:'text', border:false, italic:false },
+    { id:'waste_code', label:'★ รหัสสิ่งปฏิกูล (คงที่)',
+      sampleValue:'120105',
+      x:40, y:15, w:34, h:5.5, fontSize:11, fontWeight:'900', align:'left',
+      visible:true, type:'text', border:false, italic:false },
+    { id:'sep_h1', label:'เส้นคั่น กลาง1', sampleValue:'', x:2, y:22, w:72, h:0, fontSize:8, fontWeight:'400', align:'left', visible:true, type:'separator', border:false, italic:false },
+    { id:'waste_mgmt_lbl', label:'ป้าย: รหัสการจัดการ',
+      sampleValue:'รหัสการจัดการ',
+      x:2, y:23, w:35, h:3, fontSize:6.5, fontWeight:'700', align:'left',
+      visible:true, type:'text', border:false, italic:false },
+    { id:'waste_mgmt', label:'★ รหัสการจัดการ (คงที่)',
+      sampleValue:'049',
+      x:2, y:25.5, w:35, h:5.5, fontSize:11, fontWeight:'900', align:'left',
+      visible:true, type:'text', border:false, italic:false },
+    { id:'sep_v2', label:'เส้นตั้ง 2', sampleValue:'', x:38, y:23, w:0, h:9, fontSize:8, fontWeight:'400', align:'left', visible:true, type:'separator', border:false, italic:false },
+    { id:'waste_operator_lbl', label:'ป้าย: ผู้รับดำเนินการ',
+      sampleValue:'ผู้รับดำเนินการ',
+      x:40, y:23, w:34, h:3, fontSize:6.5, fontWeight:'700', align:'left',
+      visible:true, type:'text', border:false, italic:false },
+    { id:'waste_operator', label:'★ ผู้รับดำเนินการ (คงที่)',
+      sampleValue:'20110007725560',
+      x:40, y:25.5, w:34, h:5.5, fontSize:8.5, fontWeight:'900', align:'left',
+      visible:true, type:'text', border:false, italic:false },
+    { id:'sep_h2', label:'เส้นคั่น กลาง2', sampleValue:'', x:2, y:31.5, w:72, h:0, fontSize:8, fontWeight:'400', align:'left', visible:true, type:'separator', border:false, italic:false },
+
+    // ── วันที่ + เหตุผล ──
+    { id:'date', label:'วันที่จัดเก็บ',
+      sampleValue:'วันที่:  ___/___/___',
+      x:2, y:32.5, w:35, h:4, fontSize:7.5, fontWeight:'700', align:'left',
+      visible:true, type:'text', border:false, italic:false },
+    { id:'reason', label:'เหตุผล',
+      sampleValue:'เหตุผล: ตัดต่อ',
+      x:39, y:32.5, w:35, h:4, fontSize:7.5, fontWeight:'700', align:'left',
+      visible:true, type:'text', border:false, italic:false },
+    { id:'sep_h3', label:'เส้นคั่น กลาง3', sampleValue:'', x:2, y:37, w:72, h:0, fontSize:8, fontWeight:'400', align:'left', visible:true, type:'separator', border:false, italic:false },
+
+    // ── นน + QR (QR ต้องใหญ่พอสแกนได้ — แนะนำ ≥20mm) ──
+    { id:'net', label:'Net Weight',
+      sampleValue:'25.50',
+      x:2, y:37.5, w:42, h:17, fontSize:22, fontWeight:'900', align:'left',
+      visible:true, type:'weight', border:false, italic:false },
+    { id:'qr', label:'QR Code',
+      sampleValue:'QR',
+      x:45, y:37.5, w:29, h:24, fontSize:7, fontWeight:'400', align:'center',
+      visible:true, type:'qr', border:false, italic:false },
+    { id:'sep_h4', label:'เส้นคั่น กลาง4', sampleValue:'', x:2, y:62, w:72, h:0, fontSize:8, fontWeight:'400', align:'left', visible:true, type:'separator', border:false, italic:false },
+
+    // ── แผนก + ผู้ตรวจ ──
+    { id:'origin', label:'แผนกต้นกำเนิด',
+      sampleValue:'แผนก: เป่า  เครื่อง: BL01',
+      x:2, y:63, w:72, h:3.5, fontSize:7.5, fontWeight:'700', align:'left',
+      visible:true, type:'text', border:false, italic:false },
+    { id:'inspector', label:'ผู้ตรวจสอบ + วันที่',
+      sampleValue:'ผู้ตรวจ: ___________  วันที่: ___/___/___',
+      x:2, y:67, w:72, h:3.5, fontSize:7.5, fontWeight:'700', align:'left',
+      visible:true, type:'text', border:false, italic:false },
+    { id:'sep_h5', label:'เส้นคั่น ท้าย', sampleValue:'', x:2, y:71, w:72, h:0, fontSize:8, fontWeight:'400', align:'left', visible:true, type:'separator', border:false, italic:false },
+
+    // ── Footer ──
+    { id:'footer', label:'หมายเหตุ',
+      sampleValue:'หมายเหตุ : ห้ามผสมของเสียต่างประเภทกัน และห้ามนำของเสียออกนอกพื้นที่โดยไม่ได้รับอนุญาต',
+      x:2, y:72, w:72, h:5.5, fontSize:6, fontWeight:'700', align:'center',
+      visible:true, type:'text', border:true, italic:false },
+  ],
+}
+
+type LabelSize = 'long' | 'short' | 'waste'
+const layoutId = (size: LabelSize) => size === 'short' ? 'short' : size === 'waste' ? 'waste' : 'long'
 
 async function loadLayoutBySize(size: LabelSize): Promise<LabelLayout> {
-  const def = size === 'short' ? DEFAULT_LAYOUT_SHORT : DEFAULT_LAYOUT
+  const def = size === 'short' ? DEFAULT_LAYOUT_SHORT : size === 'waste' ? DEFAULT_LAYOUT_WASTE : DEFAULT_LAYOUT
   try {
     const { data, error } = await supabase
       .from('label_layouts').select('layout').eq('id', layoutId(size)).maybeSingle()
@@ -284,6 +386,7 @@ async function loadLayoutBySize(size: LabelSize): Promise<LabelLayout> {
 
 export const loadLongLayout  = () => loadLayoutBySize('long')
 export const loadShortLayout = () => loadLayoutBySize('short')
+export const loadWasteLayout = () => loadLayoutBySize('waste')
 
 async function saveLayoutToDB(layout: LabelLayout, size: LabelSize): Promise<boolean> {
   const { error } = await supabase
@@ -376,7 +479,7 @@ export default function LabelDesigner() {
 
   async function doReset() {
     if (!confirm('รีเซ็ตกลับค่าเริ่มต้น? (layout ที่บันทึกไว้จะหายไป)')) return
-    const def = size === 'short' ? DEFAULT_LAYOUT_SHORT : DEFAULT_LAYOUT
+    const def = size === 'short' ? DEFAULT_LAYOUT_SHORT : size === 'waste' ? DEFAULT_LAYOUT_WASTE : DEFAULT_LAYOUT
     snapshot()
     setLayout(def)
     setSelected(null)
@@ -549,6 +652,55 @@ export default function LabelDesigner() {
     )
   }
 
+  // ── ทดสอบปริ้น — เปิด popup ด้วยข้อมูล sampleValue จาก layout ──────────────
+  function doTestPrint() {
+    const W = layout.labelW
+    const H = layout.labelH
+    const win = window.open('', '_blank', `width=${Math.round(W*3.78)},height=${Math.round(H*3.78)},menubar=no,toolbar=no,location=no`)
+    if (!win) { alert('⚠ Browser block popup — กรุณาอนุญาต popup ของเว็บนี้'); return }
+
+    const fields = layout.fields
+    const renderF = (f: FieldConfig) => {
+      if (!f.visible) return ''
+      const justify = f.align === 'center' ? 'justify-content:center;' : f.align === 'right' ? 'justify-content:flex-end;' : ''
+      const italic  = f.italic ? 'font-style:italic;' : ''
+      const border  = f.border ? 'border:1px solid #000;' : ''
+      if (f.type === 'separator') {
+        if (f.h > f.w) return `<div style="position:absolute;left:${f.x}mm;top:${f.y}mm;width:0;height:${f.h}mm;border-left:1px solid #000;box-sizing:border-box"></div>`
+        return `<div style="position:absolute;left:${f.x}mm;top:${f.y}mm;width:${f.w}mm;height:0;border-top:1px solid #000;box-sizing:border-box"></div>`
+      }
+      if (f.type === 'qr') {
+        return `<div style="position:absolute;left:${f.x}mm;top:${f.y}mm;width:${f.w}mm;height:${f.h}mm;${border}box-sizing:border-box;display:flex;align-items:center;justify-content:center;background:#eee;font-size:8pt;color:#555">QR</div>`
+      }
+      if (f.type === 'weight') {
+        return `<div style="position:absolute;left:${f.x}mm;top:${f.y}mm;width:${f.w}mm;height:${f.h}mm;${border}box-sizing:border-box;overflow:hidden;padding:0 0.5mm">
+          <div style="font-size:7.5pt;font-weight:700;line-height:1.4">Net Weight</div>
+          <div style="font-size:${f.fontSize}pt;font-weight:900;line-height:1;color:#003087">${f.sampleValue}</div>
+          <div style="font-size:8pt;font-weight:700;line-height:1.3">Kgs.</div>
+        </div>`
+      }
+      return `<div style="position:absolute;left:${f.x}mm;top:${f.y}mm;width:${f.w}mm;height:${f.h}mm;font-size:${f.fontSize}pt;font-weight:${f.fontWeight};text-align:${f.align};${italic}${border}box-sizing:border-box;overflow:visible;display:flex;align-items:center;${justify}padding:0 0.5mm">
+        <span style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.1;width:100%;word-break:break-word">${f.sampleValue}</span>
+      </div>`
+    }
+
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800;900&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;width:${W}mm;height:${H}mm}
+@media print{@page{size:${W}mm ${H}mm;margin:0}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+</head><body>
+<div style="position:relative;width:${W}mm;height:${H}mm;border:1.5px solid #000;overflow:hidden">
+${fields.map(renderF).join('\n')}
+</div>
+<script>
+document.fonts.ready.then(function(){setTimeout(function(){window.print();window.close()},400)})
+</script></body></html>`)
+    win.document.close()
+  }
+
   // helper สำหรับ number input ใน property panel (ต้องอยู่นอก PropPanel เพื่อกัน remount)
   const numInput = (key: keyof FieldConfig, step = 0.5, min = 0) => selectedField ? (
     <input type="number" value={(selectedField[key] as number) ?? 0} step={step} min={min}
@@ -634,6 +786,12 @@ export default function LabelDesigner() {
               }`}>
               🏷 ใบสั้น 76×76
             </button>
+            <button onClick={() => setSize('waste')}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
+                size === 'waste' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-white'
+              }`}>
+              ♻ ใบเศษ 76×76
+            </button>
           </div>
           <span className="text-xs text-slate-500 mr-2">· ลากเพื่อจัดตำแหน่ง</span>
           {/* Undo / Redo */}
@@ -657,6 +815,10 @@ export default function LabelDesigner() {
           <button onClick={doReset}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300">
             <RotateCcw size={12} />รีเซ็ต
+          </button>
+          <button onClick={doTestPrint}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-700 hover:bg-green-600 text-white">
+            🖨 ทดสอบปริ้น
           </button>
         </div>
 

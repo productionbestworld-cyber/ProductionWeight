@@ -41,19 +41,43 @@ type Roll = {
 
 type Tab = 'control' | 'overview' | 'so' | 'transfer' | 'daily' | 'compare' | 'table' | 'machines' | 'customers' | 'rework' | 'logs'
 
-const TABS: { key: Tab; label: string }[] = [
-  { key: 'control',   label: '🎛 ศูนย์ควบคุม' },
-  { key: 'overview',  label: '📊 Dashboard ภาพรวม' },
-  { key: 'so',        label: '📋 รายงาน SO' },
-  { key: 'transfer',  label: '📦 รายงานโอนคลัง' },
-  { key: 'machines',  label: '🏭 เครื่องจักร' },
-  { key: 'customers', label: '👥 ลูกค้า/สินค้า' },
-  { key: 'rework',    label: '🔧 รายงานกรอ' },
-  { key: 'daily',     label: '📅 รายวัน' },
-  { key: 'compare',   label: '📈 เปรียบเทียบ' },
-  { key: 'table',     label: '📄 ตารางข้อมูล' },
-  { key: 'logs',      label: '📋 Logs' },
+// จัดแท็บเป็น 4 กลุ่มให้เข้าใจง่าย (เนื้อหาแต่ละแท็บเหมือนเดิมทุกอย่าง)
+const TAB_GROUPS: { group: string; tabs: { key: Tab; label: string }[] }[] = [
+  { group: 'ดูภาพรวม', tabs: [
+    { key: 'control',   label: '🎛 ศูนย์ควบคุม' },
+    { key: 'overview',  label: '📊 ภาพรวม' },
+  ]},
+  { group: 'รายงาน', tabs: [
+    { key: 'so',        label: '📋 ใบสั่งผลิต (SO)' },
+    { key: 'transfer',  label: '📦 โอนเข้าคลัง' },
+    { key: 'rework',    label: '🔧 งานกรอ' },
+  ]},
+  { group: 'วิเคราะห์', tabs: [
+    { key: 'daily',     label: '📅 รายวัน' },
+    { key: 'compare',   label: '📈 เปรียบเทียบ' },
+    { key: 'machines',  label: '🏭 เครื่องจักร' },
+    { key: 'customers', label: '👥 ลูกค้า/สินค้า' },
+  ]},
+  { group: 'ข้อมูลดิบ', tabs: [
+    { key: 'table',     label: '📄 ตารางข้อมูล' },
+    { key: 'logs',      label: '📋 บันทึก (Logs)' },
+  ]},
 ]
+
+// คำอธิบายสั้นๆ ของแต่ละแท็บ (แสดงใต้แถบแท็บ)
+const TAB_DESC: Record<Tab, string> = {
+  control:   'สถานะเครื่องจักรแบบเรียลไทม์ — เครื่องไหนกำลังเดิน เครื่องไหนว่าง',
+  overview:  'สรุปยอดผลิตทั้งหมด — ผลิตดี (FG) / เศษ / Yield และกราฟภาพรวม',
+  so:        'รายงานแยกตามใบสั่งผลิต (WO) › ใบสั่งขาย (SO) › ล็อต',
+  transfer:  'ประวัติการโอนสินค้าเข้าคลัง — ทั้งม้วนดี กรอ และเศษ',
+  rework:    'งานกรอ — รับมาเท่าไหร่ กรอได้เท่าไหร่ เป็นเศษเท่าไหร่ และสาเหตุ',
+  daily:     'กราฟผลผลิตรายวัน — ดูแนวโน้มแต่ละวัน',
+  compare:   'เปรียบเทียบข้อมูลหลายมิติ (เครื่อง/ลูกค้า/สาเหตุ) ในช่วงเวลาที่เลือก',
+  machines:  'รายละเอียดเครื่องจักรทุกเครื่อง + งานที่จอดค้างไว้',
+  customers: 'อันดับลูกค้าและสินค้าที่ผลิตมากสุด + รายชื่อทั้งหมด',
+  table:     'ตารางรายม้วนทุกใบ — กรองและดูได้ละเอียด',
+  logs:      'บันทึกการชั่งทุกครั้ง และประวัติการลบม้วน',
+}
 
 // custom tooltip for bar chart
 function CustomTooltip({ active, payload, label }: any) {
@@ -428,20 +452,36 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800">
 
-      {/* ── Tabs ── */}
-      <div className="bg-white border-b border-gray-200 px-6">
-        <div className="flex gap-0 overflow-x-auto whitespace-nowrap">
-          {TABS.map(t => (
-            <button key={t.key} onClick={() => setTab(t.key)}
-              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors shrink-0 ${
-                tab === t.key
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}>
-              {t.label}
-            </button>
+      {/* ── Tabs (จัดเป็นกลุ่ม) ── */}
+      <div className="bg-white border-b border-gray-200 px-6 pt-2">
+        <div className="flex items-stretch gap-0 overflow-x-auto whitespace-nowrap">
+          {TAB_GROUPS.map((g, gi) => (
+            <div key={g.group} className="flex flex-col shrink-0">
+              {/* หัวข้อกลุ่ม */}
+              <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider px-3 mb-0.5">{g.group}</span>
+              {/* ปุ่มในกลุ่ม */}
+              <div className={`flex gap-0 ${gi < TAB_GROUPS.length - 1 ? 'border-r border-gray-200 pr-2 mr-1' : ''}`}>
+                {g.tabs.map(t => (
+                  <button key={t.key} onClick={() => setTab(t.key)}
+                    className={`px-3 py-2.5 text-sm font-medium border-b-2 rounded-t-lg transition-colors shrink-0 ${
+                      tab === t.key
+                        ? 'border-blue-500 text-blue-600 bg-blue-50/60'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                    }`}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
+      </div>
+
+      {/* คำอธิบายแท็บปัจจุบัน */}
+      <div className="bg-blue-50/50 border-b border-blue-100 px-6 py-2">
+        <p className="text-xs text-gray-600 max-w-screen-2xl mx-auto">
+          <span className="text-blue-500">ℹ️</span> {TAB_DESC[tab]}
+        </p>
       </div>
 
       <div className="p-5 max-w-screen-2xl mx-auto space-y-4">
@@ -1721,6 +1761,40 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
             </div>
           )
 
+          // ── รับงานกรอมาจากใบสั่งผลิต (WO) › ใบสั่งขาย (SO) ── (เฉพาะกรอจากเป่า)
+          type SrcLot = { lot: string; kg: number; salvaged: number; scrapped: number; machine: string; cust: string; prod: string }
+          const woMap = new Map<string, Map<string, Map<string, SrcLot>>>()
+          for (const r of fromProd) {
+            const wo  = (r.work_order ?? '').trim() || '(ไม่ระบุ WO)'
+            const so  = (r.sale_order ?? '').trim() || '(ไม่ระบุ SO)'
+            const lot = r.lot_no ?? '—'
+            if (!woMap.has(wo)) woMap.set(wo, new Map())
+            if (!woMap.get(wo)!.has(so)) woMap.get(wo)!.set(so, new Map())
+            const lotMap = woMap.get(wo)!.get(so)!
+            const cur = lotMap.get(lot) ?? { lot, kg: 0, salvaged: 0, scrapped: 0, machine: r.machine_no ?? '—', cust: r.customer ?? '', prod: r.product_name ?? '' }
+            cur.kg       += r.weight ?? 0
+            cur.salvaged += salvagedKgOf(r)
+            if (r.rework_status === 'scrapped') cur.scrapped += r.weight ?? 0
+            lotMap.set(lot, cur)
+          }
+          const woGroups = [...woMap.entries()].map(([wo, soMap]) => {
+            const sos = [...soMap.entries()].map(([so, lotMap]) => {
+              const lots = [...lotMap.values()]
+              return {
+                so, lots,
+                kg:       lots.reduce((s, l) => s + l.kg, 0),
+                salvaged: lots.reduce((s, l) => s + l.salvaged, 0),
+                scrapped: lots.reduce((s, l) => s + l.scrapped, 0),
+              }
+            })
+            return {
+              wo, sos,
+              kg:       sos.reduce((s, x) => s + x.kg, 0),
+              salvaged: sos.reduce((s, x) => s + x.salvaged, 0),
+              scrapped: sos.reduce((s, x) => s + x.scrapped, 0),
+            }
+          }).sort((a, b) => b.kg - a.kg)
+
           // ── งานกรอ (rework_jobs) + ม้วนที่ชั่งจริงต่อ lot ──
           const jobsWithReason = reworkJobs.filter(j => j.source_defect_reason || j.rework_reason || j.rewinder_name)
 
@@ -1740,6 +1814,54 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {renderBlock('กรอจากเป่า', '🏭', 'bg-gradient-to-r from-blue-500 to-blue-600', P)}
                 {renderBlock('กรอจากงานอื่นๆ', '📦', 'bg-gradient-to-r from-purple-500 to-purple-600', E)}
+              </div>
+
+              {/* รับงานกรอมาจากใบสั่งผลิตไหนบ้าง (WO › SO › Lot) */}
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="px-5 py-3 border-b border-gray-100">
+                  <p className="font-bold text-gray-700 flex items-center gap-2"><span>📋</span> รับงานกรอมาจากใบสั่งผลิตไหนบ้าง</p>
+                  <p className="text-gray-400 text-xs mt-0.5">เฉพาะม้วนที่กรอจากเป่า — แยกตามใบคำสั่งผลิต (WO) › ใบสั่งขาย (SO) › ล็อต</p>
+                </div>
+                {woGroups.length === 0 ? (
+                  <div className="py-10 text-center text-gray-400 text-sm">ยังไม่มีงานกรอจากเป่า</div>
+                ) : (
+                  <div className="max-h-[28rem] overflow-y-auto divide-y divide-gray-100">
+                    {woGroups.map(wg => (
+                      <div key={wg.wo} className="px-3 py-2">
+                        {/* หัว WO */}
+                        <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                          <span className="text-xs font-black px-2.5 py-1 rounded-md bg-amber-100 text-amber-700 border border-amber-200">📋 WO {wg.wo}</span>
+                          <span className="text-xs text-gray-400">รับเข้า <b className="text-gray-700">{num(wg.kg,1)}</b> kg</span>
+                          <span className="text-xs text-green-600">✓ กรอได้ {num(wg.salvaged,1)}</span>
+                          <span className="text-xs text-red-500">🗑 เศษ {num(wg.scrapped,1)}</span>
+                        </div>
+                        {/* ตาราง SO › Lot */}
+                        <table className="w-full text-xs ml-1">
+                          <thead>
+                            <tr className="text-gray-400 border-b border-gray-100">
+                              {['SO','Lot','เครื่องเดิม','ลูกค้า/สินค้า','รับเข้า','กรอได้','เศษ'].map((h,i)=>(
+                                <th key={i} className="px-2 py-1 text-left font-semibold whitespace-nowrap">{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-50">
+                            {wg.sos.map(sg => sg.lots.map((lt, li) => (
+                              <tr key={sg.so + lt.lot} className="hover:bg-gray-50">
+                                <td className="px-2 py-1 font-mono text-blue-600">{li === 0 ? sg.so : ''}</td>
+                                <td className="px-2 py-1 font-mono text-gray-500">{lt.lot}</td>
+                                <td className="px-2 py-1 text-gray-600">{lt.machine}</td>
+                                <td className="px-2 py-1 text-gray-600 max-w-[200px] truncate" title={`${lt.cust} · ${lt.prod}`}>{lt.cust || '—'}{lt.prod ? ` · ${lt.prod}` : ''}</td>
+                                <td className="px-2 py-1 text-right text-gray-700 font-bold">{num(lt.kg,1)}</td>
+                                <td className="px-2 py-1 text-right text-green-600">{num(lt.salvaged,1)}</td>
+                                <td className="px-2 py-1 text-right text-red-500">{num(lt.scrapped,1)}</td>
+                              </tr>
+                            )))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* สรุปตามคนกรอ */}

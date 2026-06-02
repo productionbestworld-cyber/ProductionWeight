@@ -53,9 +53,9 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
   async function load() {
     if (!selectedType) return
     setLoading(true)
-    // โหลดทุกม้วน bad ของระบบ (ทุกสถานะ) ใช้สำหรับ status badges
+    // โหลดม้วน bad ทุกใบ (ไม่ต้องรอกดโอนเป็นทางการ — ม้วนกรอ = รอแก้ทันที)
     const { data: allData } = await supabase.from('production_rolls').select('*')
-      .eq('roll_type', 'bad').eq('transferred', true).order('created_at', { ascending: false })
+      .eq('roll_type', 'bad').order('created_at', { ascending: false })
     const allRows = (allData ?? []).filter(r => !r.is_legacy)
 
     // queue เท่านั้น — ม้วนเสียที่รอตัดสินใจ (ยังไม่เริ่มกรอ)
@@ -92,7 +92,8 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
       .then(({ data }) => {
         const c: Record<InboundType, number> = { internal:0, return_no_cn:0, return_with_cn:0, qc_reject:0, warehouse_damage:0 }
         for (const r of data ?? []) {
-          const isQueue = r.transferred && (!r.rework_status || r.rework_status === 'pending')
+          // ม้วนกรอทุกใบที่ยังไม่ปิดงาน (ไม่ต้องรอกดโอน)
+          const isQueue = (!r.rework_status || r.rework_status === 'pending')
           const isWorking = r.rework_status === 'reworking'
           if (!isQueue && !isWorking) continue
           const t = (r.inbound_type ?? 'internal') as InboundType

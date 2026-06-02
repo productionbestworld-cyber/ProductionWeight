@@ -39,7 +39,7 @@ type Roll = {
   is_legacy?: boolean
 }
 
-type Tab = 'control' | 'overview' | 'so' | 'transfer' | 'daily' | 'compare' | 'table' | 'machines' | 'customers' | 'rework' | 'logs'
+type Tab = 'control' | 'overview' | 'so' | 'transfer' | 'daily' | 'compare' | 'table' | 'machines' | 'customers' | 'rework' | 'logs' | 'problems'
 
 // จัดแท็บเป็น 4 กลุ่มให้เข้าใจง่าย (เนื้อหาแต่ละแท็บเหมือนเดิมทุกอย่าง)
 const TAB_GROUPS: { group: string; tabs: { key: Tab; label: string }[] }[] = [
@@ -53,6 +53,7 @@ const TAB_GROUPS: { group: string; tabs: { key: Tab; label: string }[] }[] = [
     { key: 'rework',    label: '🔧 งานกรอ' },
   ]},
   { group: 'วิเคราะห์', tabs: [
+    { key: 'problems',  label: '⚠️ ปัญหา & สาเหตุ' },
     { key: 'daily',     label: '📅 รายวัน' },
     { key: 'compare',   label: '📈 เปรียบเทียบ' },
     { key: 'machines',  label: '🏭 เครื่องจักร' },
@@ -66,6 +67,7 @@ const TAB_GROUPS: { group: string; tabs: { key: Tab; label: string }[] }[] = [
 
 // คำอธิบายสั้นๆ ของแต่ละแท็บ (แสดงใต้แถบแท็บ)
 const TAB_DESC: Record<Tab, string> = {
+  problems:  'Pareto ปัญหา & สาเหตุ — ม้วนกรอ / เศษ / ลบม้วน แยกตามเครื่อง กะ WO',
   control:   'สถานะเครื่องจักรแบบเรียลไทม์ — เครื่องไหนกำลังเดิน เครื่องไหนว่าง',
   overview:  'สรุปยอดผลิตทั้งหมด — ผลิตดี (FG) / เศษ / Yield และกราฟภาพรวม',
   so:        'รายงานแยกตามใบสั่งผลิต (WO) › ใบสั่งขาย (SO) › ล็อต',
@@ -2108,6 +2110,204 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                     </table>
                   </div>
                 )}
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* ════════════════════════════════ TAB: PROBLEMS ════════════════════════════════ */}
+        {tab === 'problems' && (() => {
+          // ── Pareto: สาเหตุม้วนกรอ (bad rolls) ──
+          const badReasonMap = new Map<string, { count: number; kg: number }>()
+          for (const r of filtered.filter(x => x.roll_type === 'bad')) {
+            const k = ((r as any).remark ?? '').trim() || '(ไม่ระบุ)'
+            const v = badReasonMap.get(k) ?? { count: 0, kg: 0 }
+            v.count += 1; v.kg += r.weight ?? 0
+            badReasonMap.set(k, v)
+          }
+          const badReasons = [...badReasonMap.values()].sort((a, b) => b.kg - a.kg)
+          const badKgTotal = badReasons.reduce((s, x) => s + x.kg, 0)
+
+          // ── Pareto: สาเหตุเศษ ──
+          const scrapReasonMap = new Map<string, { count: number; kg: number; type: string }>()
+          for (const r of filtered.filter(x => String(x.roll_type).startsWith('scrap'))) {
+            const k = ((r as any).remark ?? '').trim() || '(ไม่ระบุ)'
+            const v = scrapReasonMap.get(k) ?? { count: 0, kg: 0, type: r.roll_type }
+            v.count += 1; v.kg += r.weight ?? 0
+            scrapReasonMap.set(k, v)
+          }
+          const scrapReasons = [...scrapReasonMap.values()].sort((a, b) => b.kg - a.kg)
+          const scrapKgTotal = scrapReasons.reduce((s, x) => s + x.kg, 0)
+
+          // ── ม้วนกรอ breakdown ตามเครื่อง ──
+          const badByMachine = new Map<string, { count: number; kg: number; top: string }>()
+          for (const r of filtered.filter(x => x.roll_type === 'bad')) {
+            const m = r.machine_no ?? '—'
+            const v = badByMachine.get(m) ?? { count: 0, kg: 0, top: '' }
+            v.count += 1; v.kg += r.weight ?? 0
+            if (!v.top) v.top = ((r as any).remark ?? '').trim() || '—'
+            badByMachine.set(m, v)
+          }
+          const badMachines = [...badByMachine.entries()].map(([m, v]) => ({ machine: m, ...v })).sort((a, b) => b.kg - a.kg)
+
+          // ── เศษ breakdown ตามเครื่อง ──
+          const scrapByMachine = new Map<string, { count: number; kg: number; top: string }>()
+          for (const r of filtered.filter(x => String(x.roll_type).startsWith('scrap'))) {
+            const m = r.machine_no ?? '—'
+            const v = scrapByMachine.get(m) ?? { count: 0, kg: 0, top: '' }
+            v.count += 1; v.kg += r.weight ?? 0
+            if (!v.top) v.top = ((r as any).remark ?? '').trim() || '—'
+            scrapByMachine.set(m, v)
+          }
+          const scrapMachines = [...scrapByMachine.entries()].map(([m, v]) => ({ machine: m, ...v })).sort((a, b) => b.kg - a.kg)
+
+          // ── ม้วนกรอ breakdown ตามกะ ──
+          const badByShift = new Map<string, { count: number; kg: number }>()
+          for (const r of filtered.filter(x => x.roll_type === 'bad')) {
+            const k = ((r as any).inspector ?? '').trim() || '(ไม่ระบุกะ)'
+            const v = badByShift.get(k) ?? { count: 0, kg: 0 }
+            v.count += 1; v.kg += r.weight ?? 0
+            badByShift.set(k, v)
+          }
+          const badShifts = [...badByShift.entries()].map(([s, v]) => ({ shift: s, ...v })).sort((a, b) => b.kg - a.kg)
+
+          const ParetoTable = ({ title, color, rows, totalKg, unit = 'kg' }: { title: string; color: string; rows: { k?: string; count: number; kg: number }[]; totalKg: number; unit?: string }) => (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className={`px-5 py-3 border-b border-gray-100 ${color}`}>
+                <p className="font-bold text-gray-700">{title}</p>
+                <p className="text-xs text-gray-500 mt-0.5">รวม {fmtKg(totalKg)} kg · {rows.length} สาเหตุ — เรียงจากมากสุด</p>
+              </div>
+              {rows.length === 0 ? <div className="py-8 text-center text-gray-400 text-sm">ไม่มีข้อมูล</div> : (
+                <div className="max-h-72 overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 text-[10px] text-gray-500 uppercase sticky top-0">
+                      <tr><th className="px-3 py-2 text-left">#</th><th className="px-3 py-2 text-left">สาเหตุ</th><th className="px-3 py-2 text-right">ครั้ง</th><th className="px-3 py-2 text-right">kg</th><th className="px-3 py-2 text-right">%</th>
+                        <th className="px-3 py-2 text-left w-32">Pareto</th></tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {rows.map((r, i) => {
+                        const cum = rows.slice(0, i + 1).reduce((s, x) => s + x.kg, 0)
+                        const pct = totalKg ? r.kg / totalKg * 100 : 0
+                        return (
+                          <tr key={r.k ?? i} className="hover:bg-gray-50">
+                            <td className="px-3 py-1.5 text-gray-400">{i + 1}</td>
+                            <td className="px-3 py-1.5 text-gray-700 max-w-[200px]">{r.k}</td>
+                            <td className="px-3 py-1.5 text-right text-gray-500">{r.count}</td>
+                            <td className="px-3 py-1.5 text-right font-bold text-gray-800">{num(r.kg, 1)}</td>
+                            <td className="px-3 py-1.5 text-right text-gray-500 text-xs">{pct.toFixed(1)}%</td>
+                            <td className="px-3 py-1.5">
+                              <div className="flex items-center gap-1">
+                                <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                                  <div className="h-full bg-blue-400 rounded-full" style={{ width: `${Math.min(pct, 100)}%` }}/>
+                                </div>
+                                <span className="text-[9px] text-gray-400 w-8 text-right">{totalKg ? (cum / totalKg * 100).toFixed(0) : 0}%</span>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )
+
+          return (
+            <div className="space-y-4">
+              {/* KPI */}
+              <div className="grid grid-cols-4 gap-4">
+                <div className="bg-white rounded-xl border-l-4 border-orange-500 border border-gray-200 shadow-sm p-4">
+                  <p className="text-xs text-gray-500">🔄 ม้วนกรอ</p>
+                  <p className="text-3xl font-black text-orange-600 mt-1">{fmtKg(badKg)} <span className="text-sm text-gray-400">kg</span></p>
+                  <p className="text-xs text-orange-500">{bad.length} ม้วน · {totalKg ? (badKg/totalKg*100).toFixed(2) : 0}% ของผลิต</p>
+                </div>
+                <div className="bg-white rounded-xl border-l-4 border-red-500 border border-gray-200 shadow-sm p-4">
+                  <p className="text-xs text-gray-500">🗑 เศษเสีย</p>
+                  <p className="text-3xl font-black text-red-600 mt-1">{fmtKg(allScrapKg)} <span className="text-sm text-gray-400">kg</span></p>
+                  <p className="text-xs text-red-500">{allScrap.length} ถุง · {totalKg ? (allScrapKg/totalKg*100).toFixed(2) : 0}% ของผลิต</p>
+                </div>
+                <div className="bg-white rounded-xl border-l-4 border-purple-500 border border-gray-200 shadow-sm p-4">
+                  <p className="text-xs text-gray-500">⚠️ สาเหตุม้วนกรอ</p>
+                  <p className="text-3xl font-black text-purple-600 mt-1">{badReasons.length}</p>
+                  <p className="text-xs text-gray-400">สาเหตุที่พบ</p>
+                </div>
+                <div className="bg-white rounded-xl border-l-4 border-amber-500 border border-gray-200 shadow-sm p-4">
+                  <p className="text-xs text-gray-500">⚠️ สาเหตุเศษ</p>
+                  <p className="text-3xl font-black text-amber-600 mt-1">{scrapReasons.length}</p>
+                  <p className="text-xs text-gray-400">สาเหตุที่พบ</p>
+                </div>
+              </div>
+
+              {/* Pareto 2 คอลัมน์ */}
+              <div className="grid grid-cols-2 gap-4">
+                <ParetoTable title="🔄 Pareto สาเหตุม้วนกรอ" color="bg-orange-50" rows={badReasons.map(r => ({ count: r.count, kg: r.kg, k: Array.from(badReasonMap.keys()).find(key => badReasonMap.get(key) === r) ?? '' }))} totalKg={badKgTotal}/>
+                <ParetoTable title="🗑 Pareto สาเหตุเศษเสีย" color="bg-red-50" rows={scrapReasons.map(r => ({ count: r.count, kg: r.kg, k: Array.from(scrapReasonMap.keys()).find(key => scrapReasonMap.get(key) === r) ?? '' }))} totalKg={scrapKgTotal}/>
+              </div>
+
+              {/* ตารางแยกตามเครื่อง */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="px-5 py-3 border-b border-gray-100 bg-orange-50"><p className="font-bold text-gray-700">🏭 ม้วนกรอ — แยกตามเครื่อง</p></div>
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 text-[10px] text-gray-500 uppercase">
+                      <tr><th className="px-3 py-2 text-left">เครื่อง</th><th className="px-3 py-2 text-right">ครั้ง</th><th className="px-3 py-2 text-right">kg</th><th className="px-3 py-2 text-left">สาเหตุบ่อยสุด</th></tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {badMachines.length === 0 ? <tr><td colSpan={4} className="px-3 py-6 text-center text-gray-400">ไม่มีข้อมูล</td></tr> :
+                       badMachines.map(r => (
+                        <tr key={r.machine} className="hover:bg-gray-50">
+                          <td className="px-3 py-2"><span className="bg-orange-100 text-orange-700 font-bold text-xs px-2 py-0.5 rounded">{r.machine}</span></td>
+                          <td className="px-3 py-2 text-right text-gray-500">{r.count}</td>
+                          <td className="px-3 py-2 text-right font-bold text-orange-600">{num(r.kg, 1)}</td>
+                          <td className="px-3 py-2 text-gray-500 text-xs truncate max-w-[120px]">{r.top}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="px-5 py-3 border-b border-gray-100 bg-red-50"><p className="font-bold text-gray-700">🏭 เศษเสีย — แยกตามเครื่อง</p></div>
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 text-[10px] text-gray-500 uppercase">
+                      <tr><th className="px-3 py-2 text-left">เครื่อง</th><th className="px-3 py-2 text-right">ครั้ง</th><th className="px-3 py-2 text-right">kg</th><th className="px-3 py-2 text-left">สาเหตุบ่อยสุด</th></tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {scrapMachines.length === 0 ? <tr><td colSpan={4} className="px-3 py-6 text-center text-gray-400">ไม่มีข้อมูล</td></tr> :
+                       scrapMachines.map(r => (
+                        <tr key={r.machine} className="hover:bg-gray-50">
+                          <td className="px-3 py-2"><span className="bg-red-100 text-red-700 font-bold text-xs px-2 py-0.5 rounded">{r.machine}</span></td>
+                          <td className="px-3 py-2 text-right text-gray-500">{r.count}</td>
+                          <td className="px-3 py-2 text-right font-bold text-red-600">{num(r.kg, 1)}</td>
+                          <td className="px-3 py-2 text-gray-500 text-xs truncate max-w-[120px]">{r.top}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* ม้วนกรอ ตามกะ */}
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="px-5 py-3 border-b border-gray-100 bg-purple-50">
+                  <p className="font-bold text-gray-700">👷 ม้วนกรอ — แยกตามกะ (ผู้ตรวจสอบ)</p>
+                </div>
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-[10px] text-gray-500 uppercase">
+                    <tr><th className="px-3 py-2 text-left">กะ</th><th className="px-3 py-2 text-right">ครั้ง</th><th className="px-3 py-2 text-right">kg</th><th className="px-3 py-2 text-right">% ของกรอรวม</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {badShifts.length === 0 ? <tr><td colSpan={4} className="px-3 py-6 text-center text-gray-400">ไม่มีข้อมูล</td></tr> :
+                     badShifts.map(r => (
+                      <tr key={r.shift} className="hover:bg-gray-50">
+                        <td className="px-3 py-2"><span className="bg-purple-100 text-purple-700 font-bold text-xs px-2 py-0.5 rounded">{r.shift}</span></td>
+                        <td className="px-3 py-2 text-right text-gray-500">{r.count}</td>
+                        <td className="px-3 py-2 text-right font-bold text-purple-600">{num(r.kg, 1)}</td>
+                        <td className="px-3 py-2 text-right text-xs text-gray-500">{badKgTotal ? (r.kg/badKgTotal*100).toFixed(1) : 0}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )

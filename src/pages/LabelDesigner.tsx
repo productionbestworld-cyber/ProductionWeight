@@ -511,7 +511,9 @@ export default function LabelDesigner() {
       )
     }
 
-    const pxSize = f.fontSize * (SCALE / 3.78)
+    // pt → px ที่สเกลแคนวาส (1pt = 1/72 inch = 0.352778 mm) → ให้เท่าหน้าจริง 1:1
+    const ptToPx = (pt: number) => pt * SCALE * 25.4 / 72
+    const pxSize = ptToPx(f.fontSize)
     const isWeight = f.type === 'weight'
 
     return (
@@ -526,15 +528,15 @@ export default function LabelDesigner() {
           flexDirection: isWeight ? 'column' : 'row',
           alignItems: isWeight ? 'flex-start' : 'center',
           justifyContent: f.align === 'center' ? 'center' : f.align === 'right' ? 'flex-end' : 'flex-start',
-          padding: '0 1px',
+          padding: isWeight ? `0 ${1 * SCALE}px` : `0 ${0.5 * SCALE}px`,
           color: '#000',
           fontFamily: 'Sarabun, Arial, sans-serif',
         }}>
         {isWeight ? (
           <>
-            <span style={{ fontSize: pxSize * 0.28, fontWeight: '700', lineHeight: 1.2 }}>Net Weight</span>
-            <span style={{ fontSize: pxSize,        fontWeight: '900', lineHeight: 1   }}>{f.sampleValue.split(' ')[0]}</span>
-            <span style={{ fontSize: pxSize * 0.35, fontWeight: '700', lineHeight: 1.2 }}>Kgs.</span>
+            <span style={{ fontSize: ptToPx(7.5), fontWeight: '700', lineHeight: 1.4 }}>Net Weight</span>
+            <span style={{ fontSize: pxSize,      fontWeight: '900', lineHeight: 1, color: '#003087' }}>{f.sampleValue.split(' ')[0]}</span>
+            <span style={{ fontSize: ptToPx(8),   fontWeight: '700', lineHeight: 1.3 }}>Kgs.</span>
           </>
         ) : (
           <span style={{ fontSize: pxSize, fontWeight: f.fontWeight, fontStyle: f.italic ? 'italic' : 'normal',

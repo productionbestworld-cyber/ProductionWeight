@@ -27,7 +27,10 @@ export default function App() {
   // เปิดผ่าน ...?dashboard=1  หรือ  ...#dashboard
   {
     const sp = new URLSearchParams(window.location.search)
-    const isDash = sp.get('dashboard') !== null || window.location.hash.replace('#', '') === 'dashboard'
+    const path = window.location.pathname.replace(/\/+$/, '').toLowerCase()
+    const isDash = sp.get('dashboard') !== null
+      || window.location.hash.replace('#', '').toLowerCase() === 'dashboard'
+      || path === '/dashboard'
     if (isDash) {
       const d = sp.get('dept') as ('blow'|'print'|'rewind'|null)
       return (
@@ -37,7 +40,7 @@ export default function App() {
               <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center text-white font-black text-xs">BWP</div>
               <span className="text-white font-bold text-sm">Dashboard — ระบบชั่งน้ำหนักม้วน</span>
             </div>
-            <a href={window.location.pathname} className="text-xs text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 rounded-lg px-3 py-1.5">
+            <a href="/" className="text-xs text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 rounded-lg px-3 py-1.5">
               ← กลับหน้าหลัก
             </a>
           </div>
@@ -317,7 +320,7 @@ export default function App() {
         {page === 'dashboard' && (
           <div>
             <div className="flex justify-end px-4 pt-3">
-              <a href={`?dashboard=1&dept=${dept}`} target="_blank" rel="noopener noreferrer"
+              <a href={`/Dashboard?dept=${dept}`} target="_blank" rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg px-3 py-1.5">
                 🔗 เปิดแดชบอร์ดแยกหน้าต่าง
               </a>

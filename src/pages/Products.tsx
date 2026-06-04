@@ -96,6 +96,7 @@ export default function ProductsPage() {
       {tab === 'customers' ? (
         <CustomersTab
           customers={customers}
+          products={products}
           countByCust={countByCust}
           loading={loading}
           onSelect={c => setSelectedCust(c)}
@@ -118,8 +119,9 @@ export default function ProductsPage() {
 }
 
 // ─── Customers Tab ───────────────────────────────────────────────────────────
-function CustomersTab({ customers, countByCust, loading, onSelect, onChanged }: {
+function CustomersTab({ customers, products, countByCust, loading, onSelect, onChanged }: {
   customers: Customer[]
+  products: Product[]
   countByCust: Map<string, number>
   loading: boolean
   onSelect: (c: Customer) => void
@@ -130,13 +132,68 @@ function CustomersTab({ customers, countByCust, loading, onSelect, onChanged }: 
 
   const filtered = useMemo(() => {
     const v = q.trim().toLowerCase()
-    if (!v) return customers
-    return customers.filter(c =>
+    const list = !v ? customers : customers.filter(c =>
       c.cust_code?.toLowerCase().includes(v) ||
       c.cust_name?.toLowerCase().includes(v) ||
       c.cust_address?.toLowerCase().includes(v)
     )
+    // เรียงตามรหัส (ตัวเลขก่อน เรียงจากน้อยไปมาก)
+    const numOf = (s: string) => { const n = parseInt((s || '').replace(/\D/g, ''), 10); return isNaN(n) ? Number.MAX_SAFE_INTEGER : n }
+    return [...list].sort((a, b) => {
+      const na = numOf(a.cust_code), nb = numOf(b.cust_code)
+      if (na !== nb) return na - nb
+      return (a.cust_code || '').localeCompare(b.cust_code || '')
+    })
   }, [customers, q])
+
+  function exportExcel() {
+    const prodByCust = new Map<string, Product[]>()
+    for (const p of products) {
+      const arr = prodByCust.get(p.cust_code) ?? []
+      arr.push(p); prodByCust.set(p.cust_code, arr)
+    }
+
+    // ชีต 1: รายชื่อลูกค้า (เรียงตามที่แสดง)
+    const custRows = filtered.map((c, i) => ({
+      'ลำดับ': i + 1,
+      'รหัสลูกค้า': c.cust_code,
+      'ชื่อลูกค้า': c.cust_name,
+      'หมายเหตุ': (c as any).note ?? '',
+      'ที่อยู่': c.cust_address ?? '',
+      'จำนวน Item': countByCust.get(c.cust_code) ?? 0,
+    }))
+
+    // ชีต 2: Item ทั้งหมด (ทุกรายการ กระจายตามลูกค้า เรียงตามลูกค้าที่แสดง)
+    const itemRows: any[] = []
+    let no = 0
+    for (const c of filtered) {
+      const items = prodByCust.get(c.cust_code) ?? []
+      if (items.length === 0) {
+        itemRows.push({
+          'ลำดับ': ++no, 'รหัสลูกค้า': c.cust_code, 'ชื่อลูกค้า': c.cust_name,
+          'Item Code': '(ยังไม่มี item)', 'รหัสสินค้า': '', 'ชื่อสินค้า': '',
+          'หน้ากว้าง': '', 'หน่วย': '', 'หนา (mc)': '',
+        })
+      } else {
+        for (const p of items) {
+          itemRows.push({
+            'ลำดับ': ++no, 'รหัสลูกค้า': c.cust_code, 'ชื่อลูกค้า': c.cust_name,
+            'Item Code': p.item_code, 'รหัสสินค้า': p.product_code, 'ชื่อสินค้า': p.product_name,
+            'หน้ากว้าง': p.width_cm, 'หน่วย': p.width_unit ?? '', 'หนา (mc)': p.thick_mc,
+          })
+        }
+      }
+    }
+
+    const wb = XLSX.utils.book_new()
+    const ws1 = XLSX.utils.json_to_sheet(custRows)
+    ws1['!cols'] = [{ wch: 6 }, { wch: 10 }, { wch: 45 }, { wch: 22 }, { wch: 35 }, { wch: 10 }]
+    XLSX.utils.book_append_sheet(wb, ws1, 'ลูกค้า')
+    const ws2 = XLSX.utils.json_to_sheet(itemRows)
+    ws2['!cols'] = [{ wch: 6 }, { wch: 10 }, { wch: 40 }, { wch: 16 }, { wch: 14 }, { wch: 40 }, { wch: 10 }, { wch: 8 }, { wch: 10 }]
+    XLSX.utils.book_append_sheet(wb, ws2, 'Item ทั้งหมด')
+    XLSX.writeFile(wb, `ลูกค้า+Item_${new Date().toISOString().slice(0, 10)}.xlsx`)
+  }
 
   return (
     <>
@@ -147,8 +204,12 @@ function CustomersTab({ customers, countByCust, loading, onSelect, onChanged }: 
             placeholder="ค้นหา รหัส, ชื่อ, ที่อยู่..."
             className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-9 pr-3 py-2 text-white text-sm outline-none focus:border-brand-500"/>
         </div>
+        <button onClick={exportExcel}
+          className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg flex items-center gap-1.5 text-sm font-bold whitespace-nowrap">
+          📥 Export Excel
+        </button>
         <button onClick={() => setEditing(EMPTY_CUST)}
-          className="bg-brand-600 hover:bg-brand-500 text-white px-4 py-2 rounded-lg flex items-center gap-1.5 text-sm font-bold">
+          className="bg-brand-600 hover:bg-brand-500 text-white px-4 py-2 rounded-lg flex items-center gap-1.5 text-sm font-bold whitespace-nowrap">
           <Plus size={14}/> เพิ่มลูกค้า
         </button>
       </div>
@@ -158,27 +219,44 @@ function CustomersTab({ customers, countByCust, loading, onSelect, onChanged }: 
       ) : filtered.length === 0 ? (
         <p className="text-center text-slate-500 py-12">{q ? 'ไม่พบลูกค้า' : 'ยังไม่มีลูกค้า'}</p>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {filtered.map(c => {
-            const count = countByCust.get(c.cust_code) ?? 0
-            return (
-              <button key={c.id} onClick={() => onSelect(c)}
-                className="text-left bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-brand-500 rounded-xl p-4 transition-colors group">
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-mono text-xs text-brand-400 font-bold">{c.cust_code}</p>
-                    <p className="text-white font-bold text-sm mt-0.5 truncate">{c.cust_name}</p>
-                  </div>
-                  <ChevronRight size={16} className="text-slate-600 group-hover:text-brand-400 mt-0.5"/>
-                </div>
-                <div className="flex items-center gap-1.5 text-xs">
-                  <span className="bg-brand-500/15 text-brand-300 px-2 py-0.5 rounded-full font-bold">
-                    📦 {count} item{count !== 1 ? 's' : ''}
-                  </span>
-                </div>
-              </button>
-            )
-          })}
+        <div className="border border-slate-700 rounded-xl overflow-hidden">
+          <div className="overflow-x-auto max-h-[calc(100vh-220px)] overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-800 text-slate-300 text-xs sticky top-0 z-10">
+                <tr>
+                  <th className="px-3 py-2.5 text-left font-bold w-14">#</th>
+                  <th className="px-3 py-2.5 text-left font-bold w-24">รหัส</th>
+                  <th className="px-3 py-2.5 text-left font-bold">ชื่อลูกค้า</th>
+                  <th className="px-3 py-2.5 text-left font-bold w-44 hidden md:table-cell">หมายเหตุ</th>
+                  <th className="px-3 py-2.5 text-center font-bold w-24">Item</th>
+                  <th className="px-3 py-2.5 text-center font-bold w-12"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {filtered.map((c, i) => {
+                  const count = countByCust.get(c.cust_code) ?? 0
+                  return (
+                    <tr key={c.id} onClick={() => onSelect(c)}
+                      className="cursor-pointer hover:bg-slate-800/70 transition-colors">
+                      <td className="px-3 py-2 text-slate-500 text-xs">{i + 1}</td>
+                      <td className="px-3 py-2 font-mono font-bold text-brand-400">{c.cust_code}</td>
+                      <td className="px-3 py-2 text-white">{c.cust_name}</td>
+                      <td className="px-3 py-2 text-slate-400 text-xs hidden md:table-cell truncate max-w-[180px]">{(c as any).note || '—'}</td>
+                      <td className="px-3 py-2 text-center">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${count ? 'bg-brand-500/15 text-brand-300' : 'bg-slate-800 text-slate-500'}`}>
+                          📦 {count}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-center"><ChevronRight size={15} className="text-slate-600 inline"/></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="bg-slate-800/50 px-3 py-2 text-xs text-slate-400 border-t border-slate-700">
+            รวม {filtered.length} ราย {q && `(กรองจาก ${customers.length})`} · คลิกแถวเพื่อดู/แก้ไข
+          </div>
         </div>
       )}
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Plus, Trash2, RefreshCw, Search, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { fetchProducts, type Product } from './Products'
+import ExportButton from '../components/ExportButton'
 import { fmtSize, type MachineProfile } from './MachineSettings'
 import ReworkInbox from './ReworkInbox'
 
@@ -87,6 +88,23 @@ export function genReworkLot(machine: string, custCode: string): string {
 
 export default function ReworkJobList({ onPickJob }: { onPickJob: (profile: MachineProfile, job: ReworkJob) => void }) {
   const [view, setView] = useState<'jobs' | 'inbox'>('jobs')
+  const [inboxCount, setInboxCount] = useState(0)
+
+  // นับม้วนรอกรอ (queue) — แสดง badge บนแท็บ + auto refresh
+  useEffect(() => {
+    let alive = true
+    async function count() {
+      const { data } = await supabase.from('production_rolls')
+        .select('rework_status, is_legacy').eq('roll_type', 'bad')
+      if (!alive) return
+      const n = (data ?? []).filter(r => !r.is_legacy && (!r.rework_status || r.rework_status === 'pending')).length
+      setInboxCount(n)
+    }
+    count()
+    const t = setInterval(count, 15_000)
+    return () => { alive = false; clearInterval(t) }
+  }, [view])
+
   return (
     <div className="min-h-[calc(100vh-48px)] bg-[#0a0f1e] flex flex-col">
       {/* แถบสลับ: งานกรอ / รับจากผลิต */}
@@ -96,10 +114,15 @@ export default function ReworkJobList({ onPickJob }: { onPickJob: (profile: Mach
           { key: 'inbox', label: '🏭 รับจากผลิต' },
         ] as const).map(t => (
           <button key={t.key} onClick={() => setView(t.key)}
-            className={`px-4 py-2 rounded-t-lg text-sm font-bold transition-colors ${
+            className={`relative px-4 py-2 rounded-t-lg text-sm font-bold transition-colors ${
               view === t.key ? 'bg-slate-900 text-white border-x border-t border-slate-700' : 'bg-slate-950 text-slate-500 hover:text-slate-300'
             }`}>
             {t.label}
+            {t.key === 'inbox' && inboxCount > 0 && (
+              <span className="ml-2 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-black animate-pulse align-middle">
+                {inboxCount}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -216,6 +239,21 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
           <p className="text-slate-400 text-sm mt-0.5">สร้างงาน → เลือก station ตอนชั่ง → ใบปะหน้าโชว์เครื่องที่เลือก</p>
         </div>
         <div className="flex gap-2">
+          <ExportButton rows={filtered}
+            cols={[
+              { header:'Lot', value:'lot_no', width:16 },
+              { header:'WO', value: j => j.work_order ?? '' },
+              { header:'SO', value: j => j.sale_order ?? '' },
+              { header:'สินค้า', value:'product_name', width:30 },
+              { header:'ลูกค้า', value: j => j.cust_name ?? '', width:24 },
+              { header:'Item Code', value: j => j.item_code ?? '' },
+              { header:'เป้าผลิต (kg)', value: j => j.planned_qty ?? '' },
+              { header:'กรอได้ (kg)', value: j => progress[j.lot_no]?.kg ?? 0 },
+              { header:'ม้วนกรอได้', value: j => progress[j.lot_no]?.rolls ?? 0 },
+              { header:'ผู้รับ', value: j => j.inspector ?? '' },
+              { header:'สร้างเมื่อ', value: j => j.created_at ? new Date(j.created_at).toLocaleString('th-TH') : '', width:18 },
+            ]}
+            fileName="งานกรอ_active" sheetName="งานกรอ" />
           <button onClick={load}
             className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 px-3 py-2 rounded-lg text-sm flex items-center gap-1.5">
             <RefreshCw size={14}/>

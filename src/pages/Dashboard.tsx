@@ -6,6 +6,7 @@ import {
 import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
 import { RotateCcw, Upload, X, Download, FileSpreadsheet } from 'lucide-react'
+import ExportButton from '../components/ExportButton'
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 function fmtKg(n: number) {
@@ -2679,7 +2680,27 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
               <p className="font-bold text-gray-700">📋 ตารางข้อมูลรายม้วน</p>
-              <p className="text-gray-400 text-xs">{filtered.length.toLocaleString()} รายการ</p>
+              <div className="flex items-center gap-3">
+                <p className="text-gray-400 text-xs">{filtered.length.toLocaleString()} รายการ</p>
+                <ExportButton rows={filtered.slice().reverse()}
+                  cols={[
+                    { header:'เวลาชั่ง', value: r => r.created_at ? new Date(r.created_at).toLocaleString('th-TH') : '', width:18 },
+                    { header:'เครื่อง', value: r => r.machine_no ?? '' },
+                    { header:'ม้วนที่', value:'roll_no' },
+                    { header:'ประเภท', value: r => r.roll_type === 'good' ? 'FG' : String(r.roll_type).startsWith('scrap') ? 'เศษ' : 'ม้วนกรอ' },
+                    { header:'สินค้า', value: r => r.product_name ?? '', width:30 },
+                    { header:'ลูกค้า', value: r => r.customer ?? '', width:24 },
+                    { header:'Lot', value: r => r.lot_no ?? '', width:16 },
+                    { header:'WO', value: r => (r as any).work_order ?? '' },
+                    { header:'SO', value: r => (r as any).sale_order ?? '' },
+                    { header:'ขนาด', value: r => r.width_cm && r.thick_mc ? `${r.width_cm}${(r as any).width_unit ?? 'cm'}x${r.thick_mc}mc` : '' },
+                    { header:'นน.สุทธิ (kg)', value: r => r.weight ?? 0 },
+                    { header:'ผู้ตรวจ', value: r => (r as any).inspector ?? '' },
+                    { header:'เหตุผล', value: r => (r as any).remark ?? '', width:24 },
+                  ]}
+                  fileName="ข้อมูลรายม้วน" sheetName="รายม้วน"
+                  className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap" />
+              </div>
             </div>
             <div className="overflow-auto max-h-[65vh]">
               <table className="w-full text-sm">

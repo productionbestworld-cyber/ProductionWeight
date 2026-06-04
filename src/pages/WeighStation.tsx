@@ -9,6 +9,7 @@ import { loadLongLayout, loadShortLayout, loadWasteLayout, type FieldConfig } fr
 import { fetchProducts, type Product } from './Products'
 import { fetchFlag } from './Admin'
 import ReworkInbox from './ReworkInbox'
+import ExportButton from '../components/ExportButton'
 
 function fmt(n: number | null | undefined, d: 1|2 = 2) {
   if (n === null || n === undefined || isNaN(n as number)) return (0).toFixed(d)
@@ -2787,8 +2788,20 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
 
             {/* ── ม้วนดี ─────────────────────── */}
             <div className="flex-1 flex flex-col min-w-0">
-              <div className="px-3 py-2 bg-brand-500/10 border-b border-brand-500/20 shrink-0">
+              <div className="px-3 py-2 bg-brand-500/10 border-b border-brand-500/20 shrink-0 flex items-center justify-between">
                 <span className="text-brand-300 text-xs font-bold">● ม้วนดี</span>
+                <ExportButton rows={[...weighedRolls].filter(Boolean).sort((a:any,b:any)=>(a.roll_no??0)-(b.roll_no??0))}
+                  cols={[
+                    { header:'เวลาชั่ง', value:(r:any)=> r.created_at ? new Date(r.created_at).toLocaleString('th-TH') : '', width:18 },
+                    { header:'ม้วนที่', value:'roll_no' },
+                    { header:'ประเภท', value:(r:any)=> r.roll_type==='good'?'ม้วนดี':r.roll_type==='bad'?'ม้วนกรอ':String(r.roll_type).startsWith('scrap')?'เศษ':r.roll_type },
+                    { header:'นน.เต็ม (kg)', value:(r:any)=> (r.weight??0)+(r.core_weight??0) },
+                    { header:'นน.สุทธิ (kg)', value:(r:any)=> r.weight??0 },
+                    { header:'เหตุผล', value:(r:any)=> r.remark ?? '', width:24 },
+                  ]}
+                  fileName={`ม้วน_${profile.lotNo || 'งานนี้'}`} sheetName="ม้วนในงานนี้"
+                  label="📥 Excel"
+                  className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white px-2 py-0.5 rounded text-[10px] font-bold" />
               </div>
               <div className="grid grid-cols-4 border-b border-slate-800 bg-slate-800/20 shrink-0">
                 {['เวลา','ม้วน','นน.เต็ม','นน.สุทธิ'].map(h=>(

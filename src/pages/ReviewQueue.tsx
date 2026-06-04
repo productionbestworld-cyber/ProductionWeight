@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Check, X, Search, RefreshCw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { fmtSize } from './MachineSettings'
+import ExportButton from '../components/ExportButton'
 
 type Roll = {
   id: string
@@ -115,10 +116,27 @@ export default function ReviewQueue({ dept, mode = 'prod' }: { dept?: 'blow'|'pr
               {isNC ? 'ของที่เคยผ่านออกไปแล้ว เสียในคลัง / ตรวจไม่ผ่านก่อนโหลด — รอ ผจก ตัดสิน' : 'ผลิตประเมินเองว่ากรอไม่ได้ (ม้วนกรอรอตรวจ) — รอ ผจก ตัดสิน'}
             </p>
           </div>
-          <button onClick={load}
-            className="bg-white hover:bg-slate-50 border border-slate-300 px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-1.5">
-            <RefreshCw size={14}/> รีเฟรช
-          </button>
+          <div className="flex gap-2">
+            <ExportButton rows={shown}
+              cols={[
+                { header:'วันที่', value: r => r.created_at ? new Date(r.created_at).toLocaleString('th-TH') : '', width:18 },
+                { header:'เครื่อง', value:'machine_no' },
+                { header:'Lot', value:'lot_no', width:16 },
+                { header:'ม้วนที่', value:'roll_no' },
+                { header:'สินค้า', value:'product_name', width:30 },
+                { header:'ลูกค้า', value:'customer', width:24 },
+                { header:'น้ำหนัก (kg)', value:'weight' },
+                { header:'เหตุผล', value:'remark', width:30 },
+                { header:'สถานะ', value: r => r.review_status === 'pending_review' ? 'รอพิจารณา' : r.review_action === 'rework' ? 'อนุมัติกรอ' : 'อื่นๆ' },
+                { header:'ผู้ตัดสิน', value: r => (r as any).review_decision_by ?? '' },
+              ]}
+              fileName={isNC ? 'NC_คลัง_QC' : 'พิจารณาม้วนกรอ'}
+              sheetName={tab === 'pending' ? 'รอพิจารณา' : 'ตัดสินแล้ว'} />
+            <button onClick={load}
+              className="bg-white hover:bg-slate-50 border border-slate-300 px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-1.5">
+              <RefreshCw size={14}/> รีเฟรช
+            </button>
+          </div>
         </div>
 
         {/* Summary cards */}

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Wrench, Trash2, Plus, RefreshCw, Search, X, ArrowLeft } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { fetchProducts, type Product } from './Products'
+import ExportButton from '../components/ExportButton'
 
 function fmt(n: number | null | undefined, d = 2) {
   if (n == null || isNaN(n as number)) return (0).toFixed(d)
@@ -171,12 +172,72 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
             </p>
           </div>
           <div className="flex gap-2">
+            <ExportButton rows={filtered}
+              cols={[
+                { header:'วันที่', value: r => fmtDateTime(r.rework_received_at || r.created_at), width:18 },
+                { header:'เครื่องเดิม', value:'machine_no' },
+                { header:'WO', value: r => r.work_order ?? '' },
+                { header:'SO', value: r => r.sale_order ?? '' },
+                { header:'Lot', value:'lot_no', width:16 },
+                { header:'ม้วนที่', value:'roll_no' },
+                { header:'สินค้า', value:'product_name', width:30 },
+                { header:'ลูกค้า', value:'customer', width:24 },
+                { header:'น้ำหนัก (kg)', value:'weight' },
+                { header:'เหตุผลกรอ', value:'remark', width:30 },
+              ]}
+              fileName="ม้วนรอกรอ" sheetName="รอกรอ"
+              label="📥 Export รอกรอ" />
             <button onClick={load}
               className="flex items-center gap-1.5 text-slate-400 hover:text-white text-xs bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-lg">
               <RefreshCw size={12}/> รีเฟรช
             </button>
           </div>
         </div>
+
+        {/* ── แบนเนอร์แจ้งเตือน: มีม้วนรอกรอหรือไม่ (เห็นชัดทันที) ── */}
+        {(() => {
+          const waiting = rolls.length
+          const waitingKg = rolls.reduce((s, r) => s + (r.weight ?? 0), 0)
+          const woCount = new Set(rolls.map(r => (r.work_order ?? '').trim() || '(ไม่ระบุ)')).size
+          if (loading) return null
+          if (waiting === 0) {
+            return (
+              <div className="rounded-2xl border-2 border-emerald-500/40 bg-emerald-500/10 px-5 py-4 flex items-center gap-4">
+                <span className="text-4xl">✅</span>
+                <div>
+                  <p className="text-emerald-300 font-black text-lg">ไม่มีม้วนรอกรอ</p>
+                  <p className="text-emerald-400/70 text-xs">เคลียร์งานหมดแล้ว — รอม้วนใหม่จากแผนกผลิต</p>
+                </div>
+              </div>
+            )
+          }
+          return (
+            <div className="relative rounded-2xl border-2 border-amber-500 bg-gradient-to-r from-amber-500/20 to-orange-500/15 px-5 py-4 overflow-hidden">
+              <span className="absolute inset-0 bg-amber-500/10 animate-pulse pointer-events-none"/>
+              <div className="relative flex items-center gap-4 flex-wrap">
+                <span className="text-5xl animate-bounce">🔔</span>
+                <div className="flex-1 min-w-[180px]">
+                  <p className="text-amber-200 font-black text-2xl leading-tight">มีม้วนรอกรอ {waiting} ม้วน</p>
+                  <p className="text-amber-300/80 text-sm">กรุณารับเข้ากรอ — แผนกผลิตส่งม้วนมาแล้ว</p>
+                </div>
+                <div className="flex gap-3 text-center">
+                  <div className="bg-amber-500/20 rounded-xl px-5 py-2 border border-amber-500/30">
+                    <p className="text-3xl font-black text-amber-200">{waiting}</p>
+                    <p className="text-[10px] text-amber-300/80">ม้วน</p>
+                  </div>
+                  <div className="bg-orange-500/20 rounded-xl px-5 py-2 border border-orange-500/30">
+                    <p className="text-3xl font-black text-orange-200">{fmt(waitingKg, 0)}</p>
+                    <p className="text-[10px] text-orange-300/80">Kg</p>
+                  </div>
+                  <div className="bg-slate-700/40 rounded-xl px-5 py-2 border border-slate-600/40">
+                    <p className="text-3xl font-black text-slate-200">{woCount}</p>
+                    <p className="text-[10px] text-slate-400">ใบสั่งผลิต</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
 
         {/* Search */}
         <div className="flex items-center gap-3 flex-wrap">
@@ -360,8 +421,26 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
               <span className="text-emerald-400">{showLog ? '▼' : '▶'}</span>
               📋 ประวัติการรับเข้ากรอ (Log) — รับอะไรมา เท่าไหร่
             </p>
-            <span className="text-slate-500 text-xs">
-              {logRows.length} รายการ · รวม {fmt(logRows.reduce((s, r) => s + (r.weight ?? 0), 0))} Kg
+            <span className="flex items-center gap-2">
+              <span className="text-slate-500 text-xs">
+                {logRows.length} รายการ · รวม {fmt(logRows.reduce((s, r) => s + (r.weight ?? 0), 0))} Kg
+              </span>
+              <span onClick={e => e.stopPropagation()}>
+                <ExportButton rows={logRows}
+                  cols={[
+                    { header:'รับเมื่อ', value: r => fmtDateTime(r.rework_received_at || r.created_at), width:18 },
+                    { header:'เครื่องเดิม', value:'machine_no' },
+                    { header:'Lot', value:'lot_no', width:16 },
+                    { header:'สินค้า', value:'product_name', width:30 },
+                    { header:'ลูกค้า', value:'customer', width:24 },
+                    { header:'น้ำหนัก (kg)', value:'weight' },
+                    { header:'สถานะ', value: r => reworkStatusLabel(r.rework_status).txt.replace(/[^฀-๿a-zA-Z ]/g,'').trim() },
+                    { header:'ผู้รับ', value: r => r.rework_received_by || r.transferred_by || '' },
+                  ]}
+                  fileName="ประวัติรับเข้ากรอ" sheetName="Log รับกรอ"
+                  label="📥 Export Log"
+                  className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white px-2.5 py-1 rounded text-xs font-bold" />
+              </span>
             </span>
           </button>
 

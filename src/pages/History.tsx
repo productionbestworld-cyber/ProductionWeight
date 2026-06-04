@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
+import { exportToExcel } from '../lib/exportExcel'
 import { History as HistoryIcon, Search, RefreshCw, X, FileText, Download, Trash2, Activity, ChevronRight, ChevronDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
@@ -127,21 +128,48 @@ export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   const avgYield    = filtered.length > 0 ? Math.round(filtered.reduce((s,r)=>s+(r.yield_pct??0),0) / filtered.length) : 0
 
   function exportCSV() {
-    if (filtered.length === 0) return
-    const headers = ['วันที่ปิด','เครื่อง','ลูกค้า','Item Code','สินค้า','Mat Code','Lot','สั่ง (kg)','ผลิตดี (kg)','ม้วนดี','กรอ (kg)','เศษ (kg)','โอน (kg)','Yield%','ผู้ปิด']
-    const rows = filtered.map(s => [
-      fmtDateTime(s.closed_at), s.machine_no, s.customer,
-      s.item_code ?? '', s.product_name,
-      s.mat_code, s.lot_no,
-      s.planned_qty, s.good_kg, s.good_rolls, s.bad_kg, s.scrap_kg, s.transferred_kg,
-      s.yield_pct + '%', s.closed_by
-    ])
-    const csv = '﻿' + [headers, ...rows].map(r => r.map(c => `"${(c??'').toString().replace(/"/g,'""')}"`).join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = `production_history_${new Date().toISOString().slice(0,10)}.csv`
-    a.click()
+    if (tab === 'history') {
+      exportToExcel(filtered, [
+        { header:'วันที่ปิด', value: s => fmtDateTime(s.closed_at), width:18 },
+        { header:'เครื่อง', value:'machine_no' },
+        { header:'ลูกค้า', value:'customer', width:28 },
+        { header:'Item Code', value: s => s.item_code ?? '' },
+        { header:'สินค้า', value:'product_name', width:30 },
+        { header:'Mat Code', value:'mat_code' },
+        { header:'Lot', value:'lot_no', width:16 },
+        { header:'สั่ง (kg)', value:'planned_qty' },
+        { header:'ผลิตดี (kg)', value:'good_kg' },
+        { header:'ม้วนดี', value:'good_rolls' },
+        { header:'กรอ (kg)', value:'bad_kg' },
+        { header:'เศษ (kg)', value:'scrap_kg' },
+        { header:'โอน (kg)', value:'transferred_kg' },
+        { header:'Yield%', value: s => `${s.yield_pct}%` },
+        { header:'ผู้ปิด', value:'closed_by' },
+      ], { fileName:'ประวัติผลิต', sheetName:'ประวัติผลิต' })
+    } else if (tab === 'machinelog') {
+      exportToExcel(machineLog, [
+        { header:'สถานะ', value: r => machineProfiles[r.machine_no] === r.lot_no ? 'กำลังเดิน' : 'จบแล้ว' },
+        { header:'เครื่อง', value:'machine_no' },
+        { header:'สินค้า', value:'product_name', width:30 },
+        { header:'Lot', value:'lot_no', width:16 },
+        { header:'เริ่มชั่ง', value: r => r.started_at ? fmtDateTime(r.started_at) : '', width:18 },
+        { header:'ชั่งล่าสุด', value: r => r.last_roll_at ? fmtDateTime(r.last_roll_at) : '', width:18 },
+        { header:'ม้วนดี', value: r => r.good_rolls ?? 0 },
+        { header:'ม้วนกรอ', value: r => r.bad_rolls ?? 0 },
+        { header:'น้ำหนักดี (kg)', value: r => r.good_kg ?? 0 },
+      ], { fileName:'log_เครื่อง', sheetName:'Log เครื่อง' })
+    } else {
+      exportToExcel(deletedLogs, [
+        { header:'เวลาลบ', value: r => r.deleted_at ? fmtDateTime(r.deleted_at) : '', width:18 },
+        { header:'เครื่อง', value:'machine_no' },
+        { header:'Lot', value:'lot_no', width:16 },
+        { header:'ม้วนที่', value:'roll_no' },
+        { header:'ประเภท', value:'roll_type' },
+        { header:'น้ำหนัก', value:'weight' },
+        { header:'เหตุผล', value:'reason', width:30 },
+        { header:'ผู้ลบ', value:'deleted_by' },
+      ], { fileName:'log_การลบม้วน', sheetName:'Log การลบ' })
+    }
   }
 
   return (
@@ -163,8 +191,8 @@ export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
           </div>
           <div className="flex gap-2">
             <button onClick={exportCSV}
-              className="flex items-center gap-1.5 text-slate-300 hover:text-white text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg">
-              <Download size={12}/> Export CSV
+              className="flex items-center gap-1.5 text-white text-xs bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded-lg font-bold">
+              <Download size={12}/> Export Excel
             </button>
             <button onClick={load} className="flex items-center gap-1.5 text-slate-400 hover:text-white text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg">
               <RefreshCw size={12}/> รีเฟรช

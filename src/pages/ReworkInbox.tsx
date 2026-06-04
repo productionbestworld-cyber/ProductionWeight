@@ -377,7 +377,7 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
                                   <td className="px-2 py-1.5">
                                     {(() => {
                                       const ti = inboundInfo(r.inbound_type)
-                                      return <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${ti.badge}`} title={`${ti.no} ${ti.label}`}>{ti.emoji} {ti.no}</span>
+                                      return <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${ti.badge}`} title={`${ti.no} ${ti.label} — ${ti.desc}`}>{ti.emoji} {ti.label}</span>
                                     })()}
                                     {r.is_legacy && <span className="ml-1 text-[9px] text-purple-300">(เก่า)</span>}
                                   </td>

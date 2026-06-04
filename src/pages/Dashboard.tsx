@@ -623,51 +623,31 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
           const reworkLossKg  = Math.max(0, sumW(badDone) - reworkFgKg)
           return (
           <div className="space-y-4">
-            {/* ── สรุปยอดผลิต (ดูครบในหน้าเดียว) ── */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="bg-white rounded-xl border-l-4 border-slate-400 border border-gray-200 shadow-sm p-4">
-                <p className="text-xs text-gray-500">⚖ ผลิตรวม</p>
-                <p className="text-3xl font-black text-gray-800 mt-1">{num(totalKg,1)}<span className="text-base text-gray-400 font-normal"> kg</span></p>
-                <p className="text-[11px] text-gray-400">{filtered.length} ม้วน</p>
+            {/* ── หัวข้อ: หน้านี้ = สิ่งที่ต้องลงมือทำ (ไม่ซ้ำกับภาพรวม) ── */}
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-800 rounded-xl px-5 py-4 text-white">
+              <div>
+                <p className="text-base font-black flex items-center gap-2">🎛 ศูนย์ควบคุม — สิ่งที่ต้องลงมือทำ</p>
+                <p className="text-[11px] text-slate-300 mt-0.5">ตัดสิน NC · ปิดงานกรอ · ดูเครื่องที่เดิน — ส่วนตัวเลขผลผลิต/Yield อยู่ที่แท็บ 📊 ภาพรวม</p>
               </div>
-              <div className="bg-white rounded-xl border-l-4 border-green-500 border border-gray-200 shadow-sm p-4">
-                <p className="text-xs text-gray-500">✓ FG (ดี) รวม</p>
-                <p className="text-3xl font-black text-green-600 mt-1">{num(fgKg,1)}<span className="text-base text-gray-400 font-normal"> kg</span></p>
-                <p className="text-[11px] text-gray-400 mb-1">{fg.length} ม้วน · {fgPct.toFixed(1)}%</p>
-                <div className="space-y-0.5 text-[11px]">
-                  <p className="flex justify-between"><span className="text-gray-500">🏭 ครั้งแรก</span><span className="font-bold text-gray-700">{num(fgFirstKg,1)} kg · {fgFirst.length}</span></p>
-                  <p className="flex justify-between"><span className="text-emerald-600">🔧 จากกรอ</span><span className="font-bold text-emerald-700">{num(fgReworkKg,1)} kg · {fgRework.length}</span></p>
+              <div className="flex items-center gap-3 text-center">
+                <div className="bg-slate-700/60 rounded-lg px-4 py-1.5 min-w-[78px]">
+                  <p className={`text-2xl font-black ${ncPending.length ? 'text-amber-300' : 'text-slate-500'}`}>{ncPending.length}</p>
+                  <p className="text-[10px] text-slate-300">NC รอตัดสิน</p>
                 </div>
-              </div>
-              <div className="bg-white rounded-xl border-l-4 border-orange-500 border border-gray-200 shadow-sm p-4">
-                <p className="text-xs text-gray-500">🔧 ม้วนกรอ</p>
-                <p className="text-3xl font-black text-orange-600 mt-1">{num(badKg,1)}<span className="text-base text-gray-400 font-normal"> kg</span></p>
-                <p className="text-[11px] text-gray-400 mb-1">{bad.length} ม้วน</p>
-                <div className="space-y-0.5 text-[11px]">
-                  {badReview.length > 0   && <p className="flex justify-between"><span className="text-purple-600">⏳ รอพิจารณา</span><span className="font-bold text-purple-700">{num(sumW(badReview),1)} kg · {badReview.length}</span></p>}
-                  {badWaiting.length > 0  && <p className="flex justify-between"><span className="text-amber-600">📥 ส่งไปกรอ (รอเริ่ม)</span><span className="font-bold text-amber-700">{num(sumW(badWaiting),1)} kg · {badWaiting.length}</span></p>}
-                  {badWorking.length > 0  && <p className="flex justify-between"><span className="text-blue-600">⚙ กำลังกรอ</span><span className="font-bold text-blue-700">{num(sumW(badWorking),1)} kg · {badWorking.length}</span></p>}
-                  {badDone.length > 0     && <p className="flex justify-between"><span className="text-emerald-600">✓ กรอเสร็จ (ม้วนต้นทาง)</span><span className="font-bold text-emerald-700">{num(sumW(badDone),1)} kg · {badDone.length}</span></p>}
-                  {badDone.length > 0     && <p className="flex justify-between pl-3"><span className="text-emerald-500">↳ ได้ FG จากกรอ</span><span className="font-bold text-emerald-600">{num(reworkFgKg,1)} kg · {reworkFgRolls.length}</span></p>}
-                  {badDone.length > 0     && <p className="flex justify-between pl-3"><span className="text-rose-500">↳ สูญเสีย/เศษกรอ</span><span className="font-bold text-rose-600">{num(reworkLossKg,1)} kg</span></p>}
-                  {badKeep.length > 0     && <p className="flex justify-between"><span className="text-slate-600">📦 เก็บไว้ (ผจก)</span><span className="font-bold text-slate-700">{num(sumW(badKeep),1)} kg · {badKeep.length}</span></p>}
-                  {badScrapped.length > 0 && <p className="flex justify-between"><span className="text-red-600">🗑 ทำลายทิ้ง (ม้วนกรอ)</span><span className="font-bold text-red-700">{num(sumW(badScrapped),1)} kg · {badScrapped.length}</span></p>}
-                  {badOther.length > 0    && <button onClick={()=>setShowBadOther(v=>!v)} className="flex justify-between w-full hover:bg-gray-50 rounded px-0.5"><span className="text-gray-400">{showBadOther ? '▲' : '▼'} ยังไม่จัดการ</span><span className="font-bold text-gray-500">{num(sumW(badOther),1)} kg · {badOther.length}</span></button>}
+                <div className="bg-slate-700/60 rounded-lg px-4 py-1.5 min-w-[78px]">
+                  <p className={`text-2xl font-black ${badWaiting.length ? 'text-amber-300' : 'text-slate-500'}`}>{badWaiting.length}</p>
+                  <p className="text-[10px] text-slate-300">รอเริ่มกรอ</p>
                 </div>
-              </div>
-              <div className="bg-white rounded-xl border-l-4 border-red-500 border border-gray-200 shadow-sm p-4">
-                <p className="text-xs text-gray-500">🗑 เศษรวม</p>
-                <p className="text-3xl font-black text-red-600 mt-1">{num(allScrapKg,1)}<span className="text-base text-gray-400 font-normal"> kg</span></p>
-                <p className="text-[11px] text-gray-400 mb-1">{allScrap.length} ม้วน</p>
-                <div className="space-y-0.5 text-[11px]">
-                  <p className="text-[10px] text-gray-400 font-bold">— ตามต้นทาง —</p>
-                  <p className="flex justify-between"><span className="text-gray-500">🏭 ผลิตคัดทิ้ง</span><span className="font-bold text-gray-700">{num(scrapByProdKg,1)} kg · {scrapByProd.length}</span></p>
-                  <p className="flex justify-between"><span className="text-amber-600">⚖ ผจก สั่งทำลาย</span><span className="font-bold text-amber-700">{num(scrapByMgrKg,1)} kg · {scrapByMgr.length}</span></p>
-                  <p className="text-[10px] text-gray-400 font-bold pt-0.5">— ตามชนิดเศษ —</p>
-                  {scrapClearKg > 0 && <p className="flex justify-between"><span className="text-gray-500">เศษใส</span><span className="font-bold text-gray-700">{num(scrapClearKg,1)} kg · {scrapClear.length}</span></p>}
-                  {scrapColorKg > 0 && <p className="flex justify-between"><span className="text-purple-600">เศษสี</span><span className="font-bold text-purple-700">{num(scrapColorKg,1)} kg · {scrapColor.length}</span></p>}
-                  {scrapLumpKg > 0 && <p className="flex justify-between"><span className="text-orange-600">เศษก้อน/ตะกอน</span><span className="font-bold text-orange-700">{num(scrapLumpKg,1)} kg · {scrapLump.length}</span></p>}
+                <div className="bg-slate-700/60 rounded-lg px-4 py-1.5 min-w-[78px]">
+                  <p className={`text-2xl font-black ${activeJobs.length ? 'text-blue-300' : 'text-slate-500'}`}>{activeJobs.length}</p>
+                  <p className="text-[10px] text-slate-300">งานกรอเปิดอยู่</p>
                 </div>
+                {badOther.length > 0 && (
+                  <button onClick={()=>setShowBadOther(v=>!v)} className="bg-rose-500/20 hover:bg-rose-500/30 rounded-lg px-4 py-1.5 min-w-[78px]">
+                    <p className="text-2xl font-black text-rose-300">{badOther.length}</p>
+                    <p className="text-[10px] text-slate-300">{showBadOther ? '▲ ซ่อน' : '▼ ม้วนค้าง'}</p>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -847,6 +827,42 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
 
         {/* ════════════════════════════════ TAB: OVERVIEW ══════════════════════════════ */}
         {tab === 'overview' && (<>
+
+          {/* ── Hero: Yield + ผลผลิตรวม (รู้ทันทีว่าผลเป็นยังไง) ── */}
+          {(() => {
+            const yieldPct  = totalKg ? fgKg / totalKg * 100 : 0
+            const lossKg    = badKg + allScrapKg
+            const lossPct   = totalKg ? lossKg / totalKg * 100 : 0
+            const yColor    = yieldPct >= 90 ? 'text-emerald-600' : yieldPct >= 80 ? 'text-amber-600' : 'text-rose-600'
+            const yBar      = yieldPct >= 90 ? 'bg-emerald-500' : yieldPct >= 80 ? 'bg-amber-500' : 'bg-rose-500'
+            return (
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex flex-wrap items-center gap-6">
+                <div className="flex items-center gap-4">
+                  <div className="text-center">
+                    <p className="text-[11px] text-gray-400 font-medium">📊 Yield (ดี/ผลิตทั้งหมด)</p>
+                    <p className={`text-5xl font-black leading-none mt-1 ${yColor}`}>{yieldPct.toFixed(1)}<span className="text-2xl">%</span></p>
+                  </div>
+                </div>
+                <div className="flex-1 min-w-[260px]">
+                  <div className="flex justify-between text-[11px] mb-1">
+                    <span className="text-emerald-600 font-bold">✅ FG {fmtKg(fgKg)} kg</span>
+                    <span className="text-rose-600 font-bold">⚠ สูญเสีย {fmtKg(lossKg)} kg ({lossPct.toFixed(1)}%)</span>
+                  </div>
+                  <div className="h-3 bg-rose-100 rounded-full overflow-hidden flex">
+                    <div className={`h-full ${yBar}`} style={{ width: `${Math.min(yieldPct,100)}%` }}/>
+                  </div>
+                  <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+                    <span>ผลิตทั้งหมด {fmtKg(totalKg)} kg · {filtered.length} ม้วน</span>
+                    <span>🔄 กรอ {fmtKg(badKg)} · 🗑 เศษ {fmtKg(allScrapKg)} kg</span>
+                  </div>
+                </div>
+                <div className="text-[11px] text-gray-400 max-w-[200px] border-l border-gray-100 pl-4">
+                  หน้านี้ = <b className="text-gray-600">ตัวเลขผลผลิต (ดูอย่างเดียว)</b><br/>
+                  สิ่งที่ต้องสั่งการอยู่ที่แท็บ 🎛 ศูนย์ควบคุม
+                </div>
+              </div>
+            )
+          })()}
 
           {/* KPI cards row 1 — ซ่อน ม้วนกรอ เมื่อ filter เป็นแผนกกรอ */}
           <div className={`grid gap-4 ${fSection === 'rewind' ? 'grid-cols-3' : 'grid-cols-4'}`}>
@@ -2574,39 +2590,43 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
               </p>
               {data.length === 0
                 ? <div className="h-80 flex items-center justify-center text-gray-400">ไม่มีข้อมูลในช่วงนี้</div>
-                : compMetric === 'quality' ? (
-                <ResponsiveContainer width="100%" height={Math.max(380, data.length * 32)}>
-                  <BarChart data={data} layout="vertical" margin={{ top: 10, right: 50, left: 10, bottom: 5 }}
-                    stackOffset="expand">
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false}/>
-                    <XAxis type="number" tickFormatter={(v) => `${Math.round(v * 100)}%`} domain={[0, 1]} tick={{ fontSize: 10 }}/>
-                    <YAxis type="category" dataKey="key" width={130} tick={{ fontSize: 11 }}/>
-                    <Tooltip formatter={(v: any, n: any, p: any) => {
-                      const tot = p.payload.total || 1
-                      return [`${(Number(v) / tot * 100).toFixed(1)}% (${num(Number(v),1)} kg)`, n]
-                    }}/>
-                    <Legend wrapperStyle={{ fontSize: 11 }}/>
-                    <Bar dataKey="FG"       name="FG (ดี)" fill="#22c55e" stackId="a"/>
-                    <Bar dataKey="ม้วนกรอ" name="กรอ"     fill="#f97316" stackId="a"/>
-                    <Bar dataKey="scrapKg"  name="เศษ"     fill="#ef4444" stackId="a"/>
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <ResponsiveContainer width="100%" height={Math.max(380, data.length * 32)}>
-                  <BarChart data={data} layout="vertical" margin={{ top: 10, right: 80, left: 10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false}/>
-                    <XAxis type="number" tickFormatter={fmtKg} tick={{ fontSize: 10 }}/>
-                    <YAxis type="category" dataKey="key" width={130} tick={{ fontSize: 11 }}/>
-                    <Tooltip content={<CustomTooltip/>}/>
-                    <Legend wrapperStyle={{ fontSize: 11 }}/>
-                    <Bar dataKey="FG"       fill="#3b82f6" stackId="a"/>
-                    <Bar dataKey="ม้วนกรอ" fill="#f97316" stackId="a"/>
-                    <Bar dataKey="เศษใส"   fill="#ef4444" stackId="a"/>
-                    <Bar dataKey="เศษสี"   fill="#a855f7" stackId="a"/>
-                    <Bar dataKey="เศษก้อน" fill="#d97706" stackId="a"
-                      label={{ position:'right', formatter:(v: any) => fmtKg(Number(v)), fontSize: 10, fill:'#555' }}/>
-                  </BarChart>
-                </ResponsiveContainer>
+                : (
+                <div className="overflow-x-auto">
+                 <div style={{ minWidth: Math.max(480, data.length * 90) }}>
+                  {compMetric === 'quality' ? (
+                  <ResponsiveContainer width="100%" height={420}>
+                    <BarChart data={data} margin={{ top: 20, right: 15, left: 0, bottom: 5 }} stackOffset="expand">
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false}/>
+                      <XAxis dataKey="key" tick={{ fontSize: 11 }} interval={0} angle={data.length > 6 ? -25 : 0} textAnchor={data.length > 6 ? 'end' : 'middle'} height={data.length > 6 ? 60 : 30}/>
+                      <YAxis tickFormatter={(v) => `${Math.round(v * 100)}%`} domain={[0, 1]} tick={{ fontSize: 10 }} width={45}/>
+                      <Tooltip formatter={(v: any, n: any, p: any) => {
+                        const tot = p.payload.total || 1
+                        return [`${(Number(v) / tot * 100).toFixed(1)}% (${num(Number(v),1)} kg)`, n]
+                      }}/>
+                      <Legend wrapperStyle={{ fontSize: 11 }}/>
+                      <Bar dataKey="FG"       name="FG (ดี)" fill="#22c55e" stackId="a" radius={[4,4,0,0]}/>
+                      <Bar dataKey="ม้วนกรอ" name="กรอ"     fill="#f97316" stackId="a"/>
+                      <Bar dataKey="scrapKg"  name="เศษ"     fill="#ef4444" stackId="a"/>
+                    </BarChart>
+                  </ResponsiveContainer>
+                  ) : (
+                  <ResponsiveContainer width="100%" height={420}>
+                    <BarChart data={data} margin={{ top: 24, right: 15, left: 0, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false}/>
+                      <XAxis dataKey="key" tick={{ fontSize: 11 }} interval={0} angle={data.length > 6 ? -25 : 0} textAnchor={data.length > 6 ? 'end' : 'middle'} height={data.length > 6 ? 60 : 30}/>
+                      <YAxis tickFormatter={fmtKg} tick={{ fontSize: 10 }} width={48}/>
+                      <Tooltip content={<CustomTooltip/>}/>
+                      <Legend wrapperStyle={{ fontSize: 11 }}/>
+                      <Bar dataKey="FG"       fill="#3b82f6" stackId="a"/>
+                      <Bar dataKey="ม้วนกรอ" fill="#f97316" stackId="a"/>
+                      <Bar dataKey="เศษใส"   fill="#ef4444" stackId="a"/>
+                      <Bar dataKey="เศษสี"   fill="#a855f7" stackId="a"/>
+                      <Bar dataKey="เศษก้อน" fill="#d97706" stackId="a" radius={[4,4,0,0]}/>
+                    </BarChart>
+                  </ResponsiveContainer>
+                  )}
+                 </div>
+                </div>
               )}
             </div>
 

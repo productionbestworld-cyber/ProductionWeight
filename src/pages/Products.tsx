@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useRef } from 'react'
 import { Plus, Trash2, Search, Upload, Download, X, Edit3, RefreshCw, Building2, Boxes, ChevronRight, FileSpreadsheet } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import * as XLSX from 'xlsx'
+import { exportToExcel } from '../lib/exportExcel'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 export interface Customer {
@@ -20,6 +21,8 @@ export interface Product {
   width_cm:      string
   width_unit?:   'cm' | 'mm'
   thick_mc:      string
+  mat_code?:     string
+  core_weight?:  string
   cust_code:     string
   // join-ed (จาก view products_with_customer)
   cust_name?:    string
@@ -172,7 +175,7 @@ function CustomersTab({ customers, products, countByCust, loading, onSelect, onC
         itemRows.push({
           'ลำดับ': ++no, 'รหัสลูกค้า': c.cust_code, 'ชื่อลูกค้า': c.cust_name,
           'Item Code': '(ยังไม่มี item)', 'รหัสสินค้า': '', 'ชื่อสินค้า': '',
-          'หน้ากว้าง': '', 'หน่วย': '', 'หนา (mc)': '',
+          'หน้ากว้าง': '', 'หน่วย': '', 'หนา (mc)': '', 'Mat Code': '', 'นน.แกน (kg)': '',
         })
       } else {
         for (const p of items) {
@@ -180,6 +183,7 @@ function CustomersTab({ customers, products, countByCust, loading, onSelect, onC
             'ลำดับ': ++no, 'รหัสลูกค้า': c.cust_code, 'ชื่อลูกค้า': c.cust_name,
             'Item Code': p.item_code, 'รหัสสินค้า': p.product_code, 'ชื่อสินค้า': p.product_name,
             'หน้ากว้าง': p.width_cm, 'หน่วย': p.width_unit ?? '', 'หนา (mc)': p.thick_mc,
+            'Mat Code': (p as any).mat_code ?? '', 'นน.แกน (kg)': (p as any).core_weight ?? '',
           })
         }
       }
@@ -190,7 +194,7 @@ function CustomersTab({ customers, products, countByCust, loading, onSelect, onC
     ws1['!cols'] = [{ wch: 6 }, { wch: 10 }, { wch: 45 }, { wch: 22 }, { wch: 35 }, { wch: 10 }]
     XLSX.utils.book_append_sheet(wb, ws1, 'ลูกค้า')
     const ws2 = XLSX.utils.json_to_sheet(itemRows)
-    ws2['!cols'] = [{ wch: 6 }, { wch: 10 }, { wch: 40 }, { wch: 16 }, { wch: 14 }, { wch: 40 }, { wch: 10 }, { wch: 8 }, { wch: 10 }]
+    ws2['!cols'] = [{ wch: 6 }, { wch: 10 }, { wch: 40 }, { wch: 16 }, { wch: 14 }, { wch: 40 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 16 }, { wch: 12 }]
     XLSX.utils.book_append_sheet(wb, ws2, 'Item ทั้งหมด')
     XLSX.writeFile(wb, `ลูกค้า+Item_${new Date().toISOString().slice(0, 10)}.xlsx`)
   }
@@ -437,28 +441,20 @@ function ProductsTab({ products, customers, loading, onChanged }: {
   }
 
   function exportCSV() {
-    // จัดกลุ่มตามลูกค้า — แถวแรกของแต่ละลูกค้าแสดงข้อมูลเต็ม, แถวถัดไปเว้นว่าง
-    const header = ['รหัสลูกค้า','ชื่อลูกค้า','ที่อยู่','Item Code','ชื่อสินค้า','กว้าง','หนา']
-    const sorted = [...products].sort((a, b) => (a.cust_code || '').localeCompare(b.cust_code || ''))
-    const lines: string[] = [header.join(',')]
-    let prevCust = ''
-    for (const p of sorted) {
-      const isNewCust = p.cust_code !== prevCust
-      const row = [
-        isNewCust ? p.cust_code     : '',
-        isNewCust ? (p.cust_name    ?? '') : '',
-        isNewCust ? (p.cust_address ?? '') : '',
-        p.item_code, p.product_name, p.width_cm, p.thick_mc,
-      ].map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')
-      lines.push(row)
-      prevCust = p.cust_code
-    }
-    const csv = '﻿' + lines.join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url; a.download = `products-${new Date().toISOString().slice(0,10)}.csv`; a.click()
-    URL.revokeObjectURL(url)
+    const sorted = [...products].sort((a, b) =>
+      (a.cust_code || '').localeCompare(b.cust_code || '') || (a.item_code || '').localeCompare(b.item_code || ''))
+    exportToExcel(sorted, [
+      { header:'รหัสลูกค้า', value:'cust_code' },
+      { header:'ชื่อลูกค้า', value: p => p.cust_name ?? '', width:30 },
+      { header:'Item Code', value:'item_code', width:16 },
+      { header:'รหัสสินค้า', value:'product_code', width:14 },
+      { header:'ชื่อสินค้า', value:'product_name', width:40 },
+      { header:'หน้ากว้าง', value:'width_cm' },
+      { header:'หน่วย', value: p => p.width_unit ?? '' },
+      { header:'หนา (mc)', value:'thick_mc' },
+      { header:'Mat Code', value: p => p.mat_code ?? '', width:16 },
+      { header:'นน.แกน (kg)', value: p => p.core_weight ?? '', width:12 },
+    ], { fileName:'รายการสินค้า_ItemCode', sheetName:'สินค้า' })
   }
 
   return (

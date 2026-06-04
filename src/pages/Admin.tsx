@@ -1,10 +1,59 @@
 import { useState, useEffect } from 'react'
-import { Boxes, FileEdit, KeyRound, Lock, Eye, EyeOff } from 'lucide-react'
+import { Boxes, FileEdit, KeyRound, Lock, Eye, EyeOff, Database } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { exportSheetsToExcel } from '../lib/exportExcel'
 import Products from './Products'
 import LabelDesigner from './LabelDesigner'
 
 type Dept = 'blow' | 'print' | 'rewind'
+
+// ─── Backup ทั้งฐานข้อมูลเป็น Excel (หลายชีต) ─────────────────────────────────
+const BACKUP_TABLES: { table: string; sheet: string }[] = [
+  { table:'production_rolls',   sheet:'ม้วนผลิต' },
+  { table:'job_summaries',      sheet:'สรุปงาน' },
+  { table:'weigh_logs',         sheet:'Log ชั่ง' },
+  { table:'rework_jobs',        sheet:'งานกรอ' },
+  { table:'rework_rolls',       sheet:'ม้วนกรอ' },
+  { table:'transfer_documents', sheet:'ใบโอน' },
+  { table:'sales_orders',       sheet:'ใบสั่งขาย' },
+  { table:'parked_jobs',        sheet:'งานจอด' },
+  { table:'machine_profiles',   sheet:'เครื่องจักร' },
+  { table:'customers',          sheet:'ลูกค้า' },
+  { table:'products',           sheet:'สินค้า' },
+  { table:'label_layouts',      sheet:'ใบปะหน้า' },
+  { table:'roll_deletion_logs', sheet:'Log การลบ' },
+  { table:'app_settings',       sheet:'ตั้งค่า' },
+]
+
+async function fetchAllRows(table: string): Promise<any[]> {
+  const PAGE = 1000
+  let from = 0
+  const all: any[] = []
+  for (;;) {
+    const { data, error } = await supabase.from(table).select('*').range(from, from + PAGE - 1)
+    if (error) { console.warn(`[backup] ${table}:`, error.message); break }
+    const rows = data ?? []
+    all.push(...rows)
+    if (rows.length < PAGE) break
+    from += PAGE
+  }
+  return all
+}
+
+function rowsToAoa(rows: any[]): any[][] {
+  if (rows.length === 0) return [['(ไม่มีข้อมูล)']]
+  // รวมคีย์ทุกแถว กันบางแถวมีคอลัมน์ไม่ครบ
+  const keys: string[] = []
+  for (const r of rows) for (const k of Object.keys(r)) if (!keys.includes(k)) keys.push(k)
+  const aoa: any[][] = [keys]
+  for (const r of rows) aoa.push(keys.map(k => {
+    const v = r[k]
+    if (v == null) return ''
+    if (typeof v === 'object') return JSON.stringify(v)
+    return v
+  }))
+  return aoa
+}
 
 const PIN_DEFAULTS = { admin_pin:'9999', pin_blow:'1111', pin_print:'2222', pin_rewind:'3333' } as const
 const DEPT_KEYS    = { blow:'pin_blow', print:'pin_print', rewind:'pin_rewind' } as const
@@ -153,6 +202,41 @@ type Tab = 'products' | 'labels' | 'pin'
 
 export default function Admin({ dept: _dept }: { dept?: 'blow'|'print'|'rewind' }) {
   const [tab, setTab] = useState<Tab>('products')
+  const [backingUp, setBackingUp] = useState(false)
+  const [backupMsg, setBackupMsg] = useState('')
+
+  async function backupAll() {
+    if (backingUp) return
+    setBackingUp(true)
+    try {
+      const sheets: { name: string; aoa: any[][] }[] = []
+      let totalRows = 0
+      for (const t of BACKUP_TABLES) {
+        setBackupMsg(`กำลังดึง ${t.sheet}...`)
+        const rows = await fetchAllRows(t.table)
+        totalRows += rows.length
+        sheets.push({ name: t.sheet, aoa: rowsToAoa(rows) })
+      }
+      // ชีตสรุปหน้าแรก
+      const summary: any[][] = [
+        ['BACKUP ฐานข้อมูล BWP', ''],
+        ['วันที่ backup', new Date().toLocaleString('th-TH')],
+        ['รวมทุกตาราง (แถว)', totalRows],
+        ['', ''],
+        ['ตาราง', 'จำนวนแถว'],
+        ...BACKUP_TABLES.map((t, i) => [t.sheet, sheets[i].aoa.length - 1]),
+      ]
+      sheets.unshift({ name: 'สรุป', aoa: summary })
+      setBackupMsg('กำลังสร้างไฟล์ Excel...')
+      exportSheetsToExcel(sheets, `BWP_backup_${new Date().toISOString().slice(0,10)}`)
+      setBackupMsg(`✓ สำเร็จ — ${totalRows.toLocaleString()} แถว`)
+      setTimeout(() => setBackupMsg(''), 4000)
+    } catch (e: any) {
+      setBackupMsg('❌ ผิดพลาด: ' + (e?.message ?? e))
+    } finally {
+      setBackingUp(false)
+    }
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -178,8 +262,14 @@ export default function Admin({ dept: _dept }: { dept?: 'blow'|'print'|'rewind' 
           }`}>
           <KeyRound size={13}/> เปลี่ยน PIN
         </button>
+        {backupMsg && <span className="ml-auto text-xs text-emerald-300 mr-2">{backupMsg}</span>}
+        <button onClick={backupAll} disabled={backingUp}
+          className={`${backupMsg ? '' : 'ml-auto'} flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white mr-2`}
+          title="ดาวน์โหลดทั้งฐานข้อมูลเป็นไฟล์ Excel (หลายชีต)">
+          <Database size={13}/> {backingUp ? 'กำลัง Backup...' : '💾 Backup ทั้งระบบ'}
+        </button>
         <button onClick={() => { lockAdmin(); location.reload() }}
-          className="ml-auto text-slate-500 hover:text-red-400 text-xs flex items-center gap-1">
+          className="text-slate-500 hover:text-red-400 text-xs flex items-center gap-1">
           <Lock size={12}/> ล็อก
         </button>
       </div>

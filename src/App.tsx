@@ -23,6 +23,32 @@ lockAdmin()
 export default function App() {
   if (new URLSearchParams(window.location.search).get('roll')) return <RollDetail />
 
+  // ── หน้าแดชบอร์ดแบบลิงก์แยก (เปิดเต็มจอ ไม่ต้องผ่านเมนูชั่ง) ──
+  // เปิดผ่าน ...?dashboard=1  หรือ  ...#dashboard
+  {
+    const sp = new URLSearchParams(window.location.search)
+    const isDash = sp.get('dashboard') !== null || window.location.hash.replace('#', '') === 'dashboard'
+    if (isDash) {
+      const d = sp.get('dept') as ('blow'|'print'|'rewind'|null)
+      return (
+        <div className="min-h-screen bg-[#0a0f1e]">
+          <div className="bg-slate-900 border-b border-slate-800 px-5 py-2.5 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center text-white font-black text-xs">BWP</div>
+              <span className="text-white font-bold text-sm">Dashboard — ระบบชั่งน้ำหนักม้วน</span>
+            </div>
+            <a href={window.location.pathname} className="text-xs text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 rounded-lg px-3 py-1.5">
+              ← กลับหน้าหลัก
+            </a>
+          </div>
+          <div className="p-4">
+            <Dashboard dept={d ?? undefined} />
+          </div>
+        </div>
+      )
+    }
+  }
+
   // dept persist ใน localStorage
   const [dept, setDept] = useState<Dept>(() =>
     (localStorage.getItem(DEPT_KEY) as Dept) ?? 'blow'
@@ -288,7 +314,17 @@ export default function App() {
         {page === 'weigh'     && <WeighStation key={weighKey} dept={dept} />}
         {page === 'transfer'  && <Transfer dept={dept} />}
         {page === 'warehouse' && <Warehouse dept={dept} />}
-        {page === 'dashboard' && <Dashboard dept={dept} />}
+        {page === 'dashboard' && (
+          <div>
+            <div className="flex justify-end px-4 pt-3">
+              <a href={`?dashboard=1&dept=${dept}`} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg px-3 py-1.5">
+                🔗 เปิดแดชบอร์ดแยกหน้าต่าง
+              </a>
+            </div>
+            <Dashboard dept={dept} />
+          </div>
+        )}
         {page === 'history'   && <HistoryPage dept={dept} />}
         {page === 'review'    && <ReviewQueue dept={dept} mode="prod" />}
         {page === 'nc'        && <ReviewQueue dept={dept} mode="nc" />}

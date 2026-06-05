@@ -496,9 +496,7 @@ function CreateJobModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
 
   useEffect(() => { fetchProducts().then(setProducts) }, [])
 
-  function pickProduct(item_code: string) {
-    const p = products.find(x => x.item_code === item_code.trim())
-    if (!p) { setForm(f => ({ ...f, item_code })); return }
+  function fillFromProduct(p: Product) {
     setForm(f => ({
       ...f,
       item_code:    p.item_code,
@@ -509,8 +507,21 @@ function CreateJobModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
       thick_mc:     p.thick_mc,
       cust_code:    p.cust_code,
       cust_name:    p.cust_name ?? '',
+      mat_code:     p.mat_code ?? '',     // auto
+      core_weight:  p.core_weight ?? '',  // auto น้ำหนักแกน
     }))
     // ไม่ auto-gen lot ที่นี่ — Lot จะถูกสร้างตอนเลือกเครื่อง (yy+เครื่อง+ลูกค้า+เดือน)
+  }
+  function pickProduct(item_code: string) {
+    const p = products.find(x => x.item_code === item_code.trim())
+    if (!p) { setForm(f => ({ ...f, item_code })); return }
+    fillFromProduct(p)
+  }
+  // พิมพ์ Mat Code ตรงกับสินค้า → เด้งข้อมูลให้เลย
+  function onMatCode(val: string) {
+    const m = products.find(x => (x.mat_code ?? '').trim().toLowerCase() === val.trim().toLowerCase() && val.trim() !== '')
+    if (m) { fillFromProduct(m); return }
+    setForm(f => ({ ...f, mat_code: val }))
   }
 
   async function save() {
@@ -566,7 +577,8 @@ function CreateJobModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
 
           <div>
             <label className="block text-[10px] text-slate-500 mb-1">Mat Code</label>
-            <input value={form.mat_code ?? ''} onChange={e => setForm(f => ({ ...f, mat_code: e.target.value }))}
+            <input value={form.mat_code ?? ''} onChange={e => onMatCode(e.target.value)}
+              placeholder="พิมพ์ Mat Code ตรงกับสินค้า → เด้งข้อมูลให้"
               className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-brand-500"/>
           </div>
 

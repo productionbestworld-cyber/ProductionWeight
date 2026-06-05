@@ -306,7 +306,30 @@ function EditModal({ p, products, onChange, onAutoFill, onRemove, onClose }: {
   const f = (label: string, k: keyof MachineProfile, ph = '', half = false) => (
     <div className={half ? '' : 'col-span-2'}>
       <label className="block text-[10px] text-slate-500 mb-1">{label}</label>
-      <input value={(p[k] as string) ?? ''} onChange={e => onChange(k, e.target.value)} placeholder={ph}
+      <input value={(p[k] as string) ?? ''} placeholder={ph}
+        onChange={e => {
+          const val = e.target.value
+          if (k === 'matCode') {
+            // พิมพ์ Mat Code ตรงกับสินค้า → เด้งข้อมูลให้เลย
+            const m = products.find(x => (x.mat_code ?? '').trim().toLowerCase() === val.trim().toLowerCase() && val.trim() !== '')
+            if (m) {
+              onAutoFill({
+                matCode:     val,
+                itemCode:    m.item_code,
+                productCode: m.product_code,
+                productName: m.product_name,
+                widthCm:     m.width_cm,
+                thickMc:     m.thick_mc,
+                custCode:    m.cust_code,
+                custName:    m.cust_name ?? '',
+                custAddress: m.cust_address ?? '',
+                coreWeight:  m.core_weight ?? '',
+              })
+              return
+            }
+          }
+          onChange(k, val)
+        }}
         className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-brand-500" />
     </div>
   )

@@ -1364,7 +1364,30 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
           autoComplete="on"
           list={sugs.length > 0 ? listId : undefined}
           value={(p[k] as string) ?? ''}
-          onChange={e => setP(prev => ({ ...prev, [k]: e.target.value }))}
+          onChange={e => {
+            const val = e.target.value
+            if (k === 'matCode') {
+              // พิมพ์ Mat Code ตรงกับสินค้า → เด้งข้อมูลให้เลย
+              const m = products.find(x => (x.mat_code ?? '').trim().toLowerCase() === val.trim().toLowerCase() && val.trim() !== '')
+              if (m) {
+                setManyWithLot({
+                  matCode:     val,
+                  itemCode:    m.item_code,
+                  productCode: m.product_code,
+                  productName: m.product_name,
+                  widthCm:     m.width_cm,
+                  widthUnit:   (m.width_unit ?? 'cm') as 'cm'|'mm',
+                  thickMc:     m.thick_mc,
+                  custCode:    m.cust_code,
+                  custName:    m.cust_name ?? '',
+                  custAddress: m.cust_address ?? '',
+                  coreWeight:  m.core_weight ?? '',
+                })
+                return
+              }
+            }
+            setP(prev => ({ ...prev, [k]: val }))
+          }}
           placeholder={ph}
           className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-brand-500"
         />

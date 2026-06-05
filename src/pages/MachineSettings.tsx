@@ -352,7 +352,7 @@ function EditModal({ p, products, onChange, onAutoFill, onRemove, onClose }: {
                   // หา product ที่ตรงกับ value
                   const match = products.find(x => x.item_code === v.trim())
                   if (match) {
-                    // ตรงเป๊ะ → auto-fill
+                    // ตรงเป๊ะ → auto-fill (แกน+matcode จาก DB; ถ้าไม่มีเว้นว่างให้กรอกเอง)
                     onAutoFill({
                       itemCode:    match.item_code,
                       productCode: match.product_code,
@@ -362,6 +362,8 @@ function EditModal({ p, products, onChange, onAutoFill, onRemove, onClose }: {
                       custCode:    match.cust_code,
                       custName:    match.cust_name ?? '',
                       custAddress: match.cust_address ?? '',
+                      matCode:     match.mat_code ?? '',
+                      coreWeight:  match.core_weight ?? '',
                     })
                   } else {
                     // ไม่ตรง → เก็บแค่ itemCode + ล้าง auto-fill ที่เหลือ
@@ -370,6 +372,7 @@ function EditModal({ p, products, onChange, onAutoFill, onRemove, onClose }: {
                       productCode:'', productName:'',
                       widthCm:'', thickMc:'',
                       custCode:'', custName:'', custAddress:'',
+                      matCode:'', coreWeight:'',
                     })
                   }
                 }}
@@ -382,6 +385,8 @@ function EditModal({ p, products, onChange, onAutoFill, onRemove, onClose }: {
                   custCode:    s.cust_code,
                   custName:    s.cust_name,
                   custAddress: s.cust_address,
+                  matCode:     s.mat_code ?? '',
+                  coreWeight:  s.core_weight ?? '',
                 })}
               />
             </div>

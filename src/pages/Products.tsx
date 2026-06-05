@@ -42,6 +42,30 @@ export async function fetchCustomers(): Promise<Customer[]> {
   return (data ?? []) as Customer[]
 }
 
+// ─── เติมกลับ (back-fill) Mat Code / น้ำหนักแกน เข้า master ──────────────────
+// ใช้ตอนพนักงานกรอกค่าที่ master ยังไม่มี → ครั้งหน้าจะ auto-fill ให้เลย
+// เงื่อนไข: เติม "เฉพาะช่องที่ว่างอยู่" เท่านั้น — ไม่ทับค่าที่มีอยู่แล้ว
+export async function backfillProductMatCore(itemCode?: string, matCode?: string, coreWeight?: string) {
+  const ic = (itemCode ?? '').trim()
+  if (!ic) return
+  const mat = (matCode ?? '').trim()
+  const core = (coreWeight ?? '').trim()
+  if (!mat && !core) return
+  try {
+    const { data } = await supabase.from('products')
+      .select('id, mat_code, core_weight').eq('item_code', ic).limit(1)
+    const p = data?.[0]
+    if (!p) return  // ไม่มีสินค้านี้ใน master (เช่น item code ใหม่) → ไม่ทำอะไร
+    const patch: Record<string, string> = {}
+    if (mat  && !((p as any).mat_code    ?? '').trim()) patch.mat_code    = mat
+    if (core && !((p as any).core_weight ?? '').trim()) patch.core_weight = core
+    if (Object.keys(patch).length === 0) return  // master มีครบแล้ว → ไม่ทับ
+    await supabase.from('products').update(patch).eq('id', (p as any).id)
+  } catch (e) {
+    console.warn('[backfillProductMatCore]', e)
+  }
+}
+
 // ─── Main Page ───────────────────────────────────────────────────────────────
 type Tab = 'customers' | 'products'
 

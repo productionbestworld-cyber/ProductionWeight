@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase'
 import { loadProfiles, saveProfiles, fmtSize, convertWidth, type MachineProfile } from './MachineSettings'
 import ReworkJobList from './ReworkJobList'
 import { loadLongLayout, loadShortLayout, loadWasteLayout, type FieldConfig } from './LabelDesigner'
-import { fetchProducts, type Product } from './Products'
+import { fetchProducts, backfillProductMatCore, type Product } from './Products'
 import { fetchFlag } from './Admin'
 import ReworkInbox from './ReworkInbox'
 import ExportButton from '../components/ExportButton'
@@ -1424,6 +1424,8 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
                       custCode:    match.cust_code,
                       custName:    match.cust_name ?? '',
                       custAddress: match.cust_address ?? '',
+                      matCode:     match.mat_code ?? '',     // auto จาก DB (ไม่มี = เว้นว่างกรอกเอง)
+                      coreWeight:  match.core_weight ?? '',  // auto น้ำหนักแกน
                     })
                   } else {
                     setMany({
@@ -1431,6 +1433,7 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
                       productCode:'', productName:'',
                       widthCm:'', thickMc:'',
                       custCode:'', custName:'', custAddress:'',
+                      matCode:'', coreWeight:'',
                     })
                   }
                 }}
@@ -1444,6 +1447,8 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
                   custCode:    s.cust_code,
                   custName:    s.cust_name ?? '',
                   custAddress: s.cust_address ?? '',
+                  matCode:     s.mat_code ?? '',     // auto จาก DB
+                  coreWeight:  s.core_weight ?? '',  // auto น้ำหนักแกน
                 })}
               />
             </div>
@@ -2244,6 +2249,9 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
 
       setLastRoll({ ...data, weighType: actualType })
       setWeighedRolls(prev => [...prev, data].filter(Boolean))
+
+      // ── จำค่าที่กรอกเอง: ถ้า master ยังไม่มี Mat Code/แกน → เติมกลับให้ครั้งหน้า auto-fill ──
+      backfillProductMatCore(profile.itemCode, profile.matCode, profile.coreWeight)
 
       // บันทึก log ทุกการชั่ง (await + retry 2 ครั้ง — log สำคัญสำหรับ recovery)
       const logPayload = {

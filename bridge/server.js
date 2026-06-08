@@ -39,14 +39,34 @@ function saveConfig(cfg) {
 let config = loadConfig()
 if (!Array.isArray(config.scales)) config.scales = []
 let currentPort = null
-let lastWeight = { value: 0, stable: false, raw: '', timestamp: 0, connected: false }
+let lastWeight = { value: 0, stable: false, raw: '', timestamp: 0, connected: false, standby: false }
+
+// ── โหมดแย่ง COM อัตโนมัติ ────────────────────────────────
+// standby = true  → ปล่อยให้โปรแกรมเก่าใช้ COP (บริดไม่แย่ง)
+// standby = false → บริดพยายามจับ COM ทุก 2 วิ จนได้ (โปรแกรมเก่าปิดปุ๊บ จับเอง)
+let standby = false
+let retryTimer = null
+const RETRY_MS = 2000
+
+function scheduleRetry(reason) {
+  if (standby) return
+  if (retryTimer) return            // กันตั้งซ้อน
+  retryTimer = setTimeout(() => {
+    retryTimer = null
+    openSerial()
+  }, RETRY_MS)
+  if (reason) console.log(`[bridge] COM ไม่ว่าง (${reason}) → ลองใหม่ใน ${RETRY_MS/1000}s`)
+}
 
 // ── เปิด Serial Port ──────────────────────────────────────
 async function openSerial() {
+  if (retryTimer) { clearTimeout(retryTimer); retryTimer = null }
   if (currentPort) {
     try { currentPort.close() } catch {}
     currentPort = null
   }
+  if (standby) { lastWeight.connected = false; lastWeight.standby = true; broadcast(); return }
+  lastWeight.standby = false
   if (!config.comPort) {
     console.log('[bridge] ยังไม่ได้เลือก COM port')
     return
@@ -62,9 +82,10 @@ async function openSerial() {
     })
     currentPort.open(err => {
       if (err) {
-        console.error('[bridge] เปิด port ไม่สำเร็จ:', err.message)
+        // เปิดไม่ได้ (ส่วนใหญ่ = โปรแกรมเก่าจับ COM อยู่) → ลองใหม่เรื่อยๆ
         lastWeight.connected = false
         broadcast()
+        scheduleRetry(err.message)
         return
       }
       console.log(`[bridge] ✅ เชื่อมต่อ ${config.comPort} @ ${config.baudRate} baud`)
@@ -95,18 +116,36 @@ async function openSerial() {
     })
 
     currentPort.on('error', (e) => {
-      console.error('[bridge] serial error:', e.message)
       lastWeight.connected = false
       broadcast()
+      scheduleRetry('error: ' + e.message)
     })
     currentPort.on('close', () => {
       console.log('[bridge] port closed')
       lastWeight.connected = false
       broadcast()
+      scheduleRetry('closed')   // โปรแกรมอื่นอาจแย่งไป → พยายามจับกลับ
     })
   } catch (e) {
     console.error('[bridge] open error:', e.message)
+    scheduleRetry('exception')
   }
+}
+
+// ── ปล่อย COM ให้โปรแกรมเก่า / เอากลับมา ──────────────────
+function releaseCom() {
+  standby = true
+  if (retryTimer) { clearTimeout(retryTimer); retryTimer = null }
+  if (currentPort) { try { currentPort.close() } catch {} currentPort = null }
+  lastWeight.connected = false
+  lastWeight.standby = true
+  console.log('[bridge] ⏸ ปล่อย COM ให้โปรแกรมเก่า (standby)')
+  broadcast()
+}
+function acquireCom() {
+  standby = false
+  console.log('[bridge] ▶ กลับมาจับ COM')
+  openSerial()
 }
 
 // ── WebSocket Server ─────────────────────────────────────
@@ -128,7 +167,10 @@ const app = express()
 app.use(cors())
 app.use(express.json())
 
-app.get('/status', (req, res) => res.json({ ...lastWeight, config }))
+app.get('/status', (req, res) => res.json({ ...lastWeight, config, standby }))
+// ปล่อย COM ให้โปรแกรมเก่า / เอากลับมา
+app.post('/release', (req, res) => { releaseCom(); res.json({ standby }) })
+app.post('/acquire', (req, res) => { acquireCom(); res.json({ standby }) })
 app.get('/ports', async (req, res) => {
   try {
     const list = await SerialPort.list()
@@ -209,6 +251,17 @@ app.get('/', async (req, res) => {
       <div class="status" id="weight">— Kgs.</div>
       <p class="muted" style="margin-bottom:6px">Raw data:</p>
       <div class="raw" id="raw">—</div>
+    </div>
+
+    <!-- แชร์เครื่องชั่งกับโปรแกรมเก่า -->
+    <div class="card">
+      <h2>🤝 แชร์เครื่องชั่งกับโปรแกรมเก่า</h2>
+      <p class="muted" style="margin-bottom:10px">ปกติบริดจับ COM เอง · ถ้าจะใช้โปรแกรมเก่า กด "ปล่อย" → บริดถอยให้ · กด "เอากลับมา" เพื่อใช้แอปนี้ต่อ</p>
+      <div class="row">
+        <button id="btnRelease" onclick="release()" style="background:#b45309">⏸ ปล่อยให้โปรแกรมเก่า</button>
+        <button id="btnAcquire" onclick="acquire()" style="background:#15803d">▶ เอากลับมาใช้แอปนี้</button>
+      </div>
+      <p id="standbyMsg" class="muted" style="margin-top:8px;display:none">⏸ <b style="color:#f59e0b">กำลังปล่อยให้โปรแกรมเก่า</b> — แอปนี้ยังไม่อ่านน้ำหนัก</p>
     </div>
 
     <!-- ปุ่มสลับเครื่องชั่งคลิกเดียว -->
@@ -303,14 +356,21 @@ app.get('/', async (req, res) => {
         await fetch('/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({comPort, baudRate}) })
         await refresh()
       }
+      async function release() {
+        await fetch('/release', { method:'POST' })
+        alert('ปล่อย COM แล้ว — เปิดโปรแกรมเก่าได้เลย\\n(พอเลิกใช้โปรแกรมเก่า กด "เอากลับมาใช้แอปนี้")')
+      }
+      async function acquire() { await fetch('/acquire', { method:'POST' }) }
 
       const ws = new WebSocket('ws://' + location.host)
       ws.onmessage = e => {
         const d = JSON.parse(e.data)
+        const sb = !!d.standby
         document.getElementById('weight').textContent = d.value.toFixed(2) + ' Kgs. ' + (d.stable ? '✓' : '...')
-        document.getElementById('status').textContent = d.connected ? '● เชื่อมต่อแล้ว' : '○ ยังไม่เชื่อมต่อ'
+        document.getElementById('status').textContent = sb ? '⏸ ปล่อยให้โปรแกรมเก่า' : (d.connected ? '● เชื่อมต่อแล้ว' : '○ รอจับ COM (โปรแกรมเก่าอาจถืออยู่)')
         document.getElementById('status').className = d.connected ? 'ok' : 'bad'
         document.getElementById('raw').textContent = d.raw || '—'
+        document.getElementById('standbyMsg').style.display = sb ? 'block' : 'none'
       }
       refresh()
       setInterval(refresh, 5000)

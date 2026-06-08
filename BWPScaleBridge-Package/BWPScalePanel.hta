@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>BWP เครื่องชั่ง</title>
+<hta:application
+  id="app"
+  applicationname="BWP Scale Bridge"
+  border="thin"
+  borderstyle="normal"
+  caption="yes"
+  maximizebutton="no"
+  minimizebutton="yes"
+  showintaskbar="yes"
+  singleinstance="yes"
+  scroll="no"
+  innerborder="no"
+  contextmenu="no"
+  selection="no"
+/>
+<style>
+  html,body{margin:0;padding:0;font-family:'Segoe UI','Sarabun',Tahoma,sans-serif;
+    background:#0a0f1e;color:#fff;-ms-user-select:none;user-select:none;overflow:hidden}
+  .wrap{padding:22px 22px 18px}
+  h1{margin:0 0 2px;font-size:20px;color:#3b82f6}
+  .sub{color:#64748b;font-size:12px;margin-bottom:16px}
+  .status{border-radius:14px;padding:16px;text-align:center;margin-bottom:18px;border:2px solid #334155;background:#0f172a}
+  .dot{font-size:15px;font-weight:bold}
+  .on{color:#10b981}.off{color:#ef4444}
+  .stbig{font-size:22px;font-weight:bold;margin-top:4px}
+  button{width:100%;border:0;border-radius:14px;cursor:pointer;font-weight:bold;color:#fff;
+    font-family:inherit;margin-bottom:12px;padding:18px 0;font-size:20px}
+  .open{background:#16a34a}.open:hover{background:#22c55e}
+  .close{background:#dc2626}.close:hover{background:#ef4444}
+  .set{background:#334155;font-size:15px;padding:12px 0}.set:hover{background:#475569}
+  .small{font-size:12px;color:#64748b;text-align:center;margin-top:6px}
+  .err{color:#f87171;font-size:12px;text-align:center;min-height:16px}
+  .setpanel{background:#0f172a;border:1px solid #334155;border-radius:14px;padding:14px;margin-bottom:12px;text-align:left}
+  .setpanel label{display:block;font-size:12px;color:#94a3b8;margin:6px 0 4px}
+  .setpanel select{width:100%;padding:10px;border-radius:10px;border:1px solid #334155;
+    background:#0a0f1e;color:#fff;font-size:15px;font-family:inherit;margin-bottom:10px}
+  .setmsg{font-size:12px;color:#94a3b8;min-height:15px;margin-bottom:10px}
+  .btn2{display:flex;gap:8px}
+  .btn2 button{margin-bottom:0;padding:13px 0;font-size:16px}
+  .save{background:#16a34a}.save:hover{background:#22c55e}
+  .cancel2{background:#475569}.cancel2:hover{background:#64748b}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>&#9878; เครื่องชั่ง BWP</h1>
+  <div class="sub">กดปุ่มเพื่อเปิด หรือ ปิด</div>
+
+  <div class="status" id="box">
+    <div class="dot off" id="dot">&#9711; กำลังตรวจสอบ...</div>
+    <div class="stbig" id="big">&mdash;</div>
+  </div>
+
+  <button class="open"  onclick="startBridge()">&#9654;&nbsp; เปิดเครื่องชั่ง</button>
+  <button class="close" onclick="stopBridge()">&#9632;&nbsp; ปิดเครื่องชั่ง</button>
+  <button class="set"   onclick="showSettings()">&#9881;&nbsp; ตั้งค่า COM port</button>
+
+  <div class="setpanel" id="setpanel" style="display:none">
+    <label>เลือกช่องเสียบเครื่องชั่ง (COM port)</label>
+    <select id="selPort"><option value="">&mdash;</option></select>
+    <label>ความเร็ว (Baud rate)</label>
+    <select id="selBaud"></select>
+    <div class="setmsg" id="setmsg"></div>
+    <div class="btn2">
+      <button class="save"    onclick="saveConfig()">&#10003; บันทึก</button>
+      <button class="cancel2" onclick="hideSettings()">ปิด</button>
+    </div>
+  </div>
+
+  <div class="err" id="err"></div>
+  <div class="small">หน้าต่างนี้ปิดได้ เครื่องชั่งยังทำงานต่อ</div>
+</div>
+
+<script language="javascript">
+  var EXE = "BWPScaleBridge.exe";
+  var URL = "http://localhost:8080";
+  var shell = new ActiveXObject("WScript.Shell");
+  var fso   = new ActiveXObject("Scripting.FileSystemObject");
+  var running = false;     // สถานะล่าสุด
+  var busy = false;        // กันยิงซ้ำซ้อน
+
+  // ดักทุก error ไม่ให้เด้ง popup — โชว์ในหน้าต่างแทน
+  window.onerror = function(msg, url, line){
+    try{ document.getElementById("err").innerHTML = "ผิดพลาด: " + msg + " (บรรทัด " + line + ")"; }catch(e){}
+    return true;
+  };
+
+  // โฟลเดอร์ที่ไฟล์ .hta นี้อยู่ — รองรับ path ที่มีตัวอักษรไทย/ช่องว่าง
+  function htaDir(){
+    try{
+      var u = "" + location.href;          // file:///C:/.../เครื่องชั่ง.hta
+      u = u.replace(/^file:\/+/i, "");      // ตัด file:///
+      u = decodeURIComponent(u);            // %20/ไทย -> ปกติ
+      u = u.replace(/\//g, "\\");           // / -> \
+      return fso.GetParentFolderName(u);
+    }catch(e){ return ""; }
+  }
+
+  // หา path ของ .exe — ติดตั้งแล้ว > โฟลเดอร์เดียวกับ hta > dist
+  function findExe(){
+    try{
+      var pf = shell.ExpandEnvironmentStrings("%ProgramFiles%") + "\\BWPScaleBridge\\" + EXE;
+      if (fso.FileExists(pf)) return pf;
+      var here = htaDir();
+      if (here){
+        var p1 = here + "\\" + EXE;          if (fso.FileExists(p1)) return p1;
+        var p2 = here + "\\dist\\" + EXE;    if (fso.FileExists(p2)) return p2;
+      }
+    }catch(e){}
+    return "";
+  }
+
+  function paint(){
+    var dot = document.getElementById("dot");
+    var big = document.getElementById("big");
+    var box = document.getElementById("box");
+    if (running){
+      dot.className = "dot on";  dot.innerHTML = "&#9679; กำลังทำงาน";
+      big.innerHTML = "พร้อมชั่ง";
+      box.style.borderColor = "#10b981";
+    } else {
+      dot.className = "dot off"; dot.innerHTML = "&#9711; ปิดอยู่";
+      big.innerHTML = "&mdash;";
+      box.style.borderColor = "#334155";
+    }
+  }
+
+  function setErr(html){ document.getElementById("err").innerHTML = html; }
+
+  // เช็คครั้งเดียวว่าบริดตอบที่ port 8080 ไหม → cb(true/false)
+  function checkOnce(cb){
+    try{
+      var xhr = new ActiveXObject("Microsoft.XMLHTTP");
+      xhr.open("GET", URL + "/status?t=" + (new Date()).getTime(), true);
+      var done = false;
+      xhr.onreadystatechange = function(){
+        if (xhr.readyState == 4 && !done){ done = true; cb(xhr.status == 200); }
+      };
+      xhr.send();
+      setTimeout(function(){ if(!done){ done=true; try{xhr.abort();}catch(e){} cb(false); } }, 1200);
+    }catch(e){ cb(false); }
+  }
+
+  // ตรวจสถานะตามรอบ (ไม่ทับช่วงกำลังเปิด)
+  function refresh(){
+    if (busy) return;
+    busy = true;
+    checkOnce(function(up){ running = up; busy = false; paint(); });
+  }
+
+  function startBridge(){
+    setErr("");
+    if (running){ openSettings(); return; }
+    var exe = findExe();
+    if (!exe){
+      setErr("ไม่พบไฟล์ <b>"+EXE+"</b><br>ต้องก๊อป <b>"+EXE+"</b> มาวางโฟลเดอร์เดียวกับไฟล์นี้");
+      return;
+    }
+    document.getElementById("big").innerHTML = "กำลังเปิด...";
+    // ปลดบล็อกไฟล์ที่ก๊อปมาจากเครื่องอื่น (Mark of the Web) แล้วค่อยรัน
+    try{ shell.Run('powershell -NoProfile -ExecutionPolicy Bypass -Command "Unblock-File -LiteralPath \'' + exe + '\'"', 0, true); }catch(e){}
+    try{ shell.Run('"'+exe+'"', 0, false); }catch(e){
+      setErr("เปิดไม่สำเร็จ: " + e.message);
+      return;
+    }
+    pollStart(0, exe);
+  }
+
+  // รอจนบริดขึ้น (ลองได้ ~7 วิ) แล้วเด้งหน้าตั้งค่า; ถ้าไม่ขึ้นบอกวิธีแก้
+  function pollStart(n, exe){
+    checkOnce(function(up){
+      if (up){ running = true; paint(); setErr(""); openSettings(); return; }
+      if (n < 7){ setTimeout(function(){ pollStart(n+1, exe); }, 1000); return; }
+      running = false; paint();
+      setErr("เปิดเครื่องชั่งไม่ขึ้น &mdash; อาจถูก Windows บล็อก<br>"
+        + "วิธีแก้: คลิกขวา <b>"+EXE+"</b> &rarr; Properties &rarr; ติ๊ก <b>Unblock</b> &rarr; OK แล้วลองใหม่<br>"
+        + "<a href='#' onclick='openFolder();return false;' style='color:#60a5fa'>เปิดโฟลเดอร์ไฟล์</a>");
+    });
+  }
+
+  function stopBridge(){
+    setErr("");
+    try{ shell.Run('taskkill /f /im '+EXE, 0, true); }catch(e){}
+    running = false; paint();
+    setTimeout(refresh, 800);
+  }
+
+  function openSettings(){ shell.Run(URL, 1, false); }
+
+  // ── ตั้งค่า COM port ในหน้าต่างนี้เลย (ไม่ต้องเปิดเว็บ) ──
+  function httpGet(path, cb){
+    try{
+      var x = new ActiveXObject("Microsoft.XMLHTTP");
+      x.open("GET", URL + path + "?t=" + (new Date()).getTime(), true);
+      var done=false;
+      x.onreadystatechange=function(){ if(x.readyState==4 && !done){ done=true; cb(x.status==200 ? x.responseText : null); } };
+      x.send();
+      setTimeout(function(){ if(!done){ done=true; try{x.abort();}catch(e){} cb(null); } }, 2500);
+    }catch(e){ cb(null); }
+  }
+  function httpPost(path, body, cb){
+    try{
+      var x = new ActiveXObject("Microsoft.XMLHTTP");
+      x.open("POST", URL + path, true);
+      x.setRequestHeader("Content-Type","application/json");
+      var done=false;
+      x.onreadystatechange=function(){ if(x.readyState==4 && !done){ done=true; cb(x.status==200 ? x.responseText : null); } };
+      x.send(body);
+      setTimeout(function(){ if(!done){ done=true; try{x.abort();}catch(e){} cb(null); } }, 3500);
+    }catch(e){ cb(null); }
+  }
+  function setMsg(s){ document.getElementById("setmsg").innerHTML = s; }
+
+  function showSettings(){
+    setErr("");
+    document.getElementById("setpanel").style.display = "block";
+    window.resizeTo(360, 640);
+    loadPorts();
+  }
+  function hideSettings(){
+    document.getElementById("setpanel").style.display = "none";
+    window.resizeTo(360, 460);
+  }
+  function loadPorts(){
+    setMsg("กำลังโหลดรายชื่อพอร์ต...");
+    var bauds=[1200,2400,4800,9600,19200,38400,57600,115200];
+    httpGet("/status", function(txt){
+      var curPort="", curBaud=9600;
+      if(txt){ try{ var s=eval('('+txt+')'); if(s.config){ curPort=s.config.comPort||""; curBaud=s.config.baudRate||9600; } }catch(e){} }
+      var bsel=document.getElementById("selBaud"); bsel.innerHTML="";
+      for(var i=0;i<bauds.length;i++){ var o=document.createElement("option"); o.value=bauds[i]; o.text=bauds[i]; if(bauds[i]==curBaud)o.selected=true; bsel.appendChild(o); }
+      httpGet("/ports", function(ptxt){
+        var sel=document.getElementById("selPort"); sel.innerHTML="";
+        if(ptxt==null){
+          var o0=document.createElement("option"); o0.value=""; o0.text="(เปิดเครื่องชั่งก่อน)"; sel.appendChild(o0);
+          setMsg("ยังไม่ได้เปิดเครื่องชั่ง &mdash; กด \"เปิดเครื่องชั่ง\" ก่อน แล้วกดตั้งค่าใหม่");
+          return;
+        }
+        var arr=[]; try{ arr=eval('('+ptxt+')'); }catch(e){}
+        if(!arr || !arr.length){
+          var o1=document.createElement("option"); o1.value=""; o1.text="(ไม่พบพอร์ต)"; sel.appendChild(o1);
+          setMsg("ไม่พบ COM port &mdash; เช็คสายเครื่องชั่งว่าเสียบแล้ว");
+          return;
+        }
+        for(var j=0;j<arr.length;j++){
+          var o=document.createElement("option"); o.value=arr[j].path;
+          o.text=arr[j].path + (arr[j].friendlyName ? (" - "+arr[j].friendlyName) : "");
+          if(arr[j].path==curPort)o.selected=true; sel.appendChild(o);
+        }
+        setMsg("เลือกพอร์ตของเครื่องชั่ง แล้วกด บันทึก");
+      });
+    });
+  }
+  function saveConfig(){
+    var port=document.getElementById("selPort").value;
+    var baud=document.getElementById("selBaud").value;
+    if(!port){ setMsg("กรุณาเลือก COM port ก่อน"); return; }
+    setMsg("กำลังบันทึก...");
+    httpPost("/config", '{"comPort":"'+port+'","baudRate":'+baud+'}', function(txt){
+      if(txt!=null){ setMsg("&#10003; บันทึกแล้ว: "+port+" @ "+baud); running=true; paint(); setTimeout(hideSettings, 1000); }
+      else { setMsg("บันทึกไม่สำเร็จ &mdash; เปิดเครื่องชั่งหรือยัง?"); }
+    });
+  }
+
+  function openFolder(){
+    var here = htaDir();
+    try{ if(here) shell.Run('explorer "'+here+'"', 1, false); }catch(e){}
+  }
+
+  // ปรับขนาดหน้าต่าง + ตรวจสถานะทุก 2.5 วิ
+  window.resizeTo(360, 460);
+  paint();
+  refresh();
+  window.setInterval(refresh, 2500);
+</script>
+</body>
+</html>

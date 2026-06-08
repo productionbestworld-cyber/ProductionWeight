@@ -28,8 +28,9 @@ timeout /t 1 /nobreak >nul
 echo [3/4] ลบ Firewall rule...
 netsh advfirewall firewall delete rule name="BWP Scale Bridge" >nul 2>&1
 
-echo [4/4] ลบไฟล์...
+echo [4/4] ลบไฟล์ + ไอคอนบนหน้าจอ...
 if exist "%INSTALL_DIR%" rmdir /s /q "%INSTALL_DIR%"
+powershell -NoProfile -Command "$d=[Environment]::GetFolderPath('CommonDesktopDirectory'); Remove-Item ($d+'\BWP Scale.lnk') -Force -ErrorAction SilentlyContinue" >nul 2>&1
 
 echo.
 echo ============================================

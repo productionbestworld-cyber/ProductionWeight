@@ -62,7 +62,8 @@ export async function addProductIfMissing(p: {
       width_unit:   p.width_unit ?? 'cm',
       thick_mc:     (p.thick_mc ?? '').trim(),
       cust_code:    (p.cust_code ?? '').trim(),
-      mat_code:     (p.mat_code ?? '').trim(),
+      // กัน mat code = item code (ค่าเสีย)
+      mat_code:     ((p.mat_code ?? '').trim() === ic ? '' : (p.mat_code ?? '').trim()),
       core_weight:  (p.core_weight ?? '').trim(),
     })
     if (error) return { ok: false, added: false, error: error.message }
@@ -87,7 +88,8 @@ export async function backfillProductMatCore(itemCode?: string, matCode?: string
     const p = data?.[0]
     if (!p) return  // ไม่มีสินค้านี้ใน master (เช่น item code ใหม่) → ไม่ทำอะไร
     const patch: Record<string, string> = {}
-    if (mat  && !((p as any).mat_code    ?? '').trim()) patch.mat_code    = mat
+    // กัน: ห้ามเอา item code มาเป็น mat code (ค่าเสีย)
+    if (mat && mat !== ic && !((p as any).mat_code ?? '').trim()) patch.mat_code = mat
     if (core && !((p as any).core_weight ?? '').trim()) patch.core_weight = core
     if (Object.keys(patch).length === 0) return  // master มีครบแล้ว → ไม่ทับ
     await supabase.from('products').update(patch).eq('id', (p as any).id)

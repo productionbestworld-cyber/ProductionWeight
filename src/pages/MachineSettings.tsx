@@ -304,6 +304,18 @@ function EditModal({ p, products, onChange, onAutoFill, onRemove, onClose, onPro
   onClose: () => void
   onProductAdded?: () => void
 }) {
+  // เติมรหัสลูกค้าอัตโนมัติ ถ้าโปรไฟล์มี Item Code แต่รหัสลูกค้าว่าง (ข้อมูลเก่าไม่ครบ)
+  useEffect(() => {
+    try {
+      if ((p.custCode ?? '').trim()) return
+      const ic = (p.itemCode ?? '').trim()
+      if (!ic || !Array.isArray(products)) return
+      const prod = products.find(x => x.item_code === ic)
+      if (prod && (prod.cust_code ?? '').trim()) onChange('custCode', prod.cust_code)
+    } catch (e) { console.warn('[fill custCode]', e) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products, p.itemCode])
+
   const f = (label: string, k: keyof MachineProfile, ph = '', half = false) => (
     <div className={half ? '' : 'col-span-2'}>
       <label className="block text-[10px] text-slate-500 mb-1">{label}</label>

@@ -198,10 +198,10 @@ export function DeptPinGate({ dept, onUnlock, onClose }: {
 }
 
 // ─── Main Admin Page ─────────────────────────────────────────────────────────
-type Tab = 'products' | 'labels' | 'pin'
+type Tab = 'labels' | 'pin'
 
 export default function Admin({ dept: _dept }: { dept?: 'blow'|'print'|'rewind' }) {
-  const [tab, setTab] = useState<Tab>('products')
+  const [tab, setTab] = useState<Tab>('labels')
   const [backingUp, setBackingUp] = useState(false)
   const [backupMsg, setBackupMsg] = useState('')
 
@@ -244,12 +244,6 @@ export default function Admin({ dept: _dept }: { dept?: 'blow'|'print'|'rewind' 
       <div className="flex items-center gap-1 px-4 py-2 bg-slate-900 border-b border-slate-800">
         <Lock size={14} className="text-amber-400 mr-2"/>
         <span className="text-amber-400 text-xs font-bold uppercase tracking-wider mr-3">Admin</span>
-        <button onClick={() => setTab('products')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-            tab==='products' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'
-          }`}>
-          <Boxes size={13}/> คลัง Item Code
-        </button>
         <button onClick={() => setTab('labels')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
             tab==='labels' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'
@@ -276,7 +270,6 @@ export default function Admin({ dept: _dept }: { dept?: 'blow'|'print'|'rewind' 
 
       {/* Content */}
       <div className="flex-1 overflow-auto">
-        {tab === 'products' && <Products/>}
         {tab === 'labels'   && <LabelDesigner/>}
         {tab === 'pin'      && <PinManager/>}
       </div>

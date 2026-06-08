@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Scale, LayoutDashboard, Settings, Package, History, Warehouse as WarehouseIcon, ChevronDown, Wifi, WifiOff, AlertTriangle, Lock, Search } from 'lucide-react'
+import { Scale, LayoutDashboard, Settings, Package, History, Warehouse as WarehouseIcon, ChevronDown, Wifi, WifiOff, AlertTriangle, Lock, Search, Boxes } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import WeighStation from './pages/WeighStation'
 import Dashboard from './pages/Dashboard'
@@ -10,8 +10,9 @@ import HistoryPage from './pages/History'
 import Warehouse from './pages/Warehouse'
 import Admin, { PinGate, DeptPinGate, isAdminUnlocked, isDeptUnlocked, lockAllDepts, lockAdmin } from './pages/Admin'
 import ReviewQueue from './pages/ReviewQueue'
+import ProductsPage from './pages/Products'
 
-type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings' | 'admin' | 'review' | 'nc'
+type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings' | 'admin' | 'review' | 'nc' | 'products'
 type Dept = 'blow' | 'print' | 'rewind'
 
 const DEPT_KEY = 'bwp_dept'
@@ -154,6 +155,7 @@ export default function App() {
     { key: 'warehouse', label: 'คลังสินค้า',    icon: WarehouseIcon,   depts: ['blow','print','rewind'] },
     { key: 'dashboard', label: 'Dashboard',      icon: LayoutDashboard, depts: ['blow','print','rewind'] },
     { key: 'history',   label: 'ประวัติผลิต',    icon: History,         depts: ['blow','print','rewind'] },
+    { key: 'products',  label: 'คลังข้อมูล',     icon: Boxes,           depts: ['blow','print','rewind'] },
     { key: 'review',    label: 'พิจารณาม้วนกรอ', icon: Search,         depts: ['blow','print','rewind'] },
     { key: 'nc',        label: 'NC (คลัง/QC)',   icon: AlertTriangle,   depts: ['blow','print','rewind'] },
     { key: 'settings',  label: 'ตั้งค่าเครื่อง', icon: Settings,        depts: ['blow','print','rewind'] },
@@ -333,6 +335,7 @@ export default function App() {
           </div>
         )}
         {page === 'history'   && <HistoryPage dept={dept} />}
+        {page === 'products'  && <ProductsPage />}
         {page === 'review'    && <ReviewQueue dept={dept} mode="prod" />}
         {page === 'nc'        && <ReviewQueue dept={dept} mode="nc" />}
         {page === 'settings'  && <MachineSettings dept={dept} />}

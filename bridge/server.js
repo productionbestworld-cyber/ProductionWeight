@@ -58,6 +58,59 @@ function scheduleRetry(reason) {
   if (reason) console.log(`[bridge] COM ไม่ว่าง (${reason}) → ลองใหม่ใน ${RETRY_MS/1000}s`)
 }
 
+// ── ค้นหาเครื่องชั่งอัตโนมัติ (สแกนทุก COM หาตัวที่ส่งน้ำหนัก) ──────────────
+let autoDetecting = false
+let autoTimer = null
+const COMMON_BAUDS = [9600, 1200, 2400, 4800, 19200, 38400]
+
+// ลองเปิดพอร์ต+baud แล้วฟังว่ามีตัวเลข (น้ำหนัก) ไหลมาไหม ภายใน ms
+function probePort(path, baud, ms) {
+  return new Promise(resolve => {
+    let sp, done = false
+    const finish = (ok) => { if (done) return; done = true; try { sp && sp.isOpen && sp.close() } catch {} resolve(ok) }
+    try {
+      sp = new SerialPort({ path, baudRate: baud, dataBits: 8, stopBits: 1, parity: 'none', autoOpen: false })
+      sp.open(err => {
+        if (err) return finish(false)
+        let buf = ''
+        sp.on('data', c => { buf += c.toString('utf8'); if (/\d+\.\d+/.test(buf) || /\d{3,}/.test(buf)) finish(true) })
+      })
+      sp.on('error', () => finish(false))
+      setTimeout(() => finish(false), ms)
+    } catch { finish(false) }
+  })
+}
+
+async function autoDetect() {
+  if (standby || autoDetecting) return
+  if (autoTimer) { clearTimeout(autoTimer); autoTimer = null }
+  if (retryTimer) { clearTimeout(retryTimer); retryTimer = null }
+  if (currentPort) { try { currentPort.close() } catch {} currentPort = null }
+  autoDetecting = true
+  lastWeight.connected = false; lastWeight.detecting = true; broadcast()
+  console.log('[bridge] 🔍 ค้นหาเครื่องชั่งอัตโนมัติ...')
+  try {
+    const ports = await SerialPort.list().catch(() => [])
+    if (!ports.length) console.log('[bridge] ไม่พบ COM port ใดๆ (เสียบสาย/ลง driver หรือยัง?)')
+    for (const baud of COMMON_BAUDS) {
+      for (const p of ports) {
+        if (standby) { autoDetecting = false; lastWeight.detecting = false; return }
+        const ok = await probePort(p.path, baud, 2200)
+        if (ok) {
+          console.log(`[bridge] ✅ เจอเครื่องชั่งที่ ${p.path} @ ${baud} baud`)
+          config.comPort = p.path; config.baudRate = baud; saveConfig(config)
+          autoDetecting = false; lastWeight.detecting = false
+          openSerial()
+          return
+        }
+      }
+    }
+  } catch (e) { console.warn('[bridge] autoDetect error:', e.message) }
+  autoDetecting = false; lastWeight.detecting = false; broadcast()
+  console.log('[bridge] ยังไม่เจอเครื่องชั่ง — ลองใหม่ใน 6 วิ')
+  autoTimer = setTimeout(autoDetect, 6000)
+}
+
 // ── เปิด Serial Port ──────────────────────────────────────
 async function openSerial() {
   if (retryTimer) { clearTimeout(retryTimer); retryTimer = null }
@@ -68,7 +121,8 @@ async function openSerial() {
   if (standby) { lastWeight.connected = false; lastWeight.standby = true; broadcast(); return }
   lastWeight.standby = false
   if (!config.comPort) {
-    console.log('[bridge] ยังไม่ได้เลือก COM port')
+    // ยังไม่เคยตั้ง COM → ค้นหาเครื่องชั่งอัตโนมัติเลย
+    autoDetect()
     return
   }
   try {
@@ -80,11 +134,15 @@ async function openSerial() {
       parity: 'none',
       autoOpen: false,
     })
-    currentPort.open(err => {
+    currentPort.open(async err => {
       if (err) {
-        // เปิดไม่ได้ (ส่วนใหญ่ = โปรแกรมเก่าจับ COM อยู่) → ลองใหม่เรื่อยๆ
         lastWeight.connected = false
         broadcast()
+        // ถ้าพอร์ตที่ตั้งไว้ "หายไปแล้ว" (ถอดสาย/เปลี่ยนเครื่อง) → ค้นหาใหม่อัตโนมัติ
+        const ports = await SerialPort.list().catch(() => [])
+        const stillThere = ports.some(p => p.path === config.comPort)
+        if (!stillThere) { console.log(`[bridge] ${config.comPort} หายไป → ค้นหาใหม่`); config.comPort = ''; autoDetect(); return }
+        // พอร์ตยังอยู่แต่เปิดไม่ได้ (โปรแกรมเก่าจับอยู่) → ลองใหม่เรื่อยๆ
         scheduleRetry(err.message)
         return
       }
@@ -169,6 +227,7 @@ app.use(express.json())
 
 app.get('/status', (req, res) => res.json({ ...lastWeight, config, standby }))
 // ปล่อย COM ให้โปรแกรมเก่า / เอากลับมา
+app.post('/autodetect', (req, res) => { config.comPort=''; autoDetect(); res.json({ detecting: true }) })
 app.post('/release', (req, res) => { releaseCom(); res.json({ standby }) })
 app.post('/acquire', (req, res) => { acquireCom(); res.json({ standby }) })
 app.get('/ports', async (req, res) => {
@@ -381,8 +440,9 @@ app.get('/', async (req, res) => {
 const server = app.listen(PORT, () => {
   console.log(`[bridge] 🚀 http://localhost:${PORT}`)
   console.log(`[bridge] WebSocket: ws://localhost:${PORT}`)
+  // มี COM ที่เคยตั้งไว้ → เปิดเลย · ยังไม่เคยตั้ง → ค้นหาเครื่องชั่งอัตโนมัติ
   if (config.comPort) openSerial()
-  else console.log('[bridge] เปิด UI ที่ http://localhost:8080 เพื่อตั้งค่า COM port')
+  else autoDetect()
 })
 
 server.on('upgrade', (req, socket, head) => {

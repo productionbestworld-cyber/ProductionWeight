@@ -58,7 +58,8 @@
 
   <button class="open"  onclick="startBridge()">&#9654;&nbsp; เปิดเครื่องชั่ง</button>
   <button class="close" onclick="stopBridge()">&#9632;&nbsp; ปิดเครื่องชั่ง</button>
-  <button class="set"   onclick="showSettings()">&#9881;&nbsp; ตั้งค่า COM port</button>
+  <button class="auto"  onclick="autoFind()" style="background:#0891b2">&#128269;&nbsp; ค้นหาเครื่องชั่งอัตโนมัติ</button>
+  <button class="set"   onclick="showSettings()">&#9881;&nbsp; ตั้งค่า COM เอง (ถ้าจำเป็น)</button>
 
   <div class="setpanel" id="setpanel" style="display:none">
     <label>เลือกช่องเสียบเครื่องชั่ง (COM port)</label>
@@ -191,6 +192,27 @@
   }
 
   function openSettings(){ shell.Run(URL, 1, false); }
+
+  // ── ค้นหาเครื่องชั่งอัตโนมัติ ──
+  function autoFind(){
+    setErr("");
+    document.getElementById("big").innerHTML = "&#128269; กำลังค้นหาเครื่องชั่ง...";
+    if(!running){ startBridge(); }
+    httpPost2("/autodetect", function(ok){
+      if(ok){ setErr("กำลังสแกนทุก COM port... รอสักครู่ (~10 วิ)"); setTimeout(refresh, 11000); }
+      else { setErr("ยังต่อ Bridge ไม่ได้ — กด 'เปิดเครื่องชั่ง' ก่อน"); }
+    });
+  }
+  function httpPost2(path, cb){
+    try{
+      var x=new ActiveXObject("Microsoft.XMLHTTP");
+      x.open("POST", URL+path, true);
+      var done=false;
+      x.onreadystatechange=function(){ if(x.readyState==4 && !done){ done=true; cb(x.status==200); } };
+      x.send("");
+      setTimeout(function(){ if(!done){ done=true; try{x.abort();}catch(e){} cb(false); } }, 3000);
+    }catch(e){ cb(false); }
+  }
 
   // ── ตั้งค่า COM port ในหน้าต่างนี้เลย (ไม่ต้องเปิดเว็บ) ──
   function httpGet(path, cb){

@@ -59,7 +59,7 @@ export default function App() {
   const [page, setPage]               = useState<Page>('weigh')
   const [weighKey, setWeighKey]       = useState(0)
   const [showDeptMenu, setShowDeptMenu] = useState(false)
-  const [showPinGate, setShowPinGate] = useState(false)
+  const [pinTarget, setPinTarget] = useState<Page | null>(null)  // หน้าที่ต้องใส่ PIN ก่อนเข้า
   const [pendingDept, setPendingDept] = useState<Dept | null>(null)
 
   // ── เข้าครั้งแรก: แสดงหน้าเลือกแผนก (profile select) ──────────────
@@ -159,10 +159,13 @@ export default function App() {
     { key: 'settings',  label: 'ตั้งค่าเครื่อง', icon: Settings,        depts: ['blow','print','rewind'] },
   ] as const).filter(n => (n.depts as readonly string[]).includes(dept))
 
-  function gotoAdmin() {
-    if (isAdminUnlocked()) setPage('admin')
-    else setShowPinGate(true)
+  // หน้าที่ต้องล็อกด้วย PIN ผจก (เฉพาะ ผจก เข้าได้)
+  const LOCKED_PAGES: Page[] = ['review', 'nc', 'admin']
+  function goPage(target: Page) {
+    if (LOCKED_PAGES.includes(target) && !isAdminUnlocked()) { setPinTarget(target); return }
+    setPage(target)
   }
+  function gotoAdmin() { goPage('admin') }
 
   // ── หน้าเลือกแผนก (Profile Select) ─────────────────────────────────
   if (showDeptSelect) {
@@ -274,11 +277,12 @@ export default function App() {
         {NAV.map(({ key, label, icon: Icon }) => {
           const badge = badges[key] ?? 0
           return (
-          <button key={key} onClick={() => setPage(key)}
+          <button key={key} onClick={() => goPage(key)}
             className={`relative flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
               page === key ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}>
             <Icon size={14}/> <span className="hidden md:block">{label}</span>
+            {(key === 'review' || key === 'nc') && <span className="text-amber-400" title="เฉพาะ ผจก (ต้องใส่ PIN)">🔒</span>}
             {badge > 0 && (
               <span className={`ml-0.5 min-w-[18px] h-[18px] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-black text-white ${key==='nc' ? 'bg-purple-600' : 'bg-red-600'} ${page===key ? '' : 'animate-pulse'}`}>
                 {badge}
@@ -335,10 +339,10 @@ export default function App() {
         {page === 'admin'     && <Admin dept={dept} />}
       </main>
 
-      {showPinGate && (
+      {pinTarget && (
         <PinGate
-          onUnlock={() => { setShowPinGate(false); setPage('admin') }}
-          onClose={() => setShowPinGate(false)}
+          onUnlock={() => { const t = pinTarget; setPinTarget(null); setPage(t) }}
+          onClose={() => setPinTarget(null)}
         />
       )}
 

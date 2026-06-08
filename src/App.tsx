@@ -38,7 +38,7 @@ export default function App() {
         <div className="min-h-screen bg-[#0a0f1e]">
           <div className="bg-slate-900 border-b border-slate-800 px-5 py-2.5 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center text-white font-black text-xs">BWP</div>
+              <img src="/logo.png" alt="BWP" className="w-8 h-8 rounded-full object-cover"/>
               <span className="text-white font-bold text-sm">Dashboard — ระบบชั่งน้ำหนักม้วน</span>
             </div>
             <a href="/" className="text-xs text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 rounded-lg px-3 py-1.5">
@@ -176,7 +176,7 @@ export default function App() {
         <div className="w-full max-w-lg">
           {/* Logo */}
           <div className="text-center mb-8">
-            <div className="w-16 h-16 rounded-2xl bg-brand-600 flex items-center justify-center text-white font-black text-2xl mx-auto mb-4 shadow-lg shadow-brand-600/30">BWP</div>
+            <img src="/logo.png" alt="BWP" className="w-20 h-20 rounded-full object-cover mx-auto mb-4 shadow-lg shadow-brand-600/30"/>
             <h1 className="text-white text-2xl font-bold">ระบบชั่งน้ำหนักม้วน</h1>
             <p className="text-slate-500 text-sm mt-1">เลือกแผนกเพื่อเข้าสู่ระบบ</p>
           </div>
@@ -235,7 +235,7 @@ export default function App() {
 
         {/* Logo — กดกลับหน้าแรก */}
         <button onClick={() => { setPage('weigh'); setWeighKey(k => k + 1) }} className="flex items-center gap-2 mr-3 hover:opacity-80 transition-opacity">
-          <div className="w-7 h-7 rounded-lg bg-brand-600 flex items-center justify-center text-white font-black text-xs">BWP</div>
+          <img src="/logo.png" alt="BWP" className="w-7 h-7 rounded-full object-cover"/>
           <span className="text-white font-bold text-sm hidden sm:block">ระบบชั่งน้ำหนักม้วน</span>
         </button>
 

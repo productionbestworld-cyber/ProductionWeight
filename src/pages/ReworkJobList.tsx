@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Plus, Trash2, RefreshCw, Search, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { fetchProducts, type Product } from './Products'
+import { fetchProducts, backfillProductMatCore, type Product } from './Products'
 import ExportButton from '../components/ExportButton'
 import { fmtSize, type MachineProfile } from './MachineSettings'
 import ReworkInbox from './ReworkInbox'
@@ -533,6 +533,8 @@ function CreateJobModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
     })
     setSaving(false)
     if (error) { alert('สร้างไม่สำเร็จ: ' + error.message); return }
+    // จำค่าที่กรอกเอง: ถ้า master ยังไม่มี Mat Code/แกน → เติมกลับให้ครั้งหน้า auto-fill
+    backfillProductMatCore(form.item_code, form.mat_code, form.core_weight)
     onSaved()
   }
 

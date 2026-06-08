@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase'
 import { loadProfiles, saveProfiles, fmtSize, convertWidth, type MachineProfile } from './MachineSettings'
 import ReworkJobList from './ReworkJobList'
 import { loadLongLayout, loadShortLayout, loadWasteLayout, type FieldConfig } from './LabelDesigner'
-import { fetchProducts, backfillProductMatCore, type Product } from './Products'
+import { fetchProducts, backfillProductMatCore, addProductIfMissing, type Product } from './Products'
 import { fetchFlag } from './Admin'
 import ReworkInbox from './ReworkInbox'
 import ExportButton from '../components/ExportButton'
@@ -1474,6 +1474,23 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
                   coreWeight:  s.core_weight ?? '',  // auto น้ำหนักแกน
                 })}
               />
+              {/* ── Item Code นี้ยังไม่มีในระบบ → เพิ่มเข้าฐานข้อมูลได้เลย ── */}
+              {(p.itemCode ?? '').trim() && !products.some(x => x.item_code === (p.itemCode ?? '').trim()) && (
+                <button type="button"
+                  onClick={async () => {
+                    if (!(p.productName ?? '').trim()) { alert('กรอกชื่อสินค้าก่อน จึงจะบันทึกเป็นสินค้าใหม่ได้'); return }
+                    const r = await addProductIfMissing({
+                      item_code: p.itemCode ?? '', product_code: p.productCode ?? '', product_name: p.productName ?? '',
+                      width_cm: p.widthCm ?? '', width_unit: p.widthUnit ?? 'cm', thick_mc: p.thickMc ?? '',
+                      cust_code: p.custCode ?? '', mat_code: p.matCode ?? '', core_weight: p.coreWeight ?? '',
+                    })
+                    if (r.ok) { alert(r.added ? `✓ เพิ่มสินค้า "${p.itemCode}" เข้าระบบแล้ว` : 'สินค้านี้มีอยู่แล้ว'); fetchProducts().then(setProducts) }
+                    else alert('เพิ่มไม่สำเร็จ: ' + r.error)
+                  }}
+                  className="mt-1 w-full bg-emerald-600/90 hover:bg-emerald-500 text-white text-xs font-bold py-1.5 rounded-lg flex items-center justify-center gap-1">
+                  ➕ Item Code นี้ยังไม่มีในระบบ — บันทึกเป็นสินค้าใหม่
+                </button>
+              )}
             </div>
             {inp('Mat Code',     'matCode', '',      true)}
             {/* Lot No — กดปุ๊ป auto-gen ทันที (ถ้าว่าง), แก้ได้ */}

@@ -42,6 +42,36 @@ export async function fetchCustomers(): Promise<Customer[]> {
   return (data ?? []) as Customer[]
 }
 
+// ─── เพิ่มสินค้าใหม่เข้า master (ถ้ายังไม่มี item_code นี้) ───────────────────
+export async function addProductIfMissing(p: {
+  item_code: string; product_code?: string; product_name?: string
+  width_cm?: string; width_unit?: string; thick_mc?: string
+  cust_code?: string; mat_code?: string; core_weight?: string
+}): Promise<{ ok: boolean; added: boolean; error?: string }> {
+  const ic = (p.item_code ?? '').trim()
+  if (!ic) return { ok: false, added: false, error: 'ไม่มี Item Code' }
+  if (!(p.product_name ?? '').trim()) return { ok: false, added: false, error: 'ต้องมีชื่อสินค้า' }
+  try {
+    const { data: exist } = await supabase.from('products').select('id').eq('item_code', ic).limit(1)
+    if (exist && exist.length) return { ok: true, added: false }   // มีแล้ว → ไม่ทำซ้ำ
+    const { error } = await supabase.from('products').insert({
+      item_code:    ic,
+      product_code: (p.product_code ?? '').trim(),
+      product_name: (p.product_name ?? '').trim(),
+      width_cm:     (p.width_cm ?? '').trim(),
+      width_unit:   p.width_unit ?? 'cm',
+      thick_mc:     (p.thick_mc ?? '').trim(),
+      cust_code:    (p.cust_code ?? '').trim(),
+      mat_code:     (p.mat_code ?? '').trim(),
+      core_weight:  (p.core_weight ?? '').trim(),
+    })
+    if (error) return { ok: false, added: false, error: error.message }
+    return { ok: true, added: true }
+  } catch (e: any) {
+    return { ok: false, added: false, error: e?.message ?? String(e) }
+  }
+}
+
 // ─── เติมกลับ (back-fill) Mat Code / น้ำหนักแกน เข้า master ──────────────────
 // ใช้ตอนพนักงานกรอกค่าที่ master ยังไม่มี → ครั้งหน้าจะ auto-fill ให้เลย
 // เงื่อนไข: เติม "เฉพาะช่องที่ว่างอยู่" เท่านั้น — ไม่ทับค่าที่มีอยู่แล้ว
@@ -502,32 +532,38 @@ function ProductsTab({ products, customers, loading, onChanged }: {
       </div>
       <p className="text-slate-500 text-xs mb-3">{filtered.length} / {products.length} รายการ</p>
 
-      <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto">
+        <table className="w-full text-sm min-w-[800px]">
           <thead className="bg-slate-800/50 text-slate-400 text-[11px] uppercase">
             <tr>
               <th className="text-left px-3 py-2.5">Item Code</th>
+              <th className="text-left px-3 py-2.5">รหัสสินค้า</th>
               <th className="text-left px-3 py-2.5">ชื่อสินค้า</th>
               <th className="text-left px-3 py-2.5">ขนาด</th>
+              <th className="text-left px-3 py-2.5">Mat Code</th>
+              <th className="text-right px-3 py-2.5">นน.แกน</th>
               <th className="text-left px-3 py-2.5">ลูกค้า</th>
               <th className="text-right px-3 py-2.5">จัดการ</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={5} className="text-center py-8 text-slate-500">กำลังโหลด...</td></tr>
+              <tr><td colSpan={8} className="text-center py-8 text-slate-500">กำลังโหลด...</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={5} className="text-center py-8 text-slate-500">{q ? 'ไม่พบ' : 'ยังไม่มีข้อมูล'}</td></tr>
+              <tr><td colSpan={8} className="text-center py-8 text-slate-500">{q ? 'ไม่พบ' : 'ยังไม่มีข้อมูล'}</td></tr>
             ) : filtered.map(p => (
               <tr key={p.id} className="border-t border-slate-800 hover:bg-slate-800/30">
-                <td className="px-3 py-2 font-mono text-brand-400 font-bold">{p.item_code}</td>
+                <td className="px-3 py-2 font-mono text-brand-400 font-bold whitespace-nowrap">{p.item_code}</td>
+                <td className="px-3 py-2 font-mono text-slate-400 text-xs">{p.product_code || '—'}</td>
                 <td className="px-3 py-2 text-white">{p.product_name || '—'}</td>
-                <td className="px-3 py-2 text-slate-300">{p.width_cm ? `${p.width_cm}${p.width_unit ?? 'cm'}×${p.thick_mc}mc` : '—'}</td>
+                <td className="px-3 py-2 text-slate-300 whitespace-nowrap">{p.width_cm ? `${p.width_cm}${p.width_unit ?? 'cm'}×${p.thick_mc}mc` : '—'}</td>
+                <td className="px-3 py-2 font-mono text-amber-300 text-xs whitespace-nowrap">{p.mat_code || '—'}</td>
+                <td className="px-3 py-2 text-right text-cyan-300 whitespace-nowrap">{p.core_weight ? `${p.core_weight}` : '—'}</td>
                 <td className="px-3 py-2 text-slate-300">
                   <span className="text-slate-500 text-xs">{p.cust_code} </span>
                   {p.cust_name || '—'}
                 </td>
-                <td className="px-3 py-2 text-right">
+                <td className="px-3 py-2 text-right whitespace-nowrap">
                   <button onClick={() => setEditing(p)} className="text-slate-400 hover:text-brand-400 p-1.5"><Edit3 size={14}/></button>
                   <button onClick={() => remove(p)} className="text-slate-400 hover:text-red-400 p-1.5"><Trash2 size={14}/></button>
                 </td>
@@ -599,6 +635,9 @@ function ProductEditModal({ product, customers, onClose }: { product: Product; c
               </div>
             </div>
             <Field label="หนา (mc)"       value={p.thick_mc}     onChange={v => setP({ ...p, thick_mc: v })} ph="80"/>
+            <Field label="รหัสสินค้า"      value={p.product_code} onChange={v => setP({ ...p, product_code: v })} ph="(ถ้ามี)"/>
+            <Field label="Mat Code"        value={p.mat_code ?? ''}    onChange={v => setP({ ...p, mat_code: v })} ph="60001585"/>
+            <Field label="น้ำหนักแกน (kg)" value={p.core_weight ?? ''} onChange={v => setP({ ...p, core_weight: v })} ph="1.15"/>
           </div>
           <div>
             <label className="block text-[10px] text-slate-500 mb-1">ลูกค้า</label>

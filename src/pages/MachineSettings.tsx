@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Plus, Trash2, Save, ChevronDown, ChevronUp, RefreshCw, X, Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { fetchProducts, type Product } from './Products'
+import { fetchProducts, addProductIfMissing, type Product } from './Products'
 
 // ── Display helpers ───────────────────────────────────────────────────────────
 // แสดงขนาดให้ตรงกับหน่วยที่ผู้ใช้เลือก — ใช้ทุกหน้าทั่วระบบ
@@ -295,13 +295,14 @@ function ItemCodeAutocomplete({ value, products, onChange, onPick }: {
 }
 
 // ─── Edit Modal ───────────────────────────────────────────────────────────────
-function EditModal({ p, products, onChange, onAutoFill, onRemove, onClose }: {
+function EditModal({ p, products, onChange, onAutoFill, onRemove, onClose, onProductAdded }: {
   p: MachineProfile
   products: Product[]
   onChange: (k: keyof MachineProfile, v: any) => void
   onAutoFill: (patch: Partial<MachineProfile>) => void
   onRemove: () => void
   onClose: () => void
+  onProductAdded?: () => void
 }) {
   const f = (label: string, k: keyof MachineProfile, ph = '', half = false) => (
     <div className={half ? '' : 'col-span-2'}>
@@ -412,6 +413,22 @@ function EditModal({ p, products, onChange, onAutoFill, onRemove, onClose }: {
                   coreWeight:  s.core_weight ?? '',
                 })}
               />
+              {(p.itemCode ?? '').trim() && !products.some(x => x.item_code === (p.itemCode ?? '').trim()) && (
+                <button type="button"
+                  onClick={async () => {
+                    if (!(p.productName ?? '').trim()) { alert('กรอกชื่อสินค้าก่อน จึงจะบันทึกเป็นสินค้าใหม่ได้'); return }
+                    const r = await addProductIfMissing({
+                      item_code: p.itemCode ?? '', product_code: p.productCode ?? '', product_name: p.productName ?? '',
+                      width_cm: p.widthCm ?? '', width_unit: p.widthUnit ?? 'cm', thick_mc: p.thickMc ?? '',
+                      cust_code: p.custCode ?? '', mat_code: p.matCode ?? '', core_weight: p.coreWeight ?? '',
+                    })
+                    if (r.ok) { alert(r.added ? `✓ เพิ่มสินค้า "${p.itemCode}" เข้าระบบแล้ว` : 'สินค้านี้มีอยู่แล้ว'); onProductAdded && onProductAdded() }
+                    else alert('เพิ่มไม่สำเร็จ: ' + r.error)
+                  }}
+                  className="mt-1 w-full bg-emerald-600/90 hover:bg-emerald-500 text-white text-xs font-bold py-1.5 rounded-lg">
+                  ➕ Item Code นี้ยังไม่มีในระบบ — บันทึกเป็นสินค้าใหม่
+                </button>
+              )}
             </div>
             {f('Mat Code','matCode','',true)}
             {/* Lot No — กดปุ๊ป auto-gen ทันที (ถ้าว่าง), แก้ได้ */}
@@ -722,6 +739,7 @@ export default function MachineSettings({ dept }: { dept?: 'blow'|'print'|'rewin
         onAutoFill={(patch) => updateMany(editIdx, patch)}
         onRemove={() => { remove(editIdx); setEditIdx(null) }}
         onClose={() => { handleSave(); setEditIdx(null) }}
+        onProductAdded={() => fetchProducts().then(setProducts)}
       />
     )}
 

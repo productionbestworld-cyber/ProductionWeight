@@ -27,10 +27,17 @@ function barcodeUrl(text: string, h = 10) {
 async function printLabel(p: MachineProfile, rollNo: number, gross: number, net: number, size: 'long'|'short' = 'long', rollType: string = 'good', reason = '', rollId?: string) {
   const dec     = p.decimal
   const mfgDate = thaiDate()
+  // EXP date — เฉพาะลูกค้าหาดทิพย์ (cust_code 08): MFG + 6 เดือน
+  const showExp = (p.custCode ?? '').trim() === '08'
+  const expDate = (() => {
+    const d = new Date(); d.setMonth(d.getMonth() + 6)
+    return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()+543}`
+  })()
   const core    = parseFloat(p.coreWeight) || 0
   // QR encode แค่ roll ID → URL สั้น → generate เป็น data URL ฝังใน HTML ทันที
   const appUrl    = window.location.origin
-  const detailUrl = rollId ? `${appUrl}/?roll=${rollId}` : `${appUrl}/`
+  const matParam  = p.matCode ? `&mat=${encodeURIComponent(p.matCode)}` : ''
+  const detailUrl = rollId ? `${appUrl}/?roll=${rollId}${matParam}` : `${appUrl}/`
 
   // generate QR เป็น PNG data URL (ไม่ต้องพึ่ง internet)
   const makeQR = async (px: number) => {
@@ -62,7 +69,7 @@ async function printLabel(p: MachineProfile, rollNo: number, gross: number, net:
                    (rollTypeLabelLong ? `&nbsp;&nbsp;[${rollTypeLabelLong}]` : ''),
     // 3-column header
     mat:         `Mat Code&nbsp;&nbsp;<b style="font-size:1.15em">${p.matCode}</b>`,
-    mfg:         `MFG Date&nbsp;&nbsp;<b style="font-size:1.15em">${mfgDate}</b>`,
+    mfg:         `MFG Date&nbsp;&nbsp;<b style="font-size:1.15em">${mfgDate}</b>${showExp ? `&nbsp;&nbsp;&nbsp;EXP&nbsp;&nbsp;<b style="font-size:1.15em">${expDate}</b>` : ''}`,
     rollno:      `${rollLabel}&nbsp;&nbsp;<b style="font-size:1.15em">${rollNo === 0 ? '—' : rollNo}</b>`,
     // left column
     prodcode:    '', // Product Code removed
@@ -141,7 +148,7 @@ ${savedLayout.fields.map(renderLongField).join('\n')}
                ? `<span style="font-size:0.9em">SO <b>${p.soNo || '—'}</b> · WO <b>${p.woNo || '—'}</b> · รหัส <b>${p.itemCode || '—'}</b></span>${rollTypeLabelLong ? ` [${rollTypeLabelLong}]` : ''}${rollType === 'bad' && reason ? ` <span style="color:#c00">เหตุผล: ${reason}</span>` : ''}`
                : shortHeader + (rollTypeLabelLong ? `${shortHeader ? '&nbsp;' : ''}[${rollTypeLabelLong}]` : ''),
     mat:       `Mat&nbsp;&nbsp;<b>${p.matCode}</b>`,
-    mfg:       `MFG&nbsp;&nbsp;<b>${mfgDate}</b>`,
+    mfg:       `MFG&nbsp;&nbsp;<b>${mfgDate}</b>${showExp ? `&nbsp;&nbsp;EXP&nbsp;<b>${expDate}</b>` : ''}`,
     rollno:    `${rollWord}&nbsp;<b>${rollNo === 0 ? '—' : rollNo}</b>`,
     prodname:  p.productName,
     itemcode:  p.itemCode || '—',

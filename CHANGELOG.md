@@ -5,6 +5,12 @@
 
 ---
 
+## v1.2.2 — 2026-06-09
+- QR ใบปะหน้า: เพิ่ม Mat Code ใน URL (สแกนเห็น Mat Code) — ใบเก่าไม่กระทบ
+- EXP date: เฉพาะลูกค้าหาดทิพย์ (cust 08) = MFG + 6 เดือน (ลูกค้าอื่นไม่มี)
+
+---
+
 ## v1.2.1 — 2026-06-09
 - แผนกผลิต: ตัวเลือก "เริ่มนับม้วนใหม่" (SO เดียวคนละ WO ใน Lot เดียวกัน → Roll 1 ใหม่) — opt-in, default ปิด ไม่กระทบงานเดิม
 - DB: เพิ่ม work_order เข้า unique index ของ production_rolls + คอลัมน์ fresh_start ใน machine_profiles

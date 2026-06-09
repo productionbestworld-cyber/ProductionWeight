@@ -1,10 +1,17 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.2.1'
+export const APP_VERSION = '1.2.2'
 export const APP_BUILD_DATE = '2026-06-09'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.2.2', date: '2026-06-09',
+    items: [
+      'QR ใบปะหน้า: เพิ่ม Mat Code ลงใน URL (สแกนแล้วเห็น Mat Code)',
+      'EXP date บนใบปะหน้า: เฉพาะลูกค้าหาดทิพย์ (cust 08) = วันผลิต + 6 เดือน',
+    ],
+  },
   {
     version: '1.2.1', date: '2026-06-09',
     items: [

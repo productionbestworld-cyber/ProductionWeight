@@ -55,7 +55,8 @@ async function printLabel(p: MachineProfile, rollNo: number, gross: number, net:
   const rollLabel = rollType.startsWith('scrap') ? 'ถุงเศษ' : rollType === 'bad' ? 'กรอ No.' : 'Roll No.'
   const longFieldData: Record<string, string> = {
     header:      (p.headerText?.trim() || 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด') +
-                 (rollTypeLabelLong ? `&nbsp;&nbsp;[${rollTypeLabelLong}]` : ''),
+                 (rollTypeLabelLong ? `&nbsp;&nbsp;[${rollTypeLabelLong}]` : '') +
+                 (rollType === 'bad' && reason ? `&nbsp;&nbsp;<span style="color:#c00">เหตุผล: ${reason}</span>` : ''),
     // 3-column header
     mat:         `Mat Code&nbsp;&nbsp;<b style="font-size:1.15em">${p.matCode}</b>`,
     mfg:         `MFG Date&nbsp;&nbsp;<b style="font-size:1.15em">${mfgDate}</b>`,
@@ -124,7 +125,6 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
 </style>
 <div style="position:relative;width:${savedLayout.labelW}mm;height:${savedLayout.labelH}mm;border:1.5px solid #000;overflow:hidden">
 ${savedLayout.fields.map(renderLongField).join('\n')}
-${rollType === 'bad' && reason ? `<div style="position:absolute;left:0;bottom:0;width:100%;background:#ffe5e5;border-top:1.5px solid #c00;color:#c00;font-weight:900;font-size:8.5pt;text-align:center;padding:0.6mm 1mm;line-height:1.15">⚠ เหตุผลกรอ: ${reason}</div>` : ''}
 </div>`
 
   // ═══════════════════════════════════════════════════════
@@ -134,7 +134,7 @@ ${rollType === 'bad' && reason ? `<div style="position:absolute;left:0;bottom:0;
   const shortHeader  = p.blankHeader ? '' : ((p.headerText || '').trim() || 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด')
   const rollWord     = rollType.startsWith('scrap') ? 'ถุง' : rollType === 'bad' ? 'กรอ' : 'Roll'
   const shortFieldData: Record<string, string> = {
-    header:    shortHeader + (rollTypeLabelLong ? `${shortHeader ? '&nbsp;' : ''}[${rollTypeLabelLong}]` : ''),
+    header:    shortHeader + (rollTypeLabelLong ? `${shortHeader ? '&nbsp;' : ''}[${rollTypeLabelLong}]` : '') + (rollType === 'bad' && reason ? `&nbsp;<span style="color:#c00">เหตุผล: ${reason}</span>` : ''),
     mat:       `Mat&nbsp;&nbsp;<b>${p.matCode}</b>`,
     mfg:       `MFG&nbsp;&nbsp;<b>${mfgDate}</b>`,
     rollno:    `${rollWord}&nbsp;<b>${rollNo === 0 ? '—' : rollNo}</b>`,
@@ -159,7 +159,6 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
 </style>
 <div style="position:relative;width:${shortLayout.labelW}mm;height:${shortLayout.labelH}mm;border:1.5px solid #000;overflow:hidden">
 ${shortLayout.fields.map(renderShortField).join('\n')}
-${rollType === 'bad' && reason ? `<div style="position:absolute;left:0;bottom:0;width:100%;background:#ffe5e5;border-top:1.5px solid #c00;color:#c00;font-weight:900;font-size:7pt;text-align:center;padding:0.5mm 0.5mm;line-height:1.15">⚠ เหตุผลกรอ: ${reason}</div>` : ''}
 </div>`
 
 

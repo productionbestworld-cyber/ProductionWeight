@@ -2786,28 +2786,35 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
             </div>
           )}
 
-          {/* ── แถบแยก: ดี + กรอ รวม (คนละแถบกับ progress ของม้วนดี) ── */}
-          <div className="rounded-xl px-3 py-2 bg-amber-500/10 border border-amber-500/30 flex items-center justify-between">
-            <span className="text-amber-300 text-xs font-bold">🔄 ดี + กรอ รวม</span>
-            <span className="text-right leading-tight">
-              <b className="text-amber-200 text-lg">{fmt(goodPlusBadKg,dec)}</b> <span className="text-amber-300 text-xs">Kgs.</span>
-              <span className="block text-[10px] text-slate-500">{goodCnt + badCnt} ม้วน · กรอ {fmt(badKgSum,dec)} Kgs.</span>
-            </span>
-          </div>
-
-          {/* Progress (ของเดิม — ม้วนดี เทียบเป้า) */}
-          {planned > 0 && (
+          {/* Progress — แถบเดียวแบ่งสี (น้ำเงิน=ม้วนดี, เหลือง=กรอ) ชี้เมาส์เห็นยอดจริง */}
+          {planned > 0 && (() => {
+            const fgW  = Math.min(100, planned > 0 ? (weighedKg / planned) * 100 : 0)
+            const badW = Math.min(100 - fgW, planned > 0 ? (badKgSum / planned) * 100 : 0)
+            return (
             <div className={`rounded-xl p-3 border ${done ? 'bg-green-500/10 border-green-500/30' : 'bg-slate-900 border-slate-800'}`}>
               <div className="flex justify-between text-xs mb-1.5">
                 <span className="text-slate-400">ชั่งแล้ว (ม้วนดี) <b className={done?'text-green-300':'text-white'}>{fmt(weighedKg,dec)}</b></span>
                 <span className={done ? 'text-green-400 font-bold' : 'text-brand-300'}>{done ? '✓ ครบ' : `เหลือ ${fmt(remaining,dec)}`}</span>
               </div>
-              <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                <div className={`h-full rounded-full ${progressColor}`} style={{width:`${pct}%`}}/>
+              {/* แถบเดียว 2 สี — hover ดูยอดจริง */}
+              <div className="h-3 bg-slate-800 rounded-full overflow-hidden flex"
+                   title={`ม้วนดี ${fmt(weighedKg,dec)} + กรอ ${fmt(badKgSum,dec)} = รวม ${fmt(goodPlusBadKg,dec)} Kgs. (เป้า ${fmt(planned,dec)})`}>
+                <div className={`h-full ${progressColor} transition-all`} style={{width:`${fgW}%`}}
+                     title={`ม้วนดี ${fmt(weighedKg,dec)} Kgs. (${goodCnt} ม้วน)`}/>
+                <div className="h-full bg-amber-400 transition-all" style={{width:`${badW}%`}}
+                     title={`กรอ ${fmt(badKgSum,dec)} Kgs. (${badCnt} ม้วน)`}/>
               </div>
-              <p className="text-slate-600 text-[10px] mt-1">{goodCnt} ม้วนดี · {pct}% · เป้า {fmt(planned,dec)} Kgs.</p>
+              {/* legend + ยอดรวม */}
+              <div className="flex justify-between items-center mt-1">
+                <p className="text-slate-600 text-[10px]">
+                  <span className="text-brand-400">■</span> ดี {fmt(weighedKg,dec)}
+                  {badKgSum > 0 && <> · <span className="text-amber-400">■</span> กรอ {fmt(badKgSum,dec)}</>}
+                </p>
+                <p className="text-slate-500 text-[10px]">รวม <b className="text-slate-300">{fmt(goodPlusBadKg,dec)}</b> · เป้า {fmt(planned,dec)}</p>
+              </div>
             </div>
-          )}
+            )
+          })()}
         </div>
 
         {/* ── RIGHT: ตารางแยก ──────────────────────────────── */}

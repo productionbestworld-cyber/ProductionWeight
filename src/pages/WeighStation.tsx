@@ -749,22 +749,29 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
                             </span>
                           )}
                         </div>
-                        {/* ดี + กรอ รวม (โชว์เมื่อมีม้วนกรอ) */}
-                        {prog.badRolls > 0 && (
-                          <div className="text-[10px] text-amber-300 mb-1">
-                            🔄 ดี+กรอ รวม <b className="text-amber-200">{(prog.done + prog.badKg).toFixed(p.decimal ?? 2)}</b> Kgs.
-                            <span className="text-slate-500"> ({prog.rolls + prog.badRolls} ม้วน · กรอ {prog.badKg.toFixed(p.decimal ?? 2)})</span>
-                          </div>
-                        )}
-                        {planned > 0 && (
+                        {planned > 0 && (() => {
+                          const fgW  = Math.min(100, (prog.done / planned) * 100)
+                          const badW = Math.min(100 - fgW, (prog.badKg / planned) * 100)
+                          return (
                           <>
-                            <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden">
-                              <div className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-green-500' : pct >= 70 ? 'bg-amber-400' : 'bg-brand-500'}`}
-                                style={{ width: `${pct}%` }}/>
+                            {/* แถบเดียว 2 สี — น้ำเงิน=ดี, เหลือง=กรอ */}
+                            <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden flex"
+                                 title={`ม้วนดี ${prog.done.toFixed(p.decimal ?? 2)} + กรอ ${prog.badKg.toFixed(p.decimal ?? 2)} = รวม ${(prog.done + prog.badKg).toFixed(p.decimal ?? 2)} Kgs.`}>
+                              <div className={`h-full transition-all ${pct >= 100 ? 'bg-green-500' : 'bg-brand-500'}`} style={{ width: `${fgW}%` }}
+                                   title={`ม้วนดี ${prog.done.toFixed(p.decimal ?? 2)} Kgs. (${prog.rolls} ม้วน)`}/>
+                              <div className="h-full bg-amber-400 transition-all" style={{ width: `${badW}%` }}
+                                   title={`กรอ ${prog.badKg.toFixed(p.decimal ?? 2)} Kgs. (${prog.badRolls} ม้วน)`}/>
                             </div>
-                            <p className="text-[10px] text-slate-500 mt-0.5 text-right">เป้า {planned.toLocaleString()} Kgs. ({pct.toFixed(0)}%)</p>
+                            <div className="flex justify-between text-[10px] mt-0.5">
+                              <span className="text-slate-500">
+                                <span className="text-brand-400">■</span> ดี {prog.done.toFixed(p.decimal ?? 2)}
+                                {prog.badRolls > 0 && <> · <span className="text-amber-400">■</span> กรอ {prog.badKg.toFixed(p.decimal ?? 2)}</>}
+                              </span>
+                              <span className="text-slate-500">เป้า {planned.toLocaleString()} ({pct.toFixed(0)}%)</span>
+                            </div>
                           </>
-                        )}
+                          )
+                        })()}
                       </div>
                     </div>
                   ) : (

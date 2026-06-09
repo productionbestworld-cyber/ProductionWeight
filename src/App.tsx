@@ -11,7 +11,7 @@ import Warehouse from './pages/Warehouse'
 import Admin, { PinGate, DeptPinGate, isAdminUnlocked, isDeptUnlocked, lockAllDepts, lockAdmin } from './pages/Admin'
 import ReviewQueue from './pages/ReviewQueue'
 import ProductsPage from './pages/Products'
-import { APP_VERSION, APP_BUILD_DATE } from './version'
+import { APP_VERSION, APP_BUILD_DATE, CHANGELOG } from './version'
 
 type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings' | 'admin' | 'review' | 'nc' | 'products'
 type Dept = 'blow' | 'print' | 'rewind'
@@ -66,6 +66,7 @@ export default function App() {
 
   // ── เข้าครั้งแรก: แสดงหน้าเลือกแผนก (profile select) ──────────────
   const [showDeptSelect, setShowDeptSelect] = useState(true)
+  const [showAbout, setShowAbout] = useState(false)
   const [showDeptGate, setShowDeptGate] = useState(false) // จะเปิดหลังเลือกแผนก
   const deptRef = useRef<HTMLDivElement>(null)
 
@@ -306,7 +307,8 @@ export default function App() {
 
         {/* Connection status — ชิดขวา */}
         <div className="ml-auto flex-shrink-0 flex items-center gap-2">
-          <span className="hidden md:block text-[10px] text-slate-600" title={`build ${APP_BUILD_DATE}`}>v{APP_VERSION}</span>
+          <button onClick={() => setShowAbout(true)} title="ดูรายละเอียดอัปเดต"
+            className="hidden md:block text-[10px] text-slate-500 hover:text-brand-300 transition-colors">v{APP_VERSION}</button>
           <button onClick={checkConn} title={latency ? `${latency}ms` : undefined}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
               connStatus === 'online'   ? 'bg-green-500/10 border-green-500/30 text-green-400' :
@@ -363,6 +365,40 @@ export default function App() {
           }}
           onClose={() => setPendingDept(null)}
         />
+      )}
+
+      {/* About — รายละเอียดเวอร์ชัน/อัปเดต */}
+      {showAbout && (
+        <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4" onClick={() => setShowAbout(false)}>
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg max-h-[85vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <img src="/logo.png" className="w-9 h-9 rounded-full object-cover"/>
+                <div>
+                  <p className="text-white font-bold">ระบบชั่งน้ำหนักม้วน BWP</p>
+                  <p className="text-slate-400 text-xs">เวอร์ชัน {APP_VERSION} · {APP_BUILD_DATE}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowAbout(false)} className="text-slate-400 hover:text-white text-xl leading-none">×</button>
+            </div>
+            <div className="px-5 py-4 overflow-y-auto space-y-4">
+              <p className="text-slate-300 text-sm font-semibold">📋 ประวัติการอัปเดต</p>
+              {CHANGELOG.map(c => (
+                <div key={c.version} className="border-l-2 border-brand-500/50 pl-3">
+                  <p className="text-brand-300 font-bold text-sm">v{c.version} <span className="text-slate-500 font-normal text-xs">· {c.date}</span></p>
+                  <ul className="mt-1 space-y-1">
+                    {c.items.map((it, i) => (
+                      <li key={i} className="text-slate-400 text-xs leading-snug flex gap-1.5"><span className="text-brand-400">•</span><span>{it}</span></li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+            <div className="px-5 py-3 border-t border-slate-800">
+              <button onClick={() => setShowAbout(false)} className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 py-2 rounded-lg text-sm">ปิด</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

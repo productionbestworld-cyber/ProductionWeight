@@ -54,10 +54,12 @@ async function printLabel(p: MachineProfile, rollNo: number, gross: number, net:
   // ค่าจริงของแต่ละ field id → map จาก MachineProfile + น้ำหนัก
   const rollLabel = rollType.startsWith('scrap') ? 'ถุงเศษ' : rollType === 'bad' ? 'กรอ No.' : 'Roll No.'
   const longFieldData: Record<string, string> = {
-    header:      (p.headerText?.trim() || 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด') +
-                 (rollTypeLabelLong ? `&nbsp;&nbsp;[${rollTypeLabelLong}]` : '') +
-                 (rollType === 'bad' ? `&nbsp;&nbsp;<span style="font-size:0.85em">รหัสสินค้า: <b>${p.itemCode || '—'}</b></span>` : '') +
-                 (rollType === 'bad' && reason ? `&nbsp;&nbsp;<span style="color:#c00">เหตุผล: ${reason}</span>` : ''),
+    header:      (rollType === 'bad')
+                 ? `<span style="font-size:0.9em">SO <b>${p.soNo || '—'}</b>&nbsp;&nbsp;·&nbsp;&nbsp;WO <b>${p.woNo || '—'}</b>&nbsp;&nbsp;·&nbsp;&nbsp;รหัสสินค้า <b>${p.itemCode || '—'}</b></span>` +
+                   (rollTypeLabelLong ? `&nbsp;&nbsp;[${rollTypeLabelLong}]` : '') +
+                   (rollType === 'bad' && reason ? `&nbsp;&nbsp;<span style="color:#c00">เหตุผล: ${reason}</span>` : '')
+                 : (p.headerText?.trim() || 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด') +
+                   (rollTypeLabelLong ? `&nbsp;&nbsp;[${rollTypeLabelLong}]` : ''),
     // 3-column header
     mat:         `Mat Code&nbsp;&nbsp;<b style="font-size:1.15em">${p.matCode}</b>`,
     mfg:         `MFG Date&nbsp;&nbsp;<b style="font-size:1.15em">${mfgDate}</b>`,
@@ -135,7 +137,9 @@ ${savedLayout.fields.map(renderLongField).join('\n')}
   const shortHeader  = p.blankHeader ? '' : ((p.headerText || '').trim() || 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด')
   const rollWord     = rollType.startsWith('scrap') ? 'ถุง' : rollType === 'bad' ? 'กรอ' : 'Roll'
   const shortFieldData: Record<string, string> = {
-    header:    shortHeader + (rollTypeLabelLong ? `${shortHeader ? '&nbsp;' : ''}[${rollTypeLabelLong}]` : '') + (rollType === 'bad' ? `&nbsp;<span style="font-size:0.85em">รหัส: <b>${p.itemCode || '—'}</b></span>` : '') + (rollType === 'bad' && reason ? `&nbsp;<span style="color:#c00">เหตุผล: ${reason}</span>` : ''),
+    header:    (rollType === 'bad')
+               ? `<span style="font-size:0.9em">SO <b>${p.soNo || '—'}</b> · WO <b>${p.woNo || '—'}</b> · รหัส <b>${p.itemCode || '—'}</b></span>${rollTypeLabelLong ? ` [${rollTypeLabelLong}]` : ''}${rollType === 'bad' && reason ? ` <span style="color:#c00">เหตุผล: ${reason}</span>` : ''}`
+               : shortHeader + (rollTypeLabelLong ? `${shortHeader ? '&nbsp;' : ''}[${rollTypeLabelLong}]` : ''),
     mat:       `Mat&nbsp;&nbsp;<b>${p.matCode}</b>`,
     mfg:       `MFG&nbsp;&nbsp;<b>${mfgDate}</b>`,
     rollno:    `${rollWord}&nbsp;<b>${rollNo === 0 ? '—' : rollNo}</b>`,
@@ -1853,6 +1857,49 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
       })
   }, [isRework, profile.lotNo])
 
+  // ── ม้วนต้นทางที่เบิกมา (ของสินค้านี้) + ความคืบหน้ากรอต่อม้วน ──
+  const [srcRolls, setSrcRolls]   = useState<any[]>([])         // ม้วนเสียที่เบิกมา (reworking)
+  const [selSrc, setSelSrc]       = useState<any | null>(null)  // ม้วนต้นทางที่กำลังกรอ
+  const [srcProg, setSrcProg]     = useState<Record<string, number>>({})  // sourceId → กรอได้สะสม (kg)
+  // ม้วนนอกระบบ (เอามาจากงานอื่น/ที่อื่น มาชั่งรวมในงานนี้)
+  const [manualMode, setManualMode]       = useState(false)
+  const [manualSrcText, setManualSrcText] = useState('')   // ที่มา (พิมพ์เอง)
+  const [manualSrcKg, setManualSrcKg]     = useState('')   // หยิบมากี่โล
+
+  async function loadSrcRolls() {
+    if (!isRework) return
+    const ic = (profile.itemCode ?? '').trim()
+    if (!ic) return
+    // ม้วนเสียที่เบิกมา = bad + reworking + สินค้าเดียวกัน
+    const { data: src } = await supabase.from('production_rolls')
+      .select('id, lot_no, roll_no, weight, work_order, sale_order, remark')
+      .eq('roll_type', 'bad').eq('item_code', ic).eq('rework_status', 'reworking')
+      .order('created_at', { ascending: true })
+    setSrcRolls(src ?? [])
+    // กรอได้สะสมต่อม้วนต้นทาง = ม้วนดีของ lot นี้ที่อ้างอิง source roll
+    const { data: good } = await supabase.from('production_rolls')
+      .select('rework_source_roll_id, weight')
+      .eq('lot_no', profile.lotNo).eq('roll_type', 'good')
+    const prog: Record<string, number> = {}
+    for (const g of good ?? []) {
+      const k = g.rework_source_roll_id
+      if (k) prog[k] = (prog[k] ?? 0) + (g.weight ?? 0)
+    }
+    setSrcProg(prog)
+  }
+  useEffect(() => { loadSrcRolls() }, [isRework, profile.itemCode, profile.lotNo])
+
+  // กดเสร็จม้วนต้นทาง → ที่เหลือเป็นเศษ → ม้วนหายจากลิสต์ (กันชั่งซ้ำ)
+  async function finishSource(s: any) {
+    if (!confirm(`ม้วนต้นทาง Lot ${s.lot_no} #${s.roll_no} (${fmt(s.weight,dec)} Kg) กรอไม่ได้ → เป็นเศษทั้งม้วน?\n\nม้วนนี้จะหายจากลิสต์`)) return
+    const { error } = await supabase.from('production_rolls')
+      .update({ rework_status: 'reworked', rework_remark: `กรอไม่ได้ · เศษทั้งม้วน ${fmt(s.weight,dec)} Kg` })
+      .eq('id', s.id)
+    if (error) { alert('ปิดม้วนไม่สำเร็จ: ' + error.message); return }
+    if (selSrc?.id === s.id) setSelSrc(null)
+    loadSrcRolls()
+  }
+
   function confirmInspector(name: string) {
     if (!name.trim()) return
     setInspector(name.trim())
@@ -2242,12 +2289,33 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
     if (!inspector.trim()) { setShowInspectorPrompt(true); return }
     if (isBad && !badReason.trim()) { alert('กรุณาระบุเหตุผลม้วนกรอ'); return }
     if (isScrap && !scrapReason.trim()) { alert('กรุณาระบุเหตุผลเศษเสีย'); return }
+    if (isGood && isRework && srcRolls.length > 0 && !selSrc && !manualMode) { alert('กรุณาเลือกม้วนต้นทางที่กำลังกรอก่อน (ติ๊กด้านบน) หรือกด ➕ ม้วนนอกระบบ'); return }
+    if (isGood && isRework && manualMode && !manualSrcText.trim()) { alert('กรุณากรอกที่มาของม้วนนอกระบบ'); return }
+    if (isGood && isRework && selSrc && ((selSrc.weight ?? 0) - (srcProg[selSrc.id] ?? 0)) <= 0.001) {
+      alert('ม้วนต้นทางนี้กรอครบแล้ว — เลือกม้วนอื่น หรือกด "🗑 เศษทั้งม้วน"'); return
+    }
     if (isGood && isRework && !reworkCause.trim()) { alert('กรุณาระบุสาเหตุที่ม้วนนี้เสีย / มาจากอะไร'); return }
 
     setSaving(true)
     try {
       const actualType = isScrap ? scrapSub : weighType
       const useRollNo  = isBad ? badRollNo : isGood ? rollNo : 0
+      // หมายเหตุม้วนกรอ: หยิบม้วนต้นทางมากี่โล ชั่งได้กี่โล เศษกี่โล
+      const useSrc = (isRework && isGood && selSrc) ? selSrc : null
+      const useManual = (isRework && isGood && manualMode && manualSrcText.trim())
+        ? { text: manualSrcText.trim(), kg: parseFloat(manualSrcKg) || 0 } : null
+      const srcKg  = useSrc ? (useSrc.weight ?? 0) : useManual ? useManual.kg : 0
+      const cumKg  = useSrc ? ((srcProg[useSrc.id] ?? 0) + saveWeight) : saveWeight
+      const scrapKg = Math.max(0, srcKg - cumKg)
+      const reworkNote = useSrc
+        ? `🔁 กรอจาก Lot ${useSrc.lot_no} #${useSrc.roll_no} · หยิบมา ${fmt(srcKg,dec)} · ชั่งได้ ${fmt(cumKg,dec)} · เศษ ${fmt(scrapKg,dec)} Kg`
+        : useManual
+        ? `🔁 กรอแทนจาก ${useManual.text}${useManual.kg ? ` · หยิบมา ${fmt(srcKg,dec)} · ชั่งได้ ${fmt(cumKg,dec)} · เศษ ${fmt(scrapKg,dec)} Kg` : ''}`
+        : (isRework && isGood ? `🔁 กรอจาก ${(profile as any).sourceLotNo ? `Lot ${(profile as any).sourceLotNo}` : 'ม้วนเสีย'}` : '')
+      const rollRemark = isBad ? badReason : isScrap ? scrapReason : (reworkNote || null)
+      // อ้างอิง WO/SO: ม้วนในระบบ → ตามต้นทาง · ม้วนนอกระบบ → ออกเป็น Lot/ออเดอร์ที่กำลังชั่ง
+      const useWo = useSrc ? (useSrc.work_order ?? profile.woNo ?? '') : (profile.woNo ?? '')
+      const useSo = useSrc ? (useSrc.sale_order ?? profile.soNo ?? '') : (profile.soNo ?? '')
 
       const payload = {
         job_id:       null,
@@ -2256,12 +2324,15 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         weight:       parseFloat(saveWeight.toFixed(dec)),
         gross_weight: gross,
         core_weight:  isScrap ? 0 : core,
-        remark:       isBad ? badReason : isScrap ? scrapReason : null,
+        remark:       rollRemark,
         inspector:    inspector || null,
         machine_no:   profile.machine_no,
         lot_no:       profile.lotNo,
-        sale_order:   profile.soNo ?? '',
-        work_order:   profile.woNo ?? '',
+        sale_order:   useSo,
+        work_order:   useWo,
+        rework_source_roll_id: useSrc ? useSrc.id : null,
+        rework_source_lot:     useSrc ? useSrc.lot_no : (useManual ? useManual.text : null),
+        rework_source_weight:  (useSrc || useManual) ? srcKg : null,
         item_code:    profile.itemCode    ?? '',
         product_code: profile.productCode ?? '',
         mat_code:     profile.matCode     ?? '',
@@ -2310,6 +2381,23 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
 
       setLastRoll({ ...data, weighType: actualType })
       setWeighedRolls(prev => [...prev, data].filter(Boolean))
+      // ม้วนต้นทาง: ชั่งได้แล้ว → ปิดม้วน (ที่เหลือเป็นเศษ) → หายจากลิสต์ กันชั่งซ้ำ
+      if (useSrc) {
+        const sc = Math.max(0, (useSrc.weight ?? 0) - saveWeight)
+        await supabase.from('production_rolls').update({
+          rework_status: 'reworked',
+          rework_remark: `กรอเสร็จ · หยิบมา ${fmt(useSrc.weight,dec)} · ชั่งได้ ${fmt(saveWeight,dec)} · เศษ ${fmt(sc,dec)} Kg`,
+        }).eq('id', useSrc.id)
+        setSelSrc(null)
+        setSrcRolls(prev => prev.filter(x => x.id !== useSrc.id))
+      }
+      // ม้วนนอกระบบ: บวกเบิกมาเข้าเป้างาน (ให้คิดเศษถูก) + เคลียร์ช่องสำหรับม้วนถัดไป
+      if (useManual && reworkJobId) {
+        const { data: j } = await supabase.from('rework_jobs').select('planned_qty').eq('id', reworkJobId).maybeSingle()
+        const newPlanned = ((parseFloat(j?.planned_qty ?? '0') || 0) + useManual.kg).toFixed(2)
+        await supabase.from('rework_jobs').update({ planned_qty: newPlanned }).eq('id', reworkJobId)
+        setManualSrcText(''); setManualSrcKg('')
+      }
 
       // ── จำค่าที่กรอกเอง: ถ้า master ยังไม่มี Mat Code/แกน → เติมกลับให้ครั้งหน้า auto-fill ──
       backfillProductMatCore(profile.itemCode, profile.matCode, profile.coreWeight)
@@ -2329,7 +2417,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         gross_weight: gross,
         core_weight:  isScrap ? 0 : core,
         net_weight:   parseFloat(saveWeight.toFixed(dec)),
-        remark:       isBad ? badReason : isScrap ? scrapReason : null,
+        remark:       rollRemark,
         inspector:    inspector || null,
       }
       let logOk = false
@@ -2639,14 +2727,86 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
               className="w-full bg-slate-800 border border-red-500/40 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-red-500 placeholder-slate-500" />
           )}
 
+          {/* แผนกกรอ: เลือกม้วนต้นทางที่กำลังกรอ (ติ๊กก่อนชั่ง) */}
+          {isRework && isGood && (
+            <div className="space-y-1.5 bg-slate-900 border border-blue-500/30 rounded-xl p-2.5">
+              <p className="text-blue-300 text-xs font-bold">📌 กำลังกรอจากม้วนต้นทางไหน? (ติ๊กก่อนชั่ง)</p>
+              <div className="space-y-1 max-h-44 overflow-y-auto">
+                {srcRolls.map(s => {
+                  const done = srcProg[s.id] ?? 0
+                  const left = Math.max(0, (s.weight ?? 0) - done)
+                  const full = left <= 0.001          // กรอครบแล้ว → ล็อก
+                  const sel = selSrc?.id === s.id
+                  return (
+                    <div key={s.id}
+                      className={`rounded-lg px-2.5 py-1.5 border transition-colors ${full ? 'bg-slate-800/40 border-slate-700 opacity-60' : sel ? 'bg-blue-500/20 border-blue-500' : 'bg-slate-800 border-slate-700 hover:border-blue-500/50'}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <button disabled={full} onClick={() => { const ns = sel ? null : s; setSelSrc(ns); if (ns) setReworkCause(ns.remark ?? '') }} className="flex-1 text-left disabled:cursor-not-allowed">
+                          <span className="text-xs font-bold text-white">
+                            {full ? '✓ กรอครบ' : sel ? '☑' : '☐'} Lot {s.lot_no} #{s.roll_no}
+                          </span>
+                        </button>
+                        <span className="text-[10px] text-slate-300 shrink-0">หยิบมา <b className="text-orange-300">{fmt(s.weight,dec)}</b></span>
+                        <button onClick={() => finishSource(s)} title="กรอไม่ได้/เป็นเศษทั้งม้วน → เอาออกจากลิสต์"
+                          className="text-[10px] bg-red-700/70 hover:bg-red-600 text-white px-2 py-0.5 rounded font-bold shrink-0">🗑 เศษทั้งม้วน</button>
+                      </div>
+                      <div className="flex justify-between text-[10px] mt-0.5 text-slate-400">
+                        <span>{s.work_order ? `WO ${s.work_order}` : ''}{s.sale_order ? ` · SO ${s.sale_order}` : ''}</span>
+                        <span>กรอได้ <b className="text-green-300">{fmt(done,dec)}</b> · เหลือ <b className="text-amber-300">{fmt(left,dec)}</b></span>
+                      </div>
+                    </div>
+                  )
+                })}
+                {srcRolls.length === 0 && !manualMode && (
+                  <p className="text-[10px] text-slate-500 px-1">ไม่มีม้วนต้นทางในระบบ — ถ้าเอาม้วนจากที่อื่นมาชั่งรวม กด ➕ ด้านล่าง</p>
+                )}
+              </div>
+
+              {/* ➕ ม้วนนอกระบบ — เอามาจากงานอื่น/ที่อื่น */}
+              {!manualMode ? (
+                <button onClick={() => { setManualMode(true); setSelSrc(null) }}
+                  className="w-full text-left rounded-lg px-2.5 py-1.5 border border-dashed border-amber-500/50 bg-amber-500/5 hover:bg-amber-500/10 text-amber-300 text-xs font-bold">
+                  ➕ ม้วนนอกระบบ — เอามาจากที่อื่นมาชั่งรวม (กรอกที่มาเอง)
+                </button>
+              ) : (
+                <div className="rounded-lg px-2.5 py-2 border border-amber-500/50 bg-amber-500/10 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-amber-300 text-xs font-bold">➕ ม้วนนอกระบบ</span>
+                    <button onClick={() => { setManualMode(false); setManualSrcText(''); setManualSrcKg('') }} className="text-[10px] text-slate-400 hover:text-white underline">ยกเลิก</button>
+                  </div>
+                  <input value={manualSrcText} onChange={e => setManualSrcText(e.target.value)}
+                    placeholder="ที่มา * เช่น WO 69/06/041 SO... ม้วน #3 / งานพี่เอก"
+                    className="w-full bg-slate-800 border border-amber-500/40 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none focus:border-amber-500"/>
+                  <div className="flex items-center gap-2">
+                    <input value={manualSrcKg} onChange={e => setManualSrcKg(e.target.value)} type="number" inputMode="decimal"
+                      placeholder="หยิบมากี่โล"
+                      className="flex-1 bg-slate-800 border border-amber-500/40 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none focus:border-amber-500"/>
+                    <span className="text-[10px] text-slate-400">Kg (ไว้คิดเศษ)</span>
+                  </div>
+                </div>
+              )}
+
+              {selSrc && (
+                <p className="text-[10px] text-blue-200 bg-blue-500/10 rounded px-2 py-1">
+                  ม้วนถัดไปจะบันทึกหมายเหตุ: หยิบมา {fmt(selSrc.weight,dec)} · ชั่งได้ + เศษ อัตโนมัติ
+                </p>
+              )}
+              {manualMode && manualSrcText.trim() && (
+                <p className="text-[10px] text-amber-200 bg-amber-500/10 rounded px-2 py-1">
+                  ม้วนถัดไปจะออกใน Lot นี้ + หมายเหตุ: กรอแทนจาก "{manualSrcText.trim()}"{manualSrcKg ? ` · หยิบมา ${manualSrcKg} · เศษอัตโนมัติ` : ''}
+                </p>
+              )}
+            </div>
+          )}
+
           {/* แผนกกรอ: สาเหตุที่ม้วนนี้เสีย/มาจากอะไร (กรอกตอนชั่งออก = กรอสำเร็จ) */}
           {isRework && isGood && (
             <div className="space-y-1">
-              <p className="text-rose-300 text-xs font-bold">⚠ สาเหตุที่ม้วนนี้เสีย / มาจากอะไร (จำเป็น)</p>
+              <p className="text-rose-300 text-xs font-bold">⚠ สาเหตุที่ม้วนเสีย (มาจากแผนกเป่า — แก้ไขได้)</p>
               <input value={reworkCause} onChange={e => setReworkCause(e.target.value)}
-                placeholder="เช่น ฟิล์มย่น, พิมพ์เหลื่อม, ขอบไม่ตรง..."
+                placeholder="ติ๊กม้วนต้นทางด้านบน → สาเหตุจะเด้งมาเอง"
                 className="w-full bg-slate-800 border border-rose-500/40 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-rose-500 placeholder-slate-500" />
-              <p className="text-[10px] text-rose-400/70 leading-tight">บันทึกเข้างานกรอตาม Lot — โชว์บนแดชบอดเพื่อดูว่าผลิตเสียจากสาเหตุใด</p>
+              <p className="text-[10px] text-rose-400/70 leading-tight">ดึงจากสาเหตุที่แผนกเป่าระบุตอนชั่งเป็นม้วนกรอ — แก้/เพิ่มได้ถ้าต่างจากเดิม</p>
             </div>
           )}
 
@@ -2910,21 +3070,26 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                   const time   = d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})
                   return (
                     <div key={r.id} onClick={()=>setSelectedRoll(r)}
-                      className={`grid grid-cols-4 hover:bg-slate-800/40 cursor-pointer transition-colors ${
+                      className={`hover:bg-slate-800/40 cursor-pointer transition-colors ${
                         isRep ? 'bg-amber-500/10 border-l-4 border-amber-500' : isNew ? 'bg-green-500/5' : ''
                       } ${isDone?'opacity-60':''}`}>
-                      <div className={`px-3 py-2.5 text-xs leading-tight ${isDone?'text-slate-600 line-through':'text-slate-500'}`}>
-                        <div className="text-[9px] text-slate-600">{dateShort}</div>
-                        <div>{time}</div>
+                      <div className="grid grid-cols-4">
+                        <div className={`px-3 py-2.5 text-xs leading-tight ${isDone?'text-slate-600 line-through':'text-slate-500'}`}>
+                          <div className="text-[9px] text-slate-600">{dateShort}</div>
+                          <div>{time}</div>
+                        </div>
+                        <div className="px-3 py-2.5">
+                          <span className={`font-bold font-mono ${isRep ? 'text-amber-300' : isDone?'text-slate-500 line-through':'text-white'}`}>{r.roll_no}</span>
+                          {isRep && <span className="ml-1 text-[9px] text-amber-400 font-bold">🔁 ทดแทน</span>}
+                          {!isRep && isNew && <span className="ml-1 text-[9px] text-green-400">NEW</span>}
+                          {isDone && <span className="ml-1 text-[9px] text-green-400">📦</span>}
+                        </div>
+                        <div className={`px-3 py-2.5 text-xs ${isDone?'text-slate-600 line-through':'text-slate-400'}`}>{fmt((r.weight??0)+(r.core_weight??0),dec)}</div>
+                        <div className={`px-3 py-2.5 font-black ${isRep ? 'text-amber-300' : isDone?'text-slate-600 line-through':'text-brand-300'}`}>{fmt(r.weight??0,dec)}</div>
                       </div>
-                      <div className="px-3 py-2.5">
-                        <span className={`font-bold font-mono ${isRep ? 'text-amber-300' : isDone?'text-slate-500 line-through':'text-white'}`}>{r.roll_no}</span>
-                        {isRep && <span className="ml-1 text-[9px] text-amber-400 font-bold">🔁 ทดแทน</span>}
-                        {!isRep && isNew && <span className="ml-1 text-[9px] text-green-400">NEW</span>}
-                        {isDone && <span className="ml-1 text-[9px] text-green-400">📦</span>}
-                      </div>
-                      <div className={`px-3 py-2.5 text-xs ${isDone?'text-slate-600 line-through':'text-slate-400'}`}>{fmt((r.weight??0)+(r.core_weight??0),dec)}</div>
-                      <div className={`px-3 py-2.5 font-black ${isRep ? 'text-amber-300' : isDone?'text-slate-600 line-through':'text-brand-300'}`}>{fmt(r.weight??0,dec)}</div>
+                      {isRework && r.remark && (
+                        <div className="px-3 pb-2 -mt-1 text-[10px] text-blue-300 leading-snug">{r.remark}</div>
+                      )}
                     </div>
                   )
                     })

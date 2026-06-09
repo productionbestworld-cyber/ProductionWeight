@@ -43,7 +43,7 @@ export type ReworkJob = {
 
 // แปลง ReworkJob + machine ที่เลือก → MachineProfile สำหรับ WeighPage
 export function jobToProfile(job: ReworkJob, machine_no: string): MachineProfile {
-  return {
+  const prof: any = {
     machine_no,
     custCode:     job.cust_code    ?? '',
     custName:     job.cust_name    ?? '',
@@ -71,7 +71,10 @@ export function jobToProfile(job: ReworkJob, machine_no: string): MachineProfile
     soNo:         job.sale_order   ?? '',
     woNo:         job.work_order   ?? '',
     deliveryDate: job.delivery_date ?? '',
+    sourceLotNo:  job.source_lot_no ?? '',   // Lot ต้นทาง (สำหรับหมายเหตุ "กรอจาก")
+    reworkJobId:  job.id,                     // ใช้โหลดม้วนที่เบิกมา (rework_withdrawals)
   }
+  return prof as MachineProfile
 }
 
 function fmt(n: number, d = 2) { return Number(n ?? 0).toFixed(d) }
@@ -337,13 +340,27 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
                     </div>
                   )}
 
-                  {/* progress */}
+                  {/* progress: เบิกมา / กรอได้ / เศษ */}
                   <div className="mt-auto">
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="text-green-400 font-bold">{p.rolls} ม้วน · {fmt(p.kg,1)} Kgs.</span>
+                    <div className="grid grid-cols-3 gap-1 text-center mb-1.5">
+                      <div className="bg-slate-800/60 rounded-lg py-1">
+                        <p className="text-[9px] text-slate-500">เบิกมา</p>
+                        <p className="text-xs font-black text-slate-200">{fmt(planned,1)}</p>
+                      </div>
+                      <div className="bg-green-500/10 rounded-lg py-1">
+                        <p className="text-[9px] text-green-400/70">กรอได้</p>
+                        <p className="text-xs font-black text-green-300">{fmt(p.kg,1)}</p>
+                      </div>
+                      <div className="bg-red-500/10 rounded-lg py-1">
+                        <p className="text-[9px] text-red-400/70">เศษ(คาด)</p>
+                        <p className="text-xs font-black text-red-300">{fmt(Math.max(0, planned - p.kg),1)}</p>
+                      </div>
+                    </div>
+                    <div className="flex justify-between text-[10px] mb-1">
+                      <span className="text-slate-500">{p.rolls} ม้วนกรอได้</span>
                       {planned > 0 && (
                         <span className={remaining <= 0 ? 'text-green-400 font-bold' : 'text-amber-400 font-bold'}>
-                          {remaining <= 0 ? '✓ ครบ' : `เหลือ ${fmt(remaining,0)}`}
+                          {remaining <= 0 ? '✓ ครบ' : `เหลือ ${fmt(remaining,0)}`} · {pct}%
                         </span>
                       )}
                     </div>
@@ -396,19 +413,30 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
               </div>
 
               <div className="px-6 py-4 space-y-3">
-                {/* สรุปกรอได้ */}
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="bg-green-500/10 border border-green-500/25 rounded-xl p-3 text-center">
-                    <p className="text-green-400 text-[10px]">กรอได้ (ม้วนดี)</p>
-                    <p className="text-green-300 font-black text-2xl">{fmt(prog.kg, 1)}</p>
-                    <p className="text-slate-500 text-[9px]">Kgs.</p>
+                {/* สรุป: เบิกมา / กรอได้ / เศษ(คิดอัตโนมัติ) */}
+                {(() => {
+                  const withdrawn = parseFloat(closeFor.planned_qty ?? '') || 0
+                  const scrap = Math.max(0, withdrawn - prog.kg)
+                  return (
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="bg-slate-800 rounded-xl p-3 text-center">
+                      <p className="text-slate-400 text-[10px]">เบิกมา</p>
+                      <p className="text-slate-100 font-black text-2xl">{fmt(withdrawn, 1)}</p>
+                      <p className="text-slate-500 text-[9px]">Kg</p>
+                    </div>
+                    <div className="bg-green-500/10 border border-green-500/25 rounded-xl p-3 text-center">
+                      <p className="text-green-400 text-[10px]">กรอได้ ({prog.rolls} ม้วน)</p>
+                      <p className="text-green-300 font-black text-2xl">{fmt(prog.kg, 1)}</p>
+                      <p className="text-slate-500 text-[9px]">Kg</p>
+                    </div>
+                    <div className="bg-red-500/10 border border-red-500/25 rounded-xl p-3 text-center">
+                      <p className="text-red-400 text-[10px]">เศษ (อัตโนมัติ)</p>
+                      <p className="text-red-300 font-black text-2xl">{fmt(scrap, 1)}</p>
+                      <p className="text-slate-500 text-[9px]">เบิก − กรอได้</p>
+                    </div>
                   </div>
-                  <div className="bg-slate-800 rounded-xl p-3 text-center">
-                    <p className="text-slate-400 text-[10px]">จำนวนม้วน</p>
-                    <p className="text-white font-black text-2xl">{prog.rolls}</p>
-                    <p className="text-slate-500 text-[9px]">ม้วน</p>
-                  </div>
-                </div>
+                  )
+                })()}
 
                 {/* รายละเอียด สาเหตุ/คนกรอ */}
                 <div className="bg-slate-800 rounded-xl p-3 space-y-1.5 text-sm">
@@ -634,15 +662,10 @@ function CreateJobModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="block text-[10px] text-slate-500 mb-1">Core (kg)</label>
               <input value={form.core_weight ?? ''} onChange={e => setForm(f => ({ ...f, core_weight: e.target.value }))}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-brand-500"/>
-            </div>
-            <div>
-              <label className="block text-[10px] text-slate-500 mb-1">ยอดสั่ง (kg)</label>
-              <input value={form.planned_qty ?? ''} onChange={e => setForm(f => ({ ...f, planned_qty: e.target.value }))}
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-brand-500"/>
             </div>
             <div>
@@ -652,28 +675,6 @@ function CreateJobModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
             </div>
           </div>
 
-          {/* สาเหตุการกรอ */}
-          <p className="text-emerald-400 text-[10px] font-bold uppercase tracking-wider pt-2">สาเหตุการกรอ</p>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-[10px] text-slate-500 mb-1">สาเหตุที่ม้วนเสีย (ถ้ามี)</label>
-              <input value={form.source_defect_reason ?? ''} onChange={e => setForm(f => ({ ...f, source_defect_reason: e.target.value }))}
-                placeholder="เช่น ขอบเสีย, สีเพี้ยน..."
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-emerald-500"/>
-            </div>
-            <div>
-              <label className="block text-[10px] text-slate-500 mb-1">สาเหตุ/วิธีที่กรอได้</label>
-              <input value={form.rework_reason ?? ''} onChange={e => setForm(f => ({ ...f, rework_reason: e.target.value }))}
-                placeholder="เช่น ตัดขอบเสียออก..."
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-emerald-500"/>
-            </div>
-          </div>
-          <div>
-            <label className="block text-[10px] text-slate-500 mb-1">ชื่อคนกรอ</label>
-            <input value={form.rewinder_name ?? ''} onChange={e => setForm(f => ({ ...f, rewinder_name: e.target.value }))}
-              placeholder={form.inspector || 'ชื่อคนกรอ'}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-emerald-500"/>
-          </div>
         </div>
         <div className="flex gap-2 px-5 py-3 border-t border-slate-800 shrink-0">
           <button onClick={onClose} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-400 py-2.5 rounded-xl text-sm">ยกเลิก</button>

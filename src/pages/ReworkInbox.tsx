@@ -48,8 +48,87 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
   const [showReceive, setShowReceive] = useState<any | null>(null)
   const [showReturn, setShowReturn] = useState<any | null>(null)  // ส่งคืนผลิต — ให้ ผจก พิจารณา
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
+  const [groupBy, setGroupBy] = useState<'item' | 'wo' | 'so'>('item')   // จัดกลุ่มตาม
   const [logRows, setLogRows] = useState<any[]>([])   // ประวัติการรับเข้ากรอ (รับไปแล้ว)
   const [showLog, setShowLog] = useState(true)
+  // ── เบิกม้วน (multi-select) ──
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [withdrawBy, setWithdrawBy] = useState('')
+  const [withdrawing, setWithdrawing] = useState(false)
+
+  function toggleSel(id: string) {
+    setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+  function toggleMany(ids: string[], on: boolean) {
+    setSelected(prev => { const n = new Set(prev); ids.forEach(id => on ? n.add(id) : n.delete(id)); return n })
+  }
+
+  // เบิกม้วนที่เลือก → รวมเป็นงานกรอตาม "สินค้า" (item_code) ข้าม WO/SO
+  async function withdrawSelected() {
+    if (!withdrawBy.trim()) { alert('กรุณากรอกชื่อผู้เบิก'); return }
+    const picked = rolls.filter(r => selected.has(r.id))
+    if (picked.length === 0) { alert('กรุณาเลือกม้วนที่จะเบิกก่อน (ติ๊ก ☑)'); return }
+    setWithdrawing(true)
+    const now = new Date().toISOString()
+    const jobCache = new Map<string, any>()   // item_code → job (กันสร้างซ้ำในรอบเดียว)
+    let totalKg = 0
+    try {
+      for (const r of picked) {
+        const ic = (r.item_code ?? '').trim() || '(ไม่ระบุ)'
+        const rollKg = parseFloat((r.weight ?? 0).toFixed(2))
+        // หา job ของสินค้านี้ (cache → DB)
+        let job = jobCache.get(ic)
+        if (!job) {
+          const { data: existing } = await supabase.from('rework_jobs').select('*')
+            .eq('status', 'active').eq('source', 'from_production').eq('item_code', ic).limit(1)
+          job = existing?.[0] ?? null
+        }
+        if (job) {
+          await supabase.from('rework_jobs').update({
+            planned_qty:       ((parseFloat(job.planned_qty ?? '0') || 0) + rollKg).toFixed(2),
+            source_roll_count: (job.source_roll_count ?? 0) + 1,
+          }).eq('id', job.id)
+          job.planned_qty = ((parseFloat(job.planned_qty ?? '0') || 0) + rollKg).toFixed(2)
+          job.source_roll_count = (job.source_roll_count ?? 0) + 1
+        } else {
+          const { data: created, error: cErr } = await supabase.from('rework_jobs').insert({
+            lot_no: '', sale_order: r.sale_order ?? '', work_order: r.work_order ?? '',
+            item_code: ic === '(ไม่ระบุ)' ? '' : ic, mat_code: r.mat_code ?? '', product_code: r.product_code ?? '',
+            product_name: r.product_name ?? '', width_cm: r.width_cm ?? '', width_unit: r.width_unit ?? 'cm',
+            thick_mc: r.thick_mc ?? '', cust_code: r.cust_code ?? '', cust_name: r.customer ?? '',
+            cust_branch: r.cust_branch ?? '', core_weight: '1.25', decimal_places: 2,
+            planned_qty: rollKg.toString(), inspector: withdrawBy.trim(), label_size: 'long',
+            source: 'from_production', source_roll_id: r.id, source_lot_no: (r.lot_no ?? '').trim(),
+            source_roll_count: 1, source_defect_reason: r.remark ?? '',
+            status: 'active', created_by: withdrawBy.trim(), created_at: now,
+          }).select().single()
+          if (cErr) throw cErr
+          job = created
+          jobCache.set(ic, job)
+        }
+        jobCache.set(ic, job)
+        // mark ม้วนต้นทาง = reworking
+        await supabase.from('production_rolls').update({
+          rework_status: 'reworking', rework_received_by: withdrawBy.trim(), rework_received_at: now,
+          rework_remark: `เบิกเข้างานกรอ (สินค้า ${ic})`,
+        }).eq('id', r.id)
+        // บันทึกประวัติเบิก
+        await supabase.from('rework_withdrawals').insert({
+          job_id: job.id, source_roll_id: r.id, withdrawn_by: withdrawBy.trim(),
+          weight: rollKg, item_code: ic === '(ไม่ระบุ)' ? '' : ic, product_name: r.product_name ?? '',
+          lot_no: r.lot_no ?? '', work_order: r.work_order ?? '', sale_order: r.sale_order ?? '',
+        })
+        totalKg += rollKg
+      }
+      alert(`✓ เบิกม้วนเรียบร้อย ${picked.length} ม้วน · รวม ${fmt(totalKg)} Kg\nผู้เบิก: ${withdrawBy.trim()}\n\n→ ไปหน้า "ชั่งน้ำหนัก" (แผนกกรอ) → คลิกการ์ดงานของสินค้านั้น → เลือกเครื่อง → ชั่งม้วนใหม่`)
+      setSelected(new Set()); setWithdrawBy('')
+      load()
+    } catch (e: any) {
+      alert('เบิกไม่สำเร็จ: ' + (e?.message ?? e))
+    } finally {
+      setWithdrawing(false)
+    }
+  }
 
   async function load() {
     if (!selectedType) return
@@ -106,7 +185,7 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
 
   const filtered = rolls.filter(r => {
     if (!search) return true
-    const blob = `${r.machine_no} ${r.lot_no} ${r.product_name} ${r.customer} ${r.item_code} ${r.mat_code}`.toLowerCase()
+    const blob = `${r.machine_no} ${r.lot_no} ${r.work_order} ${r.sale_order} ${r.product_name} ${r.customer} ${r.item_code} ${r.mat_code}`.toLowerCase()
     return blob.includes(search.toLowerCase())
   })
 
@@ -159,16 +238,16 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
 
   return (
     <div className="bg-[#0a0f1e] p-5">
-      <div className="max-w-6xl mx-auto space-y-4">
+      <div className="max-w-6xl mx-auto space-y-4 pb-24">
 
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-white font-bold text-xl flex items-center gap-2">
-              <Wrench size={22} className="text-amber-400"/> ม้วนรอกรอ — แผนกกรอ
+              <Wrench size={22} className="text-amber-400"/> เบิกม้วนกรอ — แผนกกรอ
             </h1>
             <p className="text-slate-400 text-xs mt-0.5">
-              🏭 รับม้วนเสียจากผลิต → กดเริ่มกรอ (สร้างงาน) หรือ ส่งคืนผลิต · การชั่ง/สร้างงานเองอยู่ที่เมนู "ชั่งน้ำหนัก"
+              🏭 ☑ ติ๊กม้วนที่จะกรอ → ใส่ชื่อผู้เบิก → กด "เบิก" (รวมเป็นงานกรอตามสินค้า) → ไปชั่งที่เมนู "ชั่งน้ำหนัก"
             </p>
           </div>
           <div className="flex gap-2">
@@ -202,39 +281,19 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
           if (loading) return null
           if (waiting === 0) {
             return (
-              <div className="rounded-2xl border-2 border-emerald-500/40 bg-emerald-500/10 px-5 py-4 flex items-center gap-4">
-                <span className="text-4xl">✅</span>
-                <div>
-                  <p className="text-emerald-300 font-black text-lg">ไม่มีม้วนรอกรอ</p>
-                  <p className="text-emerald-400/70 text-xs">เคลียร์งานหมดแล้ว — รอม้วนใหม่จากแผนกผลิต</p>
-                </div>
+              <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 flex items-center gap-2">
+                <span className="text-base">✅</span>
+                <p className="text-emerald-300 font-bold text-sm">ไม่มีม้วนรอกรอ <span className="text-emerald-400/70 font-normal">— เคลียร์งานหมดแล้ว</span></p>
               </div>
             )
           }
           return (
-            <div className="relative rounded-2xl border-2 border-amber-500 bg-gradient-to-r from-amber-500/20 to-orange-500/15 px-5 py-4 overflow-hidden">
-              <span className="absolute inset-0 bg-amber-500/10 animate-pulse pointer-events-none"/>
-              <div className="relative flex items-center gap-4 flex-wrap">
-                <span className="text-5xl animate-bounce">🔔</span>
-                <div className="flex-1 min-w-[180px]">
-                  <p className="text-amber-200 font-black text-2xl leading-tight">มีม้วนรอกรอ {waiting} ม้วน</p>
-                  <p className="text-amber-300/80 text-sm">กรุณารับเข้ากรอ — แผนกผลิตส่งม้วนมาแล้ว</p>
-                </div>
-                <div className="flex gap-3 text-center">
-                  <div className="bg-amber-500/20 rounded-xl px-5 py-2 border border-amber-500/30">
-                    <p className="text-3xl font-black text-amber-200">{waiting}</p>
-                    <p className="text-[10px] text-amber-300/80">ม้วน</p>
-                  </div>
-                  <div className="bg-orange-500/20 rounded-xl px-5 py-2 border border-orange-500/30">
-                    <p className="text-3xl font-black text-orange-200">{fmt(waitingKg, 0)}</p>
-                    <p className="text-[10px] text-orange-300/80">Kg</p>
-                  </div>
-                  <div className="bg-slate-700/40 rounded-xl px-5 py-2 border border-slate-600/40">
-                    <p className="text-3xl font-black text-slate-200">{woCount}</p>
-                    <p className="text-[10px] text-slate-400">ใบสั่งผลิต</p>
-                  </div>
-                </div>
-              </div>
+            <div className="rounded-xl border border-amber-500/50 bg-amber-500/10 px-4 py-2 flex items-center gap-3 flex-wrap">
+              <span className="text-xl">🔔</span>
+              <p className="text-amber-200 font-bold text-sm flex-1 min-w-[140px]">
+                มีม้วนรอกรอ <b className="text-base">{waiting}</b> ม้วน · <span className="text-orange-300">{fmt(waitingKg, 0)} Kg</span>
+              </p>
+              <span className="text-[11px] text-amber-300/70">{woCount} ใบสั่งผลิต · แผนกผลิตส่งมาแล้ว</span>
             </div>
           )
         })()}
@@ -244,8 +303,18 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
           <div className="relative flex-1 min-w-[200px] max-w-md">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"/>
             <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="ค้นหา lot/สินค้า/ลูกค้า..."
+              placeholder="ค้นหา WO/SO/Lot/สินค้า/ลูกค้า..."
               className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-sm text-white outline-none focus:border-amber-500"/>
+          </div>
+          {/* เลือกการจัดกลุ่ม */}
+          <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-1">
+            <span className="text-[10px] text-slate-500 px-1">กลุ่มตาม:</span>
+            {([['item','📦 สินค้า'],['wo','📋 WO'],['so','🧾 SO']] as const).map(([k, label]) => (
+              <button key={k} onClick={() => setGroupBy(k)}
+                className={`text-xs font-bold px-2.5 py-1 rounded transition-colors ${groupBy === k ? 'bg-amber-500 text-white' : 'text-slate-400 hover:bg-slate-800'}`}>
+                {label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -262,145 +331,94 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
           ) : filtered.length === 0 ? (
             <div className="py-16 text-center text-slate-600">ไม่มีรายการ</div>
           ) : (() => {
-            // จัดกลุ่ม WO > SO > Lot (3 ระดับ)
-            type LotGrp = { lot: string; items: any[]; totalKg: number }
-            type SoGrp  = { so: string;  lots: LotGrp[];  totalKg: number; totalItems: number }
-            type WoGrp  = { wo: string;  sos: SoGrp[];   totalKg: number; totalItems: number; cust: string; prod: string; item: string; latest: string }
-
-            const woMap = new Map<string, Map<string, Map<string, any[]>>>()
+            // จัดกลุ่มตามที่เลือก: สินค้า (item) / WO / SO
+            const keyOf = (r: any) =>
+              groupBy === 'wo' ? ((r.work_order ?? '').trim() || '(ไม่ระบุ WO)')
+              : groupBy === 'so' ? ((r.sale_order ?? '').trim() || '(ไม่ระบุ SO)')
+              : ((r.item_code ?? '').trim() || (r.product_name ?? '').trim() || '(ไม่ระบุสินค้า)')
+            const map = new Map<string, any[]>()
             for (const r of filtered) {
-              const wo  = (r.work_order ?? '').trim() || '(ไม่ระบุ WO)'
-              const so  = (r.sale_order ?? '').trim() || '(ไม่ระบุ SO)'
-              const lot = r.lot_no ?? '(ไม่ระบุ Lot)'
-              if (!woMap.has(wo))      woMap.set(wo,  new Map())
-              if (!woMap.get(wo)!.has(so)) woMap.get(wo)!.set(so, new Map())
-              if (!woMap.get(wo)!.get(so)!.has(lot)) woMap.get(wo)!.get(so)!.set(lot, [])
-              woMap.get(wo)!.get(so)!.get(lot)!.push(r)
+              const key = keyOf(r)
+              if (!map.has(key)) map.set(key, [])
+              map.get(key)!.push(r)
             }
-
-            const woList: WoGrp[] = [...woMap.entries()].map(([wo, soMap]) => {
-              const sos: SoGrp[] = [...soMap.entries()].map(([so, lotMap]) => {
-                const lots: LotGrp[] = [...lotMap.entries()].map(([lot, items]) => ({
-                  lot, items, totalKg: items.reduce((s, x) => s + (x.weight ?? 0), 0),
-                }))
-                const totalKg = lots.reduce((s, l) => s + l.totalKg, 0)
-                const totalItems = lots.reduce((s, l) => s + l.items.length, 0)
-                return { so, lots, totalKg, totalItems }
-              })
-              const allItems = sos.flatMap(s => s.lots.flatMap(l => l.items))
-              return {
-                wo,
-                sos,
-                totalKg: sos.reduce((s, x) => s + x.totalKg, 0),
-                totalItems: sos.reduce((s, x) => s + x.totalItems, 0),
-                cust: allItems.find(x => x.customer)?.customer ?? '',
-                prod: allItems.find(x => x.product_name)?.product_name ?? '',
-                item: allItems.find(x => x.item_code)?.item_code ?? '',
-                latest: allItems.reduce((mx, x) => {
-                  const t = x.rework_received_at || x.created_at
-                  return t > mx ? t : mx
-                }, allItems[0]?.rework_received_at || allItems[0]?.created_at || ''),
-              }
-            }).sort((a, b) => b.latest.localeCompare(a.latest))
+            const groups = [...map.entries()].map(([key, items]) => ({
+              key, items,
+              totalKg: items.reduce((s, x) => s + (x.weight ?? 0), 0),
+              prod: items.find(x => x.product_name)?.product_name ?? '',
+              item: items.find(x => x.item_code)?.item_code ?? '',
+              cust: items.find(x => x.customer)?.customer ?? '',
+              title: groupBy === 'wo' ? `📋 WO ${key}` : groupBy === 'so' ? `🧾 SO ${key}` : (items.find(x => x.product_name)?.product_name ?? key),
+              latest: items.reduce((mx, x) => {
+                const t = x.rework_received_at || x.created_at || ''
+                return t > mx ? t : mx
+              }, ''),
+            })).sort((a, b) => b.latest.localeCompare(a.latest))
 
             return (
               <div className="divide-y divide-slate-800/50">
-                {woList.map(wg => {
-                  const woKey  = `wo:${wg.wo}`
-                  const woOpen = openGroups[woKey] ?? true
+                {groups.map(g => {
+                  const gKey = `prod:${g.key}`
+                  const open = openGroups[gKey] ?? true
+                  const allSel = g.items.length > 0 && g.items.every(x => selected.has(x.id))
+                  const rows = [...g.items].sort((a, b) =>
+                    (b.rework_received_at || b.created_at || '').localeCompare(a.rework_received_at || a.created_at || ''))
                   return (
-                    <div key={wg.wo} className="bg-slate-900">
-                      {/* ── WO LEVEL (ใหญ่สุด) ─────────────────── */}
-                      <button onClick={() => setOpenGroups(p => ({ ...p, [woKey]: !woOpen }))}
-                        className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-slate-800/40 transition-colors text-left border-l-4 border-amber-500">
-                        <span className="text-amber-400 text-base font-bold">{woOpen ? '▼' : '▶'}</span>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap mb-1">
-                            <span className="text-sm font-black px-3 py-1 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg">📋 WO {wg.wo}</span>
-                            <span className="text-[10px] bg-slate-700 text-slate-200 px-2 py-0.5 rounded font-bold">{wg.sos.length} SO</span>
-                            <span className="text-[10px] bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded font-bold">{wg.totalItems} ม้วน</span>
-                            <span className="text-xs text-slate-300">รวม <b className="text-orange-300 text-base">{fmt(wg.totalKg)}</b> Kg</span>
+                    <div key={g.key} className="bg-slate-900">
+                      {/* ── หัวกลุ่มสินค้า ── */}
+                      <div className="flex items-center gap-3 px-4 py-3 border-l-4 border-amber-500">
+                        <input type="checkbox" checked={allSel} className="w-4 h-4 shrink-0"
+                          onChange={e => toggleMany(g.items.map(x => x.id), e.target.checked)} title="เลือกทั้งสินค้า"/>
+                        <button onClick={() => setOpenGroups(p => ({ ...p, [gKey]: !open }))}
+                          className="flex-1 flex items-center gap-2 text-left min-w-0">
+                          <span className="text-amber-400 text-sm">{open ? '▼' : '▶'}</span>
+                          <div className="min-w-0">
+                            <p className="text-white font-bold text-sm truncate">{g.title}</p>
+                            <p className="text-xs text-slate-500 truncate">
+                              {groupBy !== 'item' && g.prod ? `${g.prod} · ` : ''}{g.cust}{g.item && <span className="font-mono"> · {g.item}</span>}
+                            </p>
                           </div>
-                          <div className="text-xs text-slate-500 flex gap-3 flex-wrap">
-                            {wg.cust && <span>👥 {wg.cust}</span>}
-                            {wg.prod && <span className="truncate max-w-[260px]">📦 {wg.prod}</span>}
-                            {wg.item && <span className="font-mono">{wg.item}</span>}
-                          </div>
+                        </button>
+                        <div className="text-right shrink-0">
+                          <p className="text-orange-300 font-black text-base leading-none">{fmt(g.totalKg)} <span className="text-[10px] text-slate-500 font-normal">Kg</span></p>
+                          <p className="text-[10px] text-slate-500">{g.items.length} ม้วน</p>
                         </div>
-                      </button>
+                      </div>
 
-                      {woOpen && wg.sos.map(sg => {
-                        const soKey  = `${woKey}|so:${sg.so}`
-                        const soOpen = openGroups[soKey] ?? true
+                      {/* ── แถวม้วน (คลิกทั้งแถวเพื่อเลือก) ── */}
+                      {open && rows.map(r => {
+                        const sel = selected.has(r.id)
                         return (
-                          <div key={sg.so} className="ml-6 border-l-2 border-blue-500/30">
-                            {/* ── SO LEVEL ─────────────────── */}
-                            <button onClick={() => setOpenGroups(p => ({ ...p, [soKey]: !soOpen }))}
-                              className="w-full flex items-center gap-3 px-4 py-2 bg-slate-900/60 hover:bg-slate-800/40 transition-colors text-left">
-                              <span className="text-blue-400 text-sm">{soOpen ? '▼' : '▶'}</span>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="text-xs font-bold px-2 py-0.5 rounded bg-blue-500/30 text-blue-200">SO {sg.so}</span>
-                                  <span className="text-[10px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded">{sg.lots.length} Lot</span>
-                                  <span className="text-[10px] text-slate-400">{sg.totalItems} ม้วน · <b className="text-orange-300">{fmt(sg.totalKg)}</b> Kg</span>
-                                </div>
+                          <div key={r.id} onClick={() => toggleSel(r.id)}
+                            className={`flex items-center gap-3 px-4 py-2 cursor-pointer border-t border-slate-800/30 transition-colors ${sel ? 'bg-blue-500/15' : 'hover:bg-slate-800/30'}`}>
+                            <input type="checkbox" checked={sel} onClick={e => e.stopPropagation()} onChange={() => toggleSel(r.id)} className="w-4 h-4 shrink-0"/>
+                            <div className="w-16 shrink-0 text-right leading-none">
+                              <p className="text-orange-300 font-black text-lg">{fmt(r.weight)}</p>
+                              <p className="text-[9px] text-slate-500">Kg</p>
+                            </div>
+                            <div className="shrink-0 text-center bg-slate-800 rounded-lg px-2 py-1 w-14">
+                              <p className="text-[8px] text-slate-500 leading-none">ม้วนที่</p>
+                              <p className="text-white font-black text-base leading-tight">{r.roll_no}</p>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap text-[10px] mb-0.5">
+                                {(() => {
+                                  const ti = inboundInfo(r.inbound_type)
+                                  return <span className={`px-1.5 py-0.5 rounded font-bold ${ti.badge}`} title={ti.desc}>{ti.emoji} {ti.label}</span>
+                                })()}
+                                {r.work_order && <span className="bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded font-bold">WO {r.work_order}</span>}
+                                {r.sale_order && <span className="bg-blue-500/15 text-blue-300 px-1.5 py-0.5 rounded font-bold">SO {r.sale_order}</span>}
+                                <span className="font-mono text-slate-500">Lot {r.lot_no}</span>
+                                <span className="text-slate-600">· เครื่อง {r.machine_no || '—'}</span>
+                                <span className="text-slate-600">· {fmtDateTime(r.rework_received_at || r.created_at)}</span>
+                                {r.is_legacy && <span className="text-purple-300">(เก่า)</span>}
                               </div>
-                            </button>
-
-                            {soOpen && sg.lots.map(lg => {
-                              const lotKey  = `${soKey}|lot:${lg.lot}`
-                              const lotOpen = openGroups[lotKey] ?? true
-                              return (
-                                <div key={lg.lot} className="ml-6 border-l-2 border-slate-700">
-                                  {/* ── LOT LEVEL ─────────────────── */}
-                                  <button onClick={() => setOpenGroups(p => ({ ...p, [lotKey]: !lotOpen }))}
-                                    className="w-full flex items-center gap-2 px-4 py-1.5 hover:bg-slate-800/30 transition-colors text-left">
-                                    <span className="text-slate-500 text-xs">{lotOpen ? '▼' : '▶'}</span>
-                                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-700 text-slate-200">Lot {lg.lot}</span>
-                                    <span className="text-[10px] text-slate-500">{lg.items.length} ม้วน · {fmt(lg.totalKg)} Kg</span>
-                                  </button>
-
-                                  {lotOpen && (
-                                    <div className="px-4 pb-3 overflow-x-auto">
-                                      <table className="w-full text-sm">
-                                        <thead className="text-[10px] text-slate-500 uppercase tracking-wider border-b border-slate-800">
-                                          <tr>
-                                            {['วันที่','แหล่ง','เครื่องเดิม','นน. (Kg)','เหตุผลกรอ','ผู้รับ', 'การจัดการ'].map(h => (
-                                              <th key={h} className="px-2 py-1.5 text-left font-semibold whitespace-nowrap">{h}</th>
-                                            ))}
-                                          </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-800/40">
-                                          {lg.items.map(r => (
-                                <tr key={r.id} className="hover:bg-slate-800/30">
-                                  <td className="px-2 py-1.5 text-slate-400 whitespace-nowrap text-xs">{fmtDateTime(r.rework_received_at || r.created_at)}</td>
-                                  <td className="px-2 py-1.5">
-                                    {(() => {
-                                      const ti = inboundInfo(r.inbound_type)
-                                      return <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${ti.badge}`} title={`${ti.no} ${ti.label} — ${ti.desc}`}>{ti.emoji} {ti.label}</span>
-                                    })()}
-                                    {r.is_legacy && <span className="ml-1 text-[9px] text-purple-300">(เก่า)</span>}
-                                  </td>
-                                  <td className="px-2 py-1.5 text-white font-bold">{r.machine_no || '—'}</td>
-                                  <td className="px-2 py-1.5 text-orange-300 font-bold">{fmt(r.weight)}</td>
-                                  <td className="px-2 py-1.5 text-slate-400 text-xs max-w-[160px] truncate" title={r.remark}>{r.remark || '—'}</td>
-                                  <td className="px-2 py-1.5 text-slate-300 text-xs">{r.rework_received_by || r.transferred_by || '—'}</td>
-                                  <td className="px-2 py-1.5">
-                                    <div className="flex gap-1 flex-wrap">
-                                      <button onClick={() => setShowReceive(r)} className="text-[10px] bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded font-bold">🔧 เริ่มกรอ</button>
-                                      <button onClick={() => setShowReturn(r)}  className="text-[10px] bg-amber-600 hover:bg-amber-500 text-white px-2 py-1 rounded font-bold whitespace-nowrap">↩ ส่งคืนผลิต</button>
-                                      <button onClick={() => setShowScrap(r)}   className="text-[10px] bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded font-bold">🗑 เศษ</button>
-                                    </div>
-                                          </td>
-                                        </tr>
-                                          ))}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                  )}
-                                </div>
-                              )
-                            })}
+                              <p className="text-xs text-slate-400 truncate" title={r.remark}>⚠ เหตุผล: {r.remark || '—'}</p>
+                            </div>
+                            <div className="flex gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                              <button onClick={() => setShowReturn(r)} title="ส่งคืนผลิต" className="text-[11px] bg-amber-600/80 hover:bg-amber-500 text-white px-2 py-1.5 rounded font-bold">↩</button>
+                              <button onClick={() => setShowScrap(r)} title="ทำลายเป็นเศษ" className="text-[11px] bg-red-600/80 hover:bg-red-500 text-white px-2 py-1.5 rounded font-bold">🗑</button>
+                            </div>
                           </div>
                         )
                       })}
@@ -481,6 +499,31 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
         </div>
 
       </div>
+
+      {/* ── แถบเบิกม้วน (ลอยล่าง โผล่เมื่อเลือก) ── */}
+      {selected.size > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-slate-900 border-t-2 border-blue-500 shadow-2xl px-5 py-3">
+          <div className="max-w-6xl mx-auto flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <span className="text-3xl font-black text-blue-300">{selected.size}</span>
+              <div className="leading-tight">
+                <p className="text-white text-sm font-bold">ม้วนที่เลือกเบิก</p>
+                <p className="text-slate-400 text-xs">รวม {fmt(rolls.filter(r => selected.has(r.id)).reduce((s, r) => s + (r.weight ?? 0), 0))} Kg</p>
+              </div>
+            </div>
+            <button onClick={() => setSelected(new Set())} className="text-xs text-slate-400 hover:text-white underline">ล้าง</button>
+            <div className="flex-1 min-w-[180px]">
+              <input value={withdrawBy} onChange={e => setWithdrawBy(e.target.value)}
+                placeholder="ชื่อผู้เบิก *"
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white outline-none focus:border-blue-500"/>
+            </div>
+            <button onClick={withdrawSelected} disabled={withdrawing}
+              className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white px-6 py-2.5 rounded-lg text-sm font-black flex items-center gap-2">
+              {withdrawing ? 'กำลังเบิก...' : <>📥 เบิก {selected.size} ม้วน → สร้างงานกรอ</>}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Modal: เริ่มกรอ (กรอกผู้รับ) */}
       {showReceive && (

@@ -1962,12 +1962,94 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
           }
           const rewinderRows = [...byRewinder.entries()].map(([k, v]) => ({ k, ...v })).sort((a, b) => b.kg - a.kg)
 
+          // ── KPI รวม + แยกตามสินค้า ──
+          const totalIn    = P.totalKg + E.totalKg
+          const totalGood  = P.reworkedKg + E.reworkedKg
+          const totalScrap = Math.max(0, totalIn - totalGood)
+          const yieldPct   = totalIn ? (totalGood / totalIn * 100) : 0
+          const activeJobCount = reworkJobs.filter(j => (j.status ?? 'active') === 'active').length
+          const pendingRolls   = reworkRolls.filter(r => !r.is_legacy && (!r.rework_status || r.rework_status === 'pending'))
+          const pendingKg      = pendingRolls.reduce((s, r) => s + (r.weight ?? 0), 0)
+          const prodMap = new Map<string, any>()
+          for (const r of [...fromProd, ...fromExt]) {
+            const k = (r.product_name ?? '').trim() || (r.item_code ?? '').trim() || '(ไม่ระบุ)'
+            const v = prodMap.get(k) ?? { k, item: r.item_code ?? '', received: 0, salvaged: 0 }
+            v.received += r.weight ?? 0
+            v.salvaged += salvagedKgOf(r)
+            prodMap.set(k, v)
+          }
+          const productRows = [...prodMap.values()]
+            .map(v => ({ ...v, scrap: Math.max(0, v.received - v.salvaged), pct: v.received ? v.salvaged / v.received * 100 : 0 }))
+            .sort((a, b) => b.received - a.received)
+
           return (
             <div className="space-y-4">
+              {/* ── KPI สรุปบนสุด ── */}
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+                <div className="bg-white rounded-xl border-l-4 border-slate-400 border border-gray-200 shadow-sm p-3">
+                  <p className="text-[11px] text-gray-500">เบิกมา</p>
+                  <p className="text-2xl font-black text-gray-700">{fmtKg(totalIn)}<span className="text-xs font-normal text-gray-400"> kg</span></p>
+                </div>
+                <div className="bg-white rounded-xl border-l-4 border-green-500 border border-gray-200 shadow-sm p-3">
+                  <p className="text-[11px] text-gray-500">กรอได้</p>
+                  <p className="text-2xl font-black text-green-600">{fmtKg(totalGood)}<span className="text-xs font-normal text-gray-400"> kg</span></p>
+                </div>
+                <div className="bg-white rounded-xl border-l-4 border-red-500 border border-gray-200 shadow-sm p-3">
+                  <p className="text-[11px] text-gray-500">เศษ</p>
+                  <p className="text-2xl font-black text-red-600">{fmtKg(totalScrap)}<span className="text-xs font-normal text-gray-400"> kg</span></p>
+                </div>
+                <div className="bg-white rounded-xl border-l-4 border-blue-500 border border-gray-200 shadow-sm p-3">
+                  <p className="text-[11px] text-gray-500">% สำเร็จ (Yield)</p>
+                  <p className={`text-2xl font-black ${yieldPct >= 80 ? 'text-green-600' : yieldPct >= 60 ? 'text-amber-600' : 'text-red-600'}`}>{yieldPct.toFixed(1)}%</p>
+                </div>
+                <div className="bg-white rounded-xl border-l-4 border-indigo-500 border border-gray-200 shadow-sm p-3">
+                  <p className="text-[11px] text-gray-500">งานกรอค้าง</p>
+                  <p className="text-2xl font-black text-indigo-600">{activeJobCount}<span className="text-xs font-normal text-gray-400"> งาน</span></p>
+                </div>
+                <div className="bg-white rounded-xl border-l-4 border-amber-500 border border-gray-200 shadow-sm p-3">
+                  <p className="text-[11px] text-gray-500">รอเบิก</p>
+                  <p className="text-2xl font-black text-amber-600">{pendingRolls.length}<span className="text-xs font-normal text-gray-400"> ม้วน</span></p>
+                  <p className="text-[10px] text-gray-400">{fmtKg(pendingKg)} kg</p>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {renderBlock('กรอจากเป่า', '🏭', 'bg-gradient-to-r from-blue-500 to-blue-600', P)}
                 {renderBlock('กรอจากงานอื่นๆ', '📦', 'bg-gradient-to-r from-purple-500 to-purple-600', E)}
               </div>
+
+              {/* ── แยกตามสินค้า ── */}
+              {productRows.length > 0 && (
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="px-5 py-3 border-b border-gray-100">
+                    <p className="font-bold text-gray-700 flex items-center gap-2"><span>📦</span> กรอได้ / เศษ — แยกตามสินค้า</p>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 text-[11px] text-gray-500 uppercase sticky top-0">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-semibold">สินค้า</th>
+                          <th className="px-3 py-2 text-right font-semibold">เบิกมา</th>
+                          <th className="px-3 py-2 text-right font-semibold">กรอได้</th>
+                          <th className="px-3 py-2 text-right font-semibold">เศษ</th>
+                          <th className="px-3 py-2 text-right font-semibold">% สำเร็จ</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {productRows.map(p => (
+                          <tr key={p.k} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 text-gray-700"><span className="font-semibold">{p.k}</span>{p.item && <span className="text-gray-400 font-mono text-xs"> · {p.item}</span>}</td>
+                            <td className="px-3 py-2 text-right text-gray-700 font-bold">{num(p.received,1)}</td>
+                            <td className="px-3 py-2 text-right text-green-600 font-bold">{num(p.salvaged,1)}</td>
+                            <td className="px-3 py-2 text-right text-red-500">{num(p.scrap,1)}</td>
+                            <td className={`px-3 py-2 text-right font-bold ${p.pct >= 80 ? 'text-green-600' : p.pct >= 60 ? 'text-amber-600' : 'text-red-600'}`}>{p.pct.toFixed(0)}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
               {/* รับงานกรอมาจากใบสั่งผลิตไหนบ้าง (WO › SO › Lot) */}
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">

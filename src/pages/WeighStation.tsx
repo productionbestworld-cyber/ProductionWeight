@@ -2784,21 +2784,16 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
             </div>
           )}
 
-          {/* ── สรุปยอด: ม้วนดี / ม้วนดี+กรอ (ดูง่าย) ── */}
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-xl p-2.5 bg-brand-500/10 border border-brand-500/30 text-center">
-              <p className="text-[10px] text-brand-300">ม้วนดี (FG)</p>
-              <p className="text-xl font-black text-brand-200 leading-tight">{fmt(weighedKg,dec)}</p>
-              <p className="text-[10px] text-slate-500">{goodCnt} ม้วน · Kgs.</p>
-            </div>
-            <div className="rounded-xl p-2.5 bg-amber-500/10 border border-amber-500/30 text-center">
-              <p className="text-[10px] text-amber-300">ดี + กรอ รวม</p>
-              <p className="text-xl font-black text-amber-200 leading-tight">{fmt(goodPlusBadKg,dec)}</p>
-              <p className="text-[10px] text-slate-500">{goodCnt + badCnt} ม้วน · กรอ {fmt(badKgSum,dec)}</p>
-            </div>
+          {/* ── แถบแยก: ดี + กรอ รวม (คนละแถบกับ progress ของม้วนดี) ── */}
+          <div className="rounded-xl px-3 py-2 bg-amber-500/10 border border-amber-500/30 flex items-center justify-between">
+            <span className="text-amber-300 text-xs font-bold">🔄 ดี + กรอ รวม</span>
+            <span className="text-right leading-tight">
+              <b className="text-amber-200 text-lg">{fmt(goodPlusBadKg,dec)}</b> <span className="text-amber-300 text-xs">Kgs.</span>
+              <span className="block text-[10px] text-slate-500">{goodCnt + badCnt} ม้วน · กรอ {fmt(badKgSum,dec)} Kgs.</span>
+            </span>
           </div>
 
-          {/* Progress */}
+          {/* Progress (ของเดิม — ม้วนดี เทียบเป้า) */}
           {planned > 0 && (
             <div className={`rounded-xl p-3 border ${done ? 'bg-green-500/10 border-green-500/30' : 'bg-slate-900 border-slate-800'}`}>
               <div className="flex justify-between text-xs mb-1.5">

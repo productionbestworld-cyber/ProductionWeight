@@ -526,7 +526,7 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
   dept?: 'blow' | 'print' | 'rewind'
 }) {
   const [editing, setEditing]   = useState<MachineProfile | null>(null)
-  const [progress, setProgress] = useState<Record<string, { done: number; rolls: number }>>({})
+  const [progress, setProgress] = useState<Record<string, { done: number; rolls: number; badKg: number; badRolls: number }>>({})
   const [parked,   setParked]   = useState<Record<string, any[]>>({}) // machine_no → list ของ parked
   const [showResumeClosed, setShowResumeClosed] = useState(false)
   const [parkedPickerMachine, setParkedPickerMachine] = useState<string | null>(null)
@@ -590,7 +590,7 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
 
     supabase.from('production_rolls')
       .select('machine_no, lot_no, weight, roll_type')
-      .eq('roll_type', 'good')
+      .in('roll_type', ['good', 'bad'])
       .in('machine_no', machineNos)
       .then(({ data }) => {
         if (!data) return
@@ -598,15 +598,15 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
         const lotMap: Record<string, string> = {}
         profiles.forEach(p => { if (p.machine_no && p.lotNo) lotMap[p.machine_no] = p.lotNo })
 
-        const map: Record<string, { done: number; rolls: number }> = {}
+        const map: Record<string, { done: number; rolls: number; badKg: number; badRolls: number }> = {}
         data.forEach(r => {
           const key = r.machine_no ?? ''
           const curLot = lotMap[key]
           // ถ้ามี lot ปัจจุบัน ให้นับเฉพาะ lot นั้น
           if (curLot && r.lot_no !== curLot) return
-          if (!map[key]) map[key] = { done: 0, rolls: 0 }
-          map[key].done  += r.weight ?? 0
-          map[key].rolls += 1
+          if (!map[key]) map[key] = { done: 0, rolls: 0, badKg: 0, badRolls: 0 }
+          if (r.roll_type === 'good') { map[key].done += r.weight ?? 0; map[key].rolls += 1 }
+          else if (r.roll_type === 'bad') { map[key].badKg += r.weight ?? 0; map[key].badRolls += 1 }
         })
         setProgress(map)
       })
@@ -676,7 +676,7 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
         <div className="grid grid-cols-3 2xl:grid-cols-4 gap-2 flex-1 overflow-hidden" style={{gridTemplateRows:'repeat(3, 1fr)'}}>
           {sorted.map((p, i) => {
             const ready    = isReady(p)
-            const prog     = progress[p.machine_no] ?? { done: 0, rolls: 0 }
+            const prog     = progress[p.machine_no] ?? { done: 0, rolls: 0, badKg: 0, badRolls: 0 }
             const planned  = parseFloat(p.plannedQty) || 0
             const pct      = planned > 0 ? Math.min((prog.done / planned) * 100, 100) : 0
             const remaining = Math.max(planned - prog.done, 0)
@@ -748,6 +748,13 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
                             </span>
                           )}
                         </div>
+                        {/* ดี + กรอ รวม (โชว์เมื่อมีม้วนกรอ) */}
+                        {prog.badRolls > 0 && (
+                          <div className="text-[10px] text-amber-300 mb-1">
+                            🔄 ดี+กรอ รวม <b className="text-amber-200">{(prog.done + prog.badKg).toFixed(p.decimal ?? 2)}</b> Kgs.
+                            <span className="text-slate-500"> ({prog.rolls + prog.badRolls} ม้วน · กรอ {prog.badKg.toFixed(p.decimal ?? 2)})</span>
+                          </div>
+                        )}
                         {planned > 0 && (
                           <>
                             <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden">
@@ -1940,6 +1947,11 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
   const remaining = Math.max(0, planned - weighedKg)
   const pct       = planned > 0 ? Math.min(100, Math.round((weighedKg / planned) * 100)) : 0
   const done      = planned > 0 && weighedKg >= planned
+  // ── ยอดสรุป: ม้วนดี (FG) vs ม้วนดี+กรอ รวม ──
+  const goodCnt   = weighedRolls.filter((r:any)=>r?.roll_type==='good').length
+  const badCnt    = weighedRolls.filter((r:any)=>r?.roll_type==='bad').length
+  const badKgSum  = weighedRolls.filter((r:any)=>r?.roll_type==='bad').reduce((s:number,r:any)=>s+(r?.weight??0),0)
+  const goodPlusBadKg = weighedKg + badKgSum
 
   // หาเลขม้วนที่หายไปเลขแรก (เช่น มี 1,2,3,5 → คืน 4) — ถ้าไม่มีช่องว่าง คืน max+1
   function nextRollNo(rolls: any[]): number {
@@ -2772,17 +2784,31 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
             </div>
           )}
 
+          {/* ── สรุปยอด: ม้วนดี / ม้วนดี+กรอ (ดูง่าย) ── */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-xl p-2.5 bg-brand-500/10 border border-brand-500/30 text-center">
+              <p className="text-[10px] text-brand-300">ม้วนดี (FG)</p>
+              <p className="text-xl font-black text-brand-200 leading-tight">{fmt(weighedKg,dec)}</p>
+              <p className="text-[10px] text-slate-500">{goodCnt} ม้วน · Kgs.</p>
+            </div>
+            <div className="rounded-xl p-2.5 bg-amber-500/10 border border-amber-500/30 text-center">
+              <p className="text-[10px] text-amber-300">ดี + กรอ รวม</p>
+              <p className="text-xl font-black text-amber-200 leading-tight">{fmt(goodPlusBadKg,dec)}</p>
+              <p className="text-[10px] text-slate-500">{goodCnt + badCnt} ม้วน · กรอ {fmt(badKgSum,dec)}</p>
+            </div>
+          </div>
+
           {/* Progress */}
           {planned > 0 && (
             <div className={`rounded-xl p-3 border ${done ? 'bg-green-500/10 border-green-500/30' : 'bg-slate-900 border-slate-800'}`}>
               <div className="flex justify-between text-xs mb-1.5">
-                <span className="text-slate-400">ชั่งแล้ว <b className={done?'text-green-300':'text-white'}>{fmt(weighedKg,dec)}</b></span>
+                <span className="text-slate-400">ชั่งแล้ว (ม้วนดี) <b className={done?'text-green-300':'text-white'}>{fmt(weighedKg,dec)}</b></span>
                 <span className={done ? 'text-green-400 font-bold' : 'text-brand-300'}>{done ? '✓ ครบ' : `เหลือ ${fmt(remaining,dec)}`}</span>
               </div>
               <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
                 <div className={`h-full rounded-full ${progressColor}`} style={{width:`${pct}%`}}/>
               </div>
-              <p className="text-slate-600 text-[10px] mt-1">{weighedRolls.filter((r:any)=>r?.roll_type==='good').length} ม้วนดี · {pct}% · เป้า {fmt(planned,dec)} Kgs.</p>
+              <p className="text-slate-600 text-[10px] mt-1">{goodCnt} ม้วนดี · {pct}% · เป้า {fmt(planned,dec)} Kgs.</p>
             </div>
           )}
         </div>

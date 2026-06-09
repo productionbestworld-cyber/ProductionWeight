@@ -11,6 +11,7 @@ import Warehouse from './pages/Warehouse'
 import Admin, { PinGate, DeptPinGate, isAdminUnlocked, isDeptUnlocked, lockAllDepts, lockAdmin } from './pages/Admin'
 import ReviewQueue from './pages/ReviewQueue'
 import ProductsPage from './pages/Products'
+import { APP_VERSION, APP_BUILD_DATE } from './version'
 
 type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings' | 'admin' | 'review' | 'nc' | 'products'
 type Dept = 'blow' | 'print' | 'rewind'
@@ -215,6 +216,7 @@ export default function App() {
           </div>
 
           <p className="text-center text-slate-600 text-xs mt-6">กรุณาเลือกแผนกที่ต้องการใช้งาน แล้วใส่ PIN เพื่อยืนยัน</p>
+          <p className="text-center text-slate-700 text-[11px] mt-3">เวอร์ชัน {APP_VERSION} · {APP_BUILD_DATE}</p>
         </div>
 
         {/* PIN gate หลังเลือกแผนกแล้ว */}
@@ -303,7 +305,8 @@ export default function App() {
         </button>
 
         {/* Connection status — ชิดขวา */}
-        <div className="ml-auto flex-shrink-0">
+        <div className="ml-auto flex-shrink-0 flex items-center gap-2">
+          <span className="hidden md:block text-[10px] text-slate-600" title={`build ${APP_BUILD_DATE}`}>v{APP_VERSION}</span>
           <button onClick={checkConn} title={latency ? `${latency}ms` : undefined}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
               connStatus === 'online'   ? 'bg-green-500/10 border-green-500/30 text-green-400' :

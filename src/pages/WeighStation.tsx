@@ -1361,6 +1361,7 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
         sale_order:    p.soNo ?? '',
         work_order:    p.woNo ?? '',
         delivery_date: p.deliveryDate || null,
+        fresh_start:   p.freshStart ?? false,
         updated_at:    new Date().toISOString(),
       }, { onConflict: 'machine_no' })
       if (error) throw new Error(error.message)
@@ -1528,6 +1529,18 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
                 className="w-full bg-slate-800 border-2 border-brand-500/40 hover:border-brand-500 focus:border-brand-500 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none font-mono cursor-pointer"
               />
             </div>
+            {/* เริ่มนับม้วนใหม่ — กรณี SO เดียวกันคนละ WO ใน Lot เดียวกัน */}
+            {!isRewind && (
+              <label className="col-span-2 flex items-start gap-2 bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-2 cursor-pointer">
+                <input type="checkbox" checked={!!p.freshStart}
+                  onChange={e => setP(prev => ({ ...prev, freshStart: e.target.checked }))}
+                  className="w-4 h-4 mt-0.5"/>
+                <span className="text-xs">
+                  <span className="text-white font-bold">▶ เริ่มนับม้วนใหม่ (เริ่ม Roll 1)</span>
+                  <span className="block text-[10px] text-slate-500">เปิดเมื่อ SO เดียวกันแต่คนละ WO ใน Lot เดียวกัน — ไม่ต่อจากม้วนของ WO เดิม</span>
+                </span>
+              </label>
+            )}
             {inp('Length (M.)',  'length',  '',          true)}
             {!isRewind && inp('ยอดสั่งผลิต (kg) *','plannedQty', '', true)}
             <div>
@@ -1729,6 +1742,7 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
           soNo:        data.sale_order   ?? '',
           woNo:        data.work_order   ?? '',
           deliveryDate: data.delivery_date ?? '',
+          freshStart:  data.fresh_start  ?? false,
         })
       })
   }, [initialProfile.machine_no])
@@ -2030,7 +2044,11 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
         const offlineForThis = loadQueue()
           .filter((q: any) => q.machine_no === profile.machine_no && q.lot_no === profile.lotNo)
           .map((q: any) => ({ ...q, id: `offline_${q.created_at}_${q.roll_no}`, _offline: true }))
-        const merged = [...(data ?? []), ...offlineForThis]
+        let merged = [...(data ?? []), ...offlineForThis]
+        // เริ่มงานใหม่ (SO เดียวคนละ WO): นับเฉพาะม้วนของ WO นี้ — ไม่ต่อจาก WO เดิมใน Lot เดียวกัน
+        if ((profile as any).freshStart) {
+          merged = merged.filter((r: any) => (r.work_order ?? '') === (profile.woNo ?? ''))
+        }
         if (!merged.length) {
           setRollNo(1); setBadRollNo(1); setWeighedRolls([]); setWeighedKg(0); return
         }
@@ -2064,6 +2082,9 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
       if (timerRef.current) clearInterval(timerRef.current)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // reload ม้วนเมื่อ freshStart/WO/Lot เปลี่ยน (profile โหลด async หลัง mount)
+  useEffect(() => { loadRollsForMachine() }, [(profile as any).freshStart, profile.woNo, profile.lotNo]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function clearAwaiting() {
     if (awaitingClearRef.current) { awaitingClearRef.current = false; setAwaitingClear(false) }
@@ -2355,10 +2376,11 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       if (insertErr && (insertErr as any).code === '23505') {
         console.warn('roll_no ชน — กำลังหาเลขใหม่...')
         const { data: existing } = await supabase.from('production_rolls')
-          .select('roll_no, roll_type')
+          .select('roll_no, roll_type, work_order')
           .eq('machine_no', profile.machine_no)
           .eq('lot_no', profile.lotNo)
-        const sameTypeRolls = (existing ?? []).filter((x:any) => x.roll_type === actualType)
+        const sameTypeRolls = (existing ?? []).filter((x:any) =>
+          x.roll_type === actualType && (!(profile as any).freshStart || (x.work_order ?? '') === (profile.woNo ?? '')))
         const newRollNo = nextRollNo(sameTypeRolls)
         const retryPayload = { ...payload, roll_no: newRollNo }
         const retry = await supabase.from('production_rolls').insert(retryPayload).select().single()

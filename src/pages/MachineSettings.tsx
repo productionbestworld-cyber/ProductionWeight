@@ -67,6 +67,8 @@ export interface MachineProfile {
   woNo:        string
   // วันที่ส่งของ
   deliveryDate: string  // YYYY-MM-DD
+  // เริ่มนับม้วนใหม่ (SO เดียวคนละ WO ใน Lot เดียวกัน)
+  freshStart?: boolean
 }
 
 const EMPTY_PROFILE: MachineProfile = {
@@ -118,6 +120,7 @@ function dbToProfile(row: any): MachineProfile {
     soNo:        row.sale_order   ?? '',
     woNo:        row.work_order    ?? '',
     deliveryDate: row.delivery_date ?? '',
+    freshStart:  row.fresh_start  ?? false,
   }
 }
 function profileToDb(p: MachineProfile) {
@@ -149,6 +152,7 @@ function profileToDb(p: MachineProfile) {
     sale_order:    p.soNo ?? '',
     work_order:    p.woNo ?? '',
     delivery_date: p.deliveryDate || null,
+    fresh_start:   p.freshStart ?? false,
     updated_at:    new Date().toISOString(),
   }
 }

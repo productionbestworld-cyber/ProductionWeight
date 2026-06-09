@@ -2798,7 +2798,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
               {/* แถบเดียว 2 สี — hover ดูยอดจริง */}
               <div className="h-3 bg-slate-800 rounded-full overflow-hidden flex"
                    title={`ม้วนดี ${fmt(weighedKg,dec)} + กรอ ${fmt(badKgSum,dec)} = รวม ${fmt(goodPlusBadKg,dec)} Kgs. (เป้า ${fmt(planned,dec)})`}>
-                <div className={`h-full ${progressColor} transition-all`} style={{width:`${fgW}%`}}
+                <div className={`h-full ${done ? 'bg-green-500' : 'bg-brand-500'} transition-all`} style={{width:`${fgW}%`}}
                      title={`ม้วนดี ${fmt(weighedKg,dec)} Kgs. (${goodCnt} ม้วน)`}/>
                 <div className="h-full bg-amber-400 transition-all" style={{width:`${badW}%`}}
                      title={`กรอ ${fmt(badKgSum,dec)} Kgs. (${badCnt} ม้วน)`}/>

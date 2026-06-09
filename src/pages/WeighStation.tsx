@@ -124,6 +124,7 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
 </style>
 <div style="position:relative;width:${savedLayout.labelW}mm;height:${savedLayout.labelH}mm;border:1.5px solid #000;overflow:hidden">
 ${savedLayout.fields.map(renderLongField).join('\n')}
+${rollType === 'bad' && reason ? `<div style="position:absolute;left:0;bottom:0;width:100%;background:#ffe5e5;border-top:1.5px solid #c00;color:#c00;font-weight:900;font-size:8.5pt;text-align:center;padding:0.6mm 1mm;line-height:1.15">⚠ เหตุผลกรอ: ${reason}</div>` : ''}
 </div>`
 
   // ═══════════════════════════════════════════════════════
@@ -158,6 +159,7 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
 </style>
 <div style="position:relative;width:${shortLayout.labelW}mm;height:${shortLayout.labelH}mm;border:1.5px solid #000;overflow:hidden">
 ${shortLayout.fields.map(renderShortField).join('\n')}
+${rollType === 'bad' && reason ? `<div style="position:absolute;left:0;bottom:0;width:100%;background:#ffe5e5;border-top:1.5px solid #c00;color:#c00;font-weight:900;font-size:7pt;text-align:center;padding:0.5mm 0.5mm;line-height:1.15">⚠ เหตุผลกรอ: ${reason}</div>` : ''}
 </div>`
 
 

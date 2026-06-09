@@ -1,4 +1,4 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายละเอียดใน CHANGELOG.md
-export const APP_VERSION = '1.0.1'
+export const APP_VERSION = '1.0.2'
 export const APP_BUILD_DATE = '2026-06-08'

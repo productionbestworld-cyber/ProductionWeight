@@ -56,6 +56,7 @@ async function printLabel(p: MachineProfile, rollNo: number, gross: number, net:
   const longFieldData: Record<string, string> = {
     header:      (p.headerText?.trim() || 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด') +
                  (rollTypeLabelLong ? `&nbsp;&nbsp;[${rollTypeLabelLong}]` : '') +
+                 (rollType === 'bad' ? `&nbsp;&nbsp;<span style="font-size:0.85em">รหัสสินค้า: <b>${p.itemCode || '—'}</b></span>` : '') +
                  (rollType === 'bad' && reason ? `&nbsp;&nbsp;<span style="color:#c00">เหตุผล: ${reason}</span>` : ''),
     // 3-column header
     mat:         `Mat Code&nbsp;&nbsp;<b style="font-size:1.15em">${p.matCode}</b>`,
@@ -134,7 +135,7 @@ ${savedLayout.fields.map(renderLongField).join('\n')}
   const shortHeader  = p.blankHeader ? '' : ((p.headerText || '').trim() || 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด')
   const rollWord     = rollType.startsWith('scrap') ? 'ถุง' : rollType === 'bad' ? 'กรอ' : 'Roll'
   const shortFieldData: Record<string, string> = {
-    header:    shortHeader + (rollTypeLabelLong ? `${shortHeader ? '&nbsp;' : ''}[${rollTypeLabelLong}]` : '') + (rollType === 'bad' && reason ? `&nbsp;<span style="color:#c00">เหตุผล: ${reason}</span>` : ''),
+    header:    shortHeader + (rollTypeLabelLong ? `${shortHeader ? '&nbsp;' : ''}[${rollTypeLabelLong}]` : '') + (rollType === 'bad' ? `&nbsp;<span style="font-size:0.85em">รหัส: <b>${p.itemCode || '—'}</b></span>` : '') + (rollType === 'bad' && reason ? `&nbsp;<span style="color:#c00">เหตุผล: ${reason}</span>` : ''),
     mat:       `Mat&nbsp;&nbsp;<b>${p.matCode}</b>`,
     mfg:       `MFG&nbsp;&nbsp;<b>${mfgDate}</b>`,
     rollno:    `${rollWord}&nbsp;<b>${rollNo === 0 ? '—' : rollNo}</b>`,

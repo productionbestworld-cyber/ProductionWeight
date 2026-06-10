@@ -70,6 +70,9 @@ export default function RollDetail() {
   const dateStr    = createdAt.toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit', year:'numeric' })
   const timeStr    = createdAt.toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit' })
   const currentUrl = window.location.href
+  // วันหมดอายุ — เฉพาะลูกค้าหาดทิพย์ (cust 08): วันผลิต + 6 เดือน
+  const isHadthip  = (roll.cust_code ?? '').trim() === '08'
+  const expStr     = (() => { const d = new Date(roll.created_at); d.setMonth(d.getMonth() + 6); return d.toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit', year:'numeric' }) })()
 
   const typeLabel  = roll.roll_type === 'good' ? 'FG ✓' : roll.roll_type === 'scrap' ? 'ของเสีย' : 'กรอ/ซ่อม'
   const typeBg     = roll.roll_type === 'good' ? 'bg-brand-700' : roll.roll_type === 'scrap' ? 'bg-red-800' : 'bg-amber-700'
@@ -107,11 +110,14 @@ export default function RollDetail() {
         <div className="px-5 py-4 space-y-2.5 border-b border-slate-800">
           <Row label="ลูกค้า"      val={roll.customer     || '—'} />
           <Row label="สินค้า"      val={roll.product_name || '—'} />
+          {roll.item_code && <Row label="รหัสสินค้า" val={roll.item_code} mono />}
+          {roll.mat_code  && <Row label="Mat Code"   val={roll.mat_code}  mono />}
           <Row label="Lot No"      val={roll.lot_no       || '—'} mono />
           <Row label="เครื่องจักร" val={roll.machine_no   || '—'} />
           {roll.inspector && <Row label="ผู้ตรวจสอบ" val={roll.inspector} />}
           {roll.remark    && <Row label="หมายเหตุ"   val={roll.remark} />}
-          <Row label="วันที่ชั่ง"  val={`${dateStr}  ${timeStr}`} />
+          <Row label="วันที่ผลิต"  val={`${dateStr}  ${timeStr}`} />
+          {isHadthip && <Row label="วันหมดอายุ (EXP)" val={expStr} />}
           <Row label="สถานะโอน"   val={roll.transferred ? `✓ โอนแล้ว · ${roll.transferred_by || ''}` : 'รอโอนเข้าคลัง'} />
         </div>
 

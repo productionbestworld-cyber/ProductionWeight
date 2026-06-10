@@ -36,8 +36,7 @@ async function printLabel(p: MachineProfile, rollNo: number, gross: number, net:
   const core    = parseFloat(p.coreWeight) || 0
   // QR encode แค่ roll ID → URL สั้น → generate เป็น data URL ฝังใน HTML ทันที
   const appUrl    = window.location.origin
-  const matParam  = p.matCode ? `&mat=${encodeURIComponent(p.matCode)}` : ''
-  const detailUrl = rollId ? `${appUrl}/?roll=${rollId}${matParam}` : `${appUrl}/`
+  const detailUrl = rollId ? `${appUrl}/?roll=${rollId}` : `${appUrl}/`
 
   // generate QR เป็น PNG data URL (ไม่ต้องพึ่ง internet)
   const makeQR = async (px: number) => {
@@ -602,14 +601,21 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
     if (machineNos.length === 0) return
 
     supabase.from('production_rolls')
-      .select('machine_no, lot_no, weight, roll_type')
+      .select('machine_no, lot_no, work_order, weight, roll_type')
       .in('roll_type', ['good', 'bad'])
       .in('machine_no', machineNos)
       .then(({ data }) => {
         if (!data) return
-        // สร้าง map lot_no ปัจจุบันต่อเครื่อง
+        // สร้าง map lot_no / work_order / fresh_start ปัจจุบันต่อเครื่อง
         const lotMap: Record<string, string> = {}
-        profiles.forEach(p => { if (p.machine_no && p.lotNo) lotMap[p.machine_no] = p.lotNo })
+        const woMap:  Record<string, string> = {}
+        const freshMap: Record<string, boolean> = {}
+        profiles.forEach(p => {
+          if (!p.machine_no) return
+          if (p.lotNo) lotMap[p.machine_no] = p.lotNo
+          woMap[p.machine_no] = p.woNo ?? ''
+          freshMap[p.machine_no] = !!(p as any).freshStart
+        })
 
         const map: Record<string, { done: number; rolls: number; badKg: number; badRolls: number }> = {}
         data.forEach(r => {
@@ -617,6 +623,8 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
           const curLot = lotMap[key]
           // ถ้ามี lot ปัจจุบัน ให้นับเฉพาะ lot นั้น
           if (curLot && r.lot_no !== curLot) return
+          // เครื่องที่เปิด "เริ่มนับม้วนใหม่" (fresh_start) → นับเฉพาะ WO ปัจจุบัน (ให้ตรงกับหน้าชั่ง)
+          if (freshMap[key] && (r.work_order ?? '') !== (woMap[key] ?? '')) return
           if (!map[key]) map[key] = { done: 0, rolls: 0, badKg: 0, badRolls: 0 }
           if (r.roll_type === 'good') { map[key].done += r.weight ?? 0; map[key].rolls += 1 }
           else if (r.roll_type === 'bad') { map[key].badKg += r.weight ?? 0; map[key].badRolls += 1 }
@@ -624,7 +632,7 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
         setProgress(map)
       })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profiles.length, profiles.map(p=>p.machine_no+p.lotNo).join(',')])
+  }, [profiles.length, profiles.map(p=>p.machine_no+p.lotNo+p.woNo+((p as any).freshStart?'1':'0')).join(',')])
 
   const sorted = [...profiles].sort((a,b) => (a.machine_no||'').localeCompare(b.machine_no||'', undefined, { numeric: true }))
 
@@ -3561,6 +3569,7 @@ export default function WeighStation({ dept }: { dept?: 'blow' | 'print' | 'rewi
           soNo:        r.sale_order   ?? '',
           woNo:        r.work_order   ?? '',
           deliveryDate: r.delivery_date ?? '',
+          freshStart:  r.fresh_start  ?? false,
         }))
         setProfiles(list)
         saveProfiles(list)

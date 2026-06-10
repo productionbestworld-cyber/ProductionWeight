@@ -69,12 +69,11 @@ export const DEFAULT_LAYOUT: LabelLayout = {
       visible:true, type:'text', border:true, italic:false },
 
     // ─ LEFT column top ────────────────────────────────────────────────────
-    // Product Code field removed — set visible:false (เก็บ id ไว้กัน label เก่า break)
-    { id:'prodcode', label:'(removed)',
-      sampleValue:'',
+    { id:'prodcode', label:'Product Code',
+      sampleValue:'Product Code  Ldpe70%pcr...',
       x:3, y:14, w:92, h:5,
       fontSize:9, fontWeight:'700', align:'left',
-      visible:false, type:'text', border:false, italic:false },
+      visible:true, type:'text', border:false, italic:false },
     { id:'prodname', label:'Product Name',
       sampleValue:'LDPE ใส',
       x:3, y:19, w:92, h:7,

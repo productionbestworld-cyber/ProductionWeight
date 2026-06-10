@@ -351,10 +351,10 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
     loadDocs()
     loadPendingCounts()
     // โหลด lot_no ปัจจุบันของแต่ละเครื่อง
-    supabase.from('machine_profiles').select('machine_no, lot_no').then(({ data }) => {
+    supabase.from('machine_profiles').select('machine_no, lot_no, work_order').then(({ data }) => {
       if (!data) return
       const map: Record<string,string> = {}
-      data.forEach(p => { if (p.machine_no) map[p.machine_no] = p.lot_no ?? '' })
+      data.forEach(p => { if (p.machine_no) map[p.machine_no] = `${p.lot_no ?? ''}__${p.work_order ?? ''}` })
       setMachineProfiles(map)
     })
   }, [])
@@ -845,7 +845,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                   {jobs.map(j => {
                     const isSel      = machine === j.machine_no && lotNo === j.lot_no && woFilter === (j.work_order ?? '')
                     const curLot     = machineProfiles[j.machine_no] ?? ''
-                    const isRunning  = curLot === j.lot_no  // เครื่องยังเดินงานนี้อยู่
+                    const isRunning  = curLot === `${j.lot_no}__${j.work_order ?? ''}`  // เครื่องยังเดินงานนี้ (Lot+WO) อยู่
                     return (
                       <button key={`${j.machine_no}-${j.lot_no}-${j.work_order}`}
                         onClick={() => { setMachine(j.machine_no); setLotNo(j.lot_no); setWoFilter(j.work_order ?? ''); setSelected(new Set()) }}

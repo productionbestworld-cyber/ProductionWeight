@@ -21,6 +21,7 @@ type Job = {
   sale_order: string
   product_name: string
   customer: string
+  size: string           // ขนาด เช่น 84cm × 55mc
   active: boolean        // เครื่องกำลังเดินงานนี้อยู่
   start?: string
   end?: string
@@ -42,9 +43,9 @@ export default function Planning({ dept }: { dept?: string }) {
   async function load() {
     setLoading(true)
     const [{ data: profs }, { data: rolls }, { data: sums }] = await Promise.all([
-      supabase.from('machine_profiles').select('machine_no, lot_no, work_order, sale_order, product_name, cust_name, planned_qty, section'),
+      supabase.from('machine_profiles').select('machine_no, lot_no, work_order, sale_order, product_name, cust_name, width_cm, width_unit, thick_mc, planned_qty, section'),
       supabase.from('production_rolls')
-        .select('id, machine_no, lot_no, work_order, sale_order, product_name, customer, roll_type, roll_no, weight, gross_weight, core_weight, remark, inspector, created_at, section')
+        .select('id, machine_no, lot_no, work_order, sale_order, product_name, customer, width_cm, width_unit, thick_mc, roll_type, roll_no, weight, gross_weight, core_weight, remark, inspector, created_at, section')
         .order('created_at', { ascending: true }).limit(8000),
       supabase.from('job_summaries').select('machine_no, lot_no, work_order, planned_qty, closed_at').limit(2000),
     ])
@@ -79,6 +80,7 @@ export default function Planning({ dept }: { dept?: string }) {
         j = {
           key: k, machine_no: r.machine_no, lot_no: r.lot_no ?? '', work_order: r.work_order ?? '',
           sale_order: r.sale_order ?? '', product_name: r.product_name ?? '', customer: r.customer ?? '',
+          size: r.width_cm ? `${r.width_cm} ${r.width_unit ?? 'cm'} × ${r.thick_mc ?? '—'} mc` : '',
           active: activeKey.has(k), target: targetByKey[k] ?? 0, closedAt: closedByKey[k],
           goodKg: 0, goodRolls: 0, badKg: 0, badRolls: 0, scrapKg: 0,
         }
@@ -99,6 +101,7 @@ export default function Planning({ dept }: { dept?: string }) {
         map.set(k, {
           key: k, machine_no: p.machine_no, lot_no: p.lot_no, work_order: p.work_order ?? '',
           sale_order: p.sale_order ?? '', product_name: p.product_name ?? '', customer: p.cust_name ?? '',
+          size: p.width_cm ? `${p.width_cm} ${p.width_unit ?? 'cm'} × ${p.thick_mc ?? '—'} mc` : '',
           active: true, target: targetByKey[k] ?? 0,
           goodKg: 0, goodRolls: 0, badKg: 0, badRolls: 0, scrapKg: 0,
         })
@@ -148,6 +151,7 @@ export default function Planning({ dept }: { dept?: string }) {
                 { header:'เครื่อง', value:'machine_no' },
                 { header:'สถานะ', value: (j:Job) => j.active ? 'กำลังเดิน' : 'จบงาน' },
                 { header:'สินค้า', value:'product_name', width:28 },
+                { header:'ขนาด', value:'size', width:16 },
                 { header:'ลูกค้า', value:'customer', width:22 },
                 { header:'WO', value:'work_order' },
                 { header:'SO', value:'sale_order' },
@@ -231,7 +235,10 @@ export default function Planning({ dept }: { dept?: string }) {
                           : <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-700 text-slate-300">จบงาน</span>}
                       </td>
                       <td className="px-3 py-2 min-w-[240px]">
-                        <p className="text-white text-xs font-semibold truncate max-w-[260px]">{j.product_name || '—'}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-white text-xs font-semibold truncate max-w-[220px]">{j.product_name || '—'}</p>
+                          {j.size && <span className="text-[11px] font-black bg-brand-500/20 text-brand-200 border border-brand-500/30 px-2 py-0.5 rounded whitespace-nowrap">{j.size}</span>}
+                        </div>
                         <div className="flex items-center gap-1.5 flex-wrap text-[10px] mt-0.5">
                           {j.work_order && <span className="bg-amber-500/15 text-amber-300 px-1.5 rounded">WO {j.work_order}</span>}
                           {j.sale_order && <span className="bg-blue-500/15 text-blue-300 px-1.5 rounded">SO {j.sale_order}</span>}

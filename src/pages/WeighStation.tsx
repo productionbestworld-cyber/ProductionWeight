@@ -71,8 +71,8 @@ async function printLabel(p: MachineProfile, rollNo: number, gross: number, net:
     mfg:         `MFG Date&nbsp;&nbsp;<b style="font-size:1.15em">${mfgDate}</b>${showExp ? `&nbsp;&nbsp;&nbsp;EXP&nbsp;&nbsp;<b style="font-size:1.15em">${expDate}</b>` : ''}`,
     rollno:      `${rollLabel}&nbsp;&nbsp;<b style="font-size:1.15em">${rollNo === 0 ? '—' : rollNo}</b>`,
     // left column
-    prodcode:    p.productCode ? `Product Code&nbsp;&nbsp;<b>${p.productCode}</b>` : '',
-    prodname:    p.productName,
+    prodcode:    p.productCode ? `<span style="font-weight:400">Product Code</span>&nbsp;&nbsp;<b>${p.productCode}</b>` : '',
+    prodname:    `<span style="font-weight:400">Product Name</span>&nbsp;&nbsp;<b>${p.productName}</b>`,
     machine:     `เครื่อง&nbsp;&nbsp;<b>${p.machine_no}</b>`,
     core:        `Core Weight&nbsp;&nbsp;<b>${fmt(core, dec)}</b>`,
     size:        `Size&nbsp;&nbsp;<b style="font-size:1.2em">${p.widthCm}</b>&nbsp;${p.widthUnit ?? 'cm'}&nbsp;×&nbsp;<b style="font-size:1.2em">${p.thickMc}</b>&nbsp;mc`,

@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.3.2'
+export const APP_VERSION = '1.3.3'
 export const APP_BUILD_DATE = '2026-06-09'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.3.3', date: '2026-06-10',
+    items: [
+      'ใบยาว: เพิ่มคำนำหน้า "Product Name" หน้าชื่อสินค้า (ให้ตรงกับ "Product Code" และใบแบบเก่า)',
+    ],
+  },
   {
     version: '1.3.2', date: '2026-06-10',
     items: [

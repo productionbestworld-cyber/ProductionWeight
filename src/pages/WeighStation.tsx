@@ -1380,6 +1380,8 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
         updated_at:    new Date().toISOString(),
       }, { onConflict: 'machine_no' })
       if (error) throw new Error(error.message)
+      // จำ Mat Code / แกน / ชื่อสินค้า ที่พิมพ์เอง กลับเข้า master (เฉพาะตอน master ว่าง)
+      backfillProductMatCore(p.itemCode, p.matCode, p.coreWeight, p.productName)
       saveAllSuggestions(p)
       onSaved()
     } catch (e: any) {
@@ -1580,7 +1582,7 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
           <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider pt-2">รายละเอียดสินค้า</p>
           <div className="grid grid-cols-2 gap-2">
             {/* Product Code — removed */}
-            {inp('ชื่อสินค้า *',  'productName', '')}
+            {inp('ชื่อสินค้า (Product Name) *',  'productName', 'พิมพ์ชื่อสินค้าเองได้ ถ้าไม่มี')}
             {/* กว้าง + toggle cm/mm */}
             <div>
               <label className="block text-[10px] text-slate-500 mb-1">กว้าง *</label>
@@ -2437,7 +2439,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       }
 
       // ── จำค่าที่กรอกเอง: ถ้า master ยังไม่มี Mat Code/แกน → เติมกลับให้ครั้งหน้า auto-fill ──
-      backfillProductMatCore(profile.itemCode, profile.matCode, profile.coreWeight)
+      backfillProductMatCore(profile.itemCode, profile.matCode, profile.coreWeight, profile.productName)
 
       // บันทึก log ทุกการชั่ง (await + retry 2 ครั้ง — log สำคัญสำหรับ recovery)
       const logPayload = {

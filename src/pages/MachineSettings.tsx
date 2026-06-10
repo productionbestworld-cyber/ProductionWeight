@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Plus, Trash2, Save, ChevronDown, ChevronUp, RefreshCw, X, Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { fetchProducts, addProductIfMissing, type Product } from './Products'
+import { fetchProducts, addProductIfMissing, backfillProductMatCore, type Product } from './Products'
 
 // ── Display helpers ───────────────────────────────────────────────────────────
 // แสดงขนาดให้ตรงกับหน่วยที่ผู้ใช้เลือก — ใช้ทุกหน้าทั่วระบบ
@@ -485,7 +485,7 @@ function EditModal({ p, products, onChange, onAutoFill, onRemove, onClose, onPro
           <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">รายละเอียดสินค้า</p>
           <div className="grid grid-cols-2 gap-2">
             {f('Product Code','productCode','',true)}
-            {f('ชื่อสินค้า *','productName','')}
+            {f('ชื่อสินค้า (Product Name) *','productName','พิมพ์ชื่อสินค้าเองได้ ถ้าไม่มี')}
             {/* กว้าง + หน่วย cm/mm */}
             <div>
               <label className="block text-[10px] text-slate-500 mb-1">กว้าง *</label>
@@ -692,6 +692,8 @@ export default function MachineSettings({ dept }: { dept?: 'blow'|'print'|'rewin
     for (const p of valid) {
       await supabase.from('machine_profiles')
         .upsert(profileToDb(p), { onConflict: 'machine_no' })
+      // จำ Mat Code / แกน / ชื่อสินค้า ที่พิมพ์เอง กลับเข้า master (เฉพาะตอน master ว่าง)
+      backfillProductMatCore(p.itemCode, p.matCode, p.coreWeight, p.productName)
     }
     saveProfiles(profiles)
     setSaved(true)

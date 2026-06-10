@@ -21,11 +21,11 @@ const {data:prods}=await sb.from('products').select('id,item_code,product_name,p
 const ch=[]
 for(const p of prods){
   const o=bak.get(norm(p.item_code).toUpperCase()); if(!o) continue
-  if(norm(p.product_name)!==o.name || norm(p.product_code)!==o.pcode)
-    ch.push({id:p.id,item:p.item_code,name:o.name,pcode:o.pcode})
+  if(norm(p.product_name)!==o.name)   // ⬅ คืนเฉพาะ "ชื่อ" (เก็บ product_code ไว้)
+    ch.push({id:p.id,item:p.item_code,name:o.name})
 }
-console.log(`ย้อนกลับ products: ${ch.length} ตัว`)
+console.log(`ย้อนชื่อ products: ${ch.length} ตัว (เก็บ product_code)`)
 if(!APPLY){ console.log('** DRY RUN ** (ใส่ --apply เพื่อย้อนจริง)'); process.exit(0) }
-let ok=0; for(const c of ch){ const {error}=await sb.from('products').update({product_name:c.name,product_code:c.pcode}).eq('id',c.id); if(!error)ok++ }
+let ok=0; for(const c of ch){ const {error}=await sb.from('products').update({product_name:c.name}).eq('id',c.id); if(!error)ok++ }
 console.log(`✓ คืน products ${ok}/${ch.length}`)
 console.log('ขั้นต่อไป: รัน SQL re-sync machine_profiles + production_rolls (อยู่ในไฟล์ revert_sync.sql)')

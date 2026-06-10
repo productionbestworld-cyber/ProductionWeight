@@ -67,6 +67,25 @@ export default function App() {
   // ── เข้าครั้งแรก: แสดงหน้าเลือกแผนก (profile select) ──────────────
   const [showDeptSelect, setShowDeptSelect] = useState(true)
   const [showAbout, setShowAbout] = useState(false)
+  const [updateReady, setUpdateReady] = useState(false)   // มีเวอร์ชันใหม่บนเซิร์ฟเวอร์
+
+  // เช็คเวอร์ชันใหม่: ดึง /version.json (กัน cache) เทียบกับที่รันอยู่ — ทุก 2 นาที + ตอนกลับมาโฟกัส
+  useEffect(() => {
+    let alive = true
+    async function check() {
+      try {
+        const r = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' })
+        if (!r.ok) return
+        const j = await r.json()
+        if (alive && j.version && j.version !== APP_VERSION) setUpdateReady(true)
+      } catch { /* ออฟไลน์ — ข้าม */ }
+    }
+    check()
+    const iv = setInterval(check, 120000)
+    const onFocus = () => check()
+    window.addEventListener('focus', onFocus)
+    return () => { alive = false; clearInterval(iv); window.removeEventListener('focus', onFocus) }
+  }, [])
   const [showDeptGate, setShowDeptGate] = useState(false) // จะเปิดหลังเลือกแผนก
   const deptRef = useRef<HTMLDivElement>(null)
 
@@ -365,6 +384,18 @@ export default function App() {
           }}
           onClose={() => setPendingDept(null)}
         />
+      )}
+
+      {/* แถบแจ้งเวอร์ชันใหม่ — เด้งให้กดรีเฟรช */}
+      {updateReady && (
+        <div className="fixed top-0 left-0 right-0 z-[70] bg-brand-600 text-white px-4 py-2 flex items-center justify-center gap-3 shadow-lg">
+          <span className="text-sm font-bold">🔄 มีเวอร์ชันใหม่พร้อมใช้งาน</span>
+          <button onClick={() => location.reload()}
+            className="bg-white text-brand-700 font-bold text-sm px-4 py-1 rounded-lg hover:bg-slate-100">
+            อัปเดตเดี๋ยวนี้
+          </button>
+          <button onClick={() => setUpdateReady(false)} className="text-white/70 hover:text-white text-sm">ภายหลัง</button>
+        </div>
       )}
 
       {/* About — รายละเอียดเวอร์ชัน/อัปเดต */}

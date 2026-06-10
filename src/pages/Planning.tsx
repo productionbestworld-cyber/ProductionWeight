@@ -36,13 +36,15 @@ export default function Planning({ dept }: { dept?: string }) {
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [onlyActive, setOnlyActive] = useState(false)
+  const [rollsByKey, setRollsByKey] = useState<Record<string, any[]>>({})
+  const [detail, setDetail] = useState<Job | null>(null)
 
   async function load() {
     setLoading(true)
     const [{ data: profs }, { data: rolls }, { data: sums }] = await Promise.all([
       supabase.from('machine_profiles').select('machine_no, lot_no, work_order, sale_order, product_name, cust_name, planned_qty, section'),
       supabase.from('production_rolls')
-        .select('machine_no, lot_no, work_order, sale_order, product_name, customer, roll_type, weight, created_at, section')
+        .select('id, machine_no, lot_no, work_order, sale_order, product_name, customer, roll_type, roll_no, weight, gross_weight, core_weight, remark, inspector, created_at, section')
         .order('created_at', { ascending: true }).limit(8000),
       supabase.from('job_summaries').select('machine_no, lot_no, work_order, planned_qty, closed_at').limit(2000),
     ])
@@ -67,9 +69,11 @@ export default function Planning({ dept }: { dept?: string }) {
     }
 
     const map = new Map<string, Job>()
+    const byKey: Record<string, any[]> = {}
     for (const r of rolls ?? []) {
       if (!r.machine_no) continue
       const k = `${r.machine_no}|${r.lot_no ?? ''}|${r.work_order ?? ''}`
+      ;(byKey[k] = byKey[k] ?? []).push(r)
       let j = map.get(k)
       if (!j) {
         j = {
@@ -110,6 +114,7 @@ export default function Planning({ dept }: { dept?: string }) {
       return (b.end || '').localeCompare(a.end || '')
     })
     setJobs(list)
+    setRollsByKey(byKey)
     setLoading(false)
   }
 
@@ -217,7 +222,8 @@ export default function Planning({ dept }: { dept?: string }) {
                   const remain = Math.max(0, j.target - j.goodKg)
                   const pct = j.target > 0 ? Math.min(100, Math.round(j.goodKg / j.target * 100)) : 0
                   return (
-                    <tr key={j.key} className={`hover:bg-slate-800/30 ${j.active ? 'bg-green-500/5' : ''}`}>
+                    <tr key={j.key} onClick={() => setDetail(j)} title="คลิกดูรายละเอียดม้วน"
+                      className={`hover:bg-slate-800/50 cursor-pointer ${j.active ? 'bg-green-500/5' : ''}`}>
                       <td className="px-3 py-2 font-black text-white whitespace-nowrap">{j.machine_no}</td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         {j.active
@@ -251,6 +257,74 @@ export default function Planning({ dept }: { dept?: string }) {
           </div>
         </div>
       </div>
+
+      {/* ── รายละเอียดม้วนของงานที่คลิก ── */}
+      {detail && (() => {
+        const rs = [...(rollsByKey[detail.key] ?? [])].sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''))
+        const typeLabel = (t: string) => t === 'good' ? 'ดี' : t === 'bad' ? 'กรอ' : t?.startsWith('scrap') ? 'เศษ' : t
+        const typeCls = (t: string) => t === 'good' ? 'bg-green-500/20 text-green-300' : t === 'bad' ? 'bg-amber-500/20 text-amber-300' : 'bg-red-500/20 text-red-300'
+        return (
+          <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setDetail(null)}>
+            <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-3xl max-h-[88vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+              <div className="px-5 py-3 border-b border-slate-800 flex items-center justify-between">
+                <div className="min-w-0">
+                  <p className="text-white font-bold truncate">{detail.machine_no} · {detail.product_name || '—'}</p>
+                  <p className="text-slate-400 text-xs">
+                    {detail.work_order && `WO ${detail.work_order} · `}{detail.sale_order && `SO ${detail.sale_order} · `}Lot {detail.lot_no} · {detail.customer}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <ExportButton rows={rs}
+                    cols={[
+                      { header:'เวลา', value:(r:any)=>dt(r.created_at), width:14 },
+                      { header:'ประเภท', value:(r:any)=>typeLabel(r.roll_type) },
+                      { header:'ม้วนที่', value:'roll_no' },
+                      { header:'นน.เต็ม', value:(r:any)=>+((r.gross_weight??0)).toFixed(2) },
+                      { header:'นน.แกน', value:(r:any)=>+((r.core_weight??0)).toFixed(2) },
+                      { header:'นน.สุทธิ', value:(r:any)=>+((r.weight??0)).toFixed(2) },
+                      { header:'หมายเหตุ', value:(r:any)=>r.remark??'', width:30 },
+                      { header:'ผู้ตรวจ', value:(r:any)=>r.inspector??'' },
+                    ]}
+                    fileName={`ม้วน_${detail.machine_no}_${detail.lot_no}`} sheetName="ม้วน" label="📥 Excel" />
+                  <button onClick={() => setDetail(null)} className="text-slate-400 hover:text-white text-xl leading-none">×</button>
+                </div>
+              </div>
+              <div className="px-5 py-2 grid grid-cols-4 gap-2 text-center border-b border-slate-800 text-xs">
+                <div><p className="text-slate-500">ม้วนดี</p><p className="text-green-400 font-black">{fmt(detail.goodKg)} <span className="text-[10px] text-slate-600">({detail.goodRolls})</span></p></div>
+                <div><p className="text-slate-500">กรอ</p><p className="text-amber-400 font-black">{fmt(detail.badKg)} <span className="text-[10px] text-slate-600">({detail.badRolls})</span></p></div>
+                <div><p className="text-slate-500">เศษ</p><p className="text-red-400 font-black">{fmt(detail.scrapKg)}</p></div>
+                <div><p className="text-slate-500">คงเหลือขาด</p><p className="text-orange-400 font-black">{detail.target ? fmt(Math.max(0, detail.target - detail.goodKg)) : '—'}</p></div>
+              </div>
+              <div className="overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-800/40 text-[10px] text-slate-500 uppercase sticky top-0">
+                    <tr>
+                      {['เวลา','ประเภท','ม้วนที่','นน.เต็ม','นน.สุทธิ','หมายเหตุ','ผู้ตรวจ'].map(h => (
+                        <th key={h} className="px-3 py-1.5 text-left font-semibold whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/40">
+                    {rs.length === 0 ? (
+                      <tr><td colSpan={7} className="py-10 text-center text-slate-600">ยังไม่มีม้วน</td></tr>
+                    ) : rs.map(r => (
+                      <tr key={r.id} className="hover:bg-slate-800/30">
+                        <td className="px-3 py-1.5 text-slate-400 text-xs whitespace-nowrap">{dt(r.created_at)}</td>
+                        <td className="px-3 py-1.5"><span className={`text-[10px] font-bold px-2 py-0.5 rounded ${typeCls(r.roll_type)}`}>{typeLabel(r.roll_type)}</span></td>
+                        <td className="px-3 py-1.5 text-white font-bold">{r.roll_no || '—'}</td>
+                        <td className="px-3 py-1.5 text-slate-400">{fmt(r.gross_weight,2)}</td>
+                        <td className="px-3 py-1.5 font-bold text-brand-300">{fmt(r.weight,2)}</td>
+                        <td className="px-3 py-1.5 text-slate-400 text-xs max-w-[220px] truncate" title={r.remark}>{r.remark || '—'}</td>
+                        <td className="px-3 py-1.5 text-slate-400 text-xs">{r.inspector || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

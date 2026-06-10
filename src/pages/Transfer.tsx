@@ -294,6 +294,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   const [staff,       setStaff]       = useState('')
   const [machine,     setMachine]     = useState<string>('')
   const [lotNo,       setLotNo]       = useState<string>('')
+  const [woFilter,    setWoFilter]    = useState<string>('')   // แยกงานตามใบสั่งผลิต (กัน 2 สินค้าปน Lot เดียว)
   const [showDone,    setShowDone]    = useState(false)
   const [search,      setSearch]      = useState('')
   const [loading,     setLoading]     = useState(true)
@@ -366,19 +367,20 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
 
   // เฉพาะ job ที่ยังมีม้วนรอโอน (pending > 0) เท่านั้น
   const jobs = Array.from(new Set(
-    rolls.map(r => `${r.machine_no}__${r.lot_no}`).filter(j => !j.includes('null'))
+    rolls.map(r => `${r.machine_no}__${r.lot_no}__${r.work_order ?? ''}`).filter(j => !j.startsWith('null'))
   )).map(key => {
-    const [mNo, lot] = key.split('__')
-    const jobRolls = rolls.filter(r => r.machine_no === mNo && r.lot_no === lot)
+    const [mNo, lot, wo] = key.split('__')
+    const jobRolls = rolls.filter(r => r.machine_no === mNo && r.lot_no === lot && (r.work_order ?? '') === wo)
     const pending  = jobRolls.filter(r => !r.transferred).length
     const sample   = jobRolls[0]
-    return { machine_no: mNo, lot_no: lot, product: sample?.product_name, customer: sample?.customer, total: jobRolls.length, pending }
+    return { machine_no: mNo, lot_no: lot, work_order: wo, product: sample?.product_name, customer: sample?.customer, total: jobRolls.length, pending }
   }).filter(j => j.pending > 0)  // ← ซ่อน job ที่โอนครบแล้ว
 
   const filtered = rolls.filter(r => {
     if (!showDone && r.transferred) return false
     if (machine && r.machine_no !== machine) return false
     if (lotNo && r.lot_no !== lotNo) return false
+    if (woFilter && (r.work_order ?? '') !== woFilter) return false
     if (search) {
       const q = search.toLowerCase()
       if (!String(r.roll_no).includes(q) && !(r.remark??'').toLowerCase().includes(q)) return false
@@ -832,7 +834,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
               ) : (
                 <div className="space-y-1.5">
                   {/* ทุกงาน */}
-                  <button onClick={() => { setMachine(''); setLotNo('') }}
+                  <button onClick={() => { setMachine(''); setLotNo(''); setWoFilter('') }}
                     className={`w-full text-left p-3 rounded-xl border transition-all ${!machine ? 'border-brand-500 bg-brand-500/15' : 'border-slate-700 hover:border-slate-500 hover:bg-slate-800/50'}`}>
                     <div className="flex items-center justify-between">
                       <span className="text-white font-bold text-sm">ทุกงาน</span>
@@ -841,12 +843,12 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                   </button>
                   {/* แต่ละงาน */}
                   {jobs.map(j => {
-                    const isSel      = machine === j.machine_no && lotNo === j.lot_no
+                    const isSel      = machine === j.machine_no && lotNo === j.lot_no && woFilter === (j.work_order ?? '')
                     const curLot     = machineProfiles[j.machine_no] ?? ''
                     const isRunning  = curLot === j.lot_no  // เครื่องยังเดินงานนี้อยู่
                     return (
-                      <button key={`${j.machine_no}-${j.lot_no}`}
-                        onClick={() => { setMachine(j.machine_no); setLotNo(j.lot_no); setSelected(new Set()) }}
+                      <button key={`${j.machine_no}-${j.lot_no}-${j.work_order}`}
+                        onClick={() => { setMachine(j.machine_no); setLotNo(j.lot_no); setWoFilter(j.work_order ?? ''); setSelected(new Set()) }}
                         className={`w-full text-left p-3 rounded-xl border transition-all ${isSel ? 'border-brand-500 bg-brand-500/15' : 'border-slate-700 hover:border-slate-500 hover:bg-slate-800/50'}`}>
                         <div className="flex items-center justify-between mb-1">
                           <span className="bg-brand-600 text-white font-black text-xs px-2 py-0.5 rounded">เครื่อง {j.machine_no}</span>
@@ -860,7 +862,10 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                         </div>
                         <p className="text-white text-xs font-semibold leading-tight truncate">{j.product || '—'}</p>
                         <p className="text-slate-500 text-[10px] mt-0.5 truncate">{j.customer || ''}</p>
-                        <p className="text-slate-600 text-[10px]">Lot {String(j.lot_no).slice(-8)} · รวม {j.total} {typeFilter==='scrap'?'ถุง':'ม้วน'}</p>
+                        <p className="text-slate-600 text-[10px]">
+                          {j.work_order && <span className="text-amber-400 font-bold">WO {j.work_order} · </span>}
+                          Lot {String(j.lot_no).slice(-8)} · รวม {j.total} {typeFilter==='scrap'?'ถุง':'ม้วน'}
+                        </p>
                         <div className="flex items-center justify-between mt-1">
                           <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold">รอโอน {j.pending} {typeFilter==='scrap'?'ถุง':'ม้วน'}</span>
                         </div>

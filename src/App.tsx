@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Scale, LayoutDashboard, Settings, Package, History, Warehouse as WarehouseIcon, ChevronDown, Wifi, WifiOff, AlertTriangle, Lock, Search, Boxes } from 'lucide-react'
+import { Scale, LayoutDashboard, Settings, Package, History, Warehouse as WarehouseIcon, ChevronDown, Wifi, WifiOff, AlertTriangle, Lock, Search, Boxes, CalendarClock } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import WeighStation from './pages/WeighStation'
 import Dashboard from './pages/Dashboard'
@@ -11,9 +11,10 @@ import Warehouse from './pages/Warehouse'
 import Admin, { PinGate, DeptPinGate, isAdminUnlocked, isDeptUnlocked, lockAllDepts, lockAdmin } from './pages/Admin'
 import ReviewQueue from './pages/ReviewQueue'
 import ProductsPage from './pages/Products'
+import Planning from './pages/Planning'
 import { APP_VERSION, APP_BUILD_DATE, CHANGELOG } from './version'
 
-type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings' | 'admin' | 'review' | 'nc' | 'products'
+type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings' | 'admin' | 'review' | 'nc' | 'products' | 'planning'
 type Dept = 'blow' | 'print' | 'rewind'
 
 const DEPT_KEY = 'bwp_dept'
@@ -175,6 +176,7 @@ export default function App() {
     { key: 'transfer',  label: 'โอนเข้าคลัง',   icon: Package,         depts: ['blow','print','rewind'] },
     { key: 'warehouse', label: 'คลังสินค้า',    icon: WarehouseIcon,   depts: ['blow','print','rewind'] },
     { key: 'dashboard', label: 'Dashboard',      icon: LayoutDashboard, depts: ['blow','print','rewind'] },
+    { key: 'planning',  label: 'วางแผน',         icon: CalendarClock,   depts: ['blow','print','rewind'] },
     { key: 'history',   label: 'ประวัติผลิต',    icon: History,         depts: ['blow','print','rewind'] },
     { key: 'products',  label: 'คลังข้อมูล',     icon: Boxes,           depts: ['blow','print','rewind'] },
     { key: 'review',    label: 'พิจารณาม้วนกรอ', icon: Search,         depts: ['blow','print','rewind'] },
@@ -358,6 +360,7 @@ export default function App() {
             <Dashboard dept={dept} />
           </div>
         )}
+        {page === 'planning'  && <Planning dept={dept} />}
         {page === 'history'   && <HistoryPage dept={dept} />}
         {page === 'products'  && <ProductsPage />}
         {page === 'review'    && <ReviewQueue dept={dept} mode="prod" />}

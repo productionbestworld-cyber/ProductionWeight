@@ -244,47 +244,36 @@ function CustomersTab({ customers, products, countByCust, loading, onSelect, onC
       arr.push(p); prodByCust.set(p.cust_code, arr)
     }
 
-    // ชีต 1: รายชื่อลูกค้า (เรียงตามที่แสดง)
-    const custRows = filtered.map((c, i) => ({
-      'ลำดับ': i + 1,
-      'รหัสลูกค้า': c.cust_code,
-      'ชื่อลูกค้า': c.cust_name,
-      'หมายเหตุ': (c as any).note ?? '',
-      'ที่อยู่': c.cust_address ?? '',
-      'จำนวน Item': countByCust.get(c.cust_code) ?? 0,
-    }))
-
-    // ชีต 2: Item ทั้งหมด (ทุกรายการ กระจายตามลูกค้า เรียงตามลูกค้าที่แสดง)
-    const itemRows: any[] = []
+    // ชีตเดียว: ลูกค้า + สินค้า รวมในตารางเดียว เรียงตามรหัสลูกค้า
+    const rows: any[] = []
     let no = 0
     for (const c of filtered) {
       const items = prodByCust.get(c.cust_code) ?? []
       if (items.length === 0) {
-        itemRows.push({
+        rows.push({
           'ลำดับ': ++no, 'รหัสลูกค้า': c.cust_code, 'ชื่อลูกค้า': c.cust_name,
           'Item Code': '(ยังไม่มี item)', 'รหัสสินค้า': '', 'ชื่อสินค้า': '',
           'หน้ากว้าง': '', 'หน่วย': '', 'หนา (mc)': '', 'Mat Code': '', 'นน.แกน (kg)': '',
+          'หมายเหตุลูกค้า': (c as any).note ?? '', 'ที่อยู่': c.cust_address ?? '',
         })
       } else {
         for (const p of items) {
-          itemRows.push({
+          rows.push({
             'ลำดับ': ++no, 'รหัสลูกค้า': c.cust_code, 'ชื่อลูกค้า': c.cust_name,
             'Item Code': p.item_code, 'รหัสสินค้า': p.product_code, 'ชื่อสินค้า': p.product_name,
             'หน้ากว้าง': p.width_cm, 'หน่วย': p.width_unit ?? '', 'หนา (mc)': p.thick_mc,
             'Mat Code': (p as any).mat_code ?? '', 'นน.แกน (kg)': (p as any).core_weight ?? '',
+            'หมายเหตุลูกค้า': (c as any).note ?? '', 'ที่อยู่': c.cust_address ?? '',
           })
         }
       }
     }
 
     const wb = XLSX.utils.book_new()
-    const ws1 = XLSX.utils.json_to_sheet(custRows)
-    ws1['!cols'] = [{ wch: 6 }, { wch: 10 }, { wch: 45 }, { wch: 22 }, { wch: 35 }, { wch: 10 }]
-    XLSX.utils.book_append_sheet(wb, ws1, 'ลูกค้า')
-    const ws2 = XLSX.utils.json_to_sheet(itemRows)
-    ws2['!cols'] = [{ wch: 6 }, { wch: 10 }, { wch: 40 }, { wch: 16 }, { wch: 14 }, { wch: 40 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 16 }, { wch: 12 }]
-    XLSX.utils.book_append_sheet(wb, ws2, 'Item ทั้งหมด')
-    XLSX.writeFile(wb, `ลูกค้า+Item_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    const ws = XLSX.utils.json_to_sheet(rows)
+    ws['!cols'] = [{ wch: 6 }, { wch: 10 }, { wch: 40 }, { wch: 16 }, { wch: 14 }, { wch: 40 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 16 }, { wch: 12 }, { wch: 22 }, { wch: 35 }]
+    XLSX.utils.book_append_sheet(wb, ws, 'ลูกค้า+สินค้า')
+    XLSX.writeFile(wb, `ลูกค้า+สินค้า_${new Date().toISOString().slice(0, 10)}.xlsx`)
   }
 
   return (

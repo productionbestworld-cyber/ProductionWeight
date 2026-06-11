@@ -387,7 +387,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
 
   const filtered = rolls.filter(r => {
     if (!showDone && r.transferred) return false
-    if (machine && r.machine_no !== machine) return false
+    if (machine && machine !== '__ALL__' && r.machine_no !== machine) return false
     if (lotNo && r.lot_no !== lotNo) return false
     if (woFilter && (r.work_order ?? '') !== woFilter) return false
     if (search) {
@@ -756,10 +756,10 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
             )}
           </div>
         ) : (
-        <div className="flex gap-5 items-start">
+        <div className="space-y-4">
 
-          {/* ══ LEFT COLUMN — Step 1 + 2 ══════════════════════════════════ */}
-          <div className="w-72 flex-shrink-0 space-y-3">
+          {/* ══ Step 1 + 2 (เลือกงาน) — โชว์เป็นกริด คลิกเข้าดูรายละเอียด ══ */}
+          <div className="space-y-3">
 
             {/* Step 1 — ชื่อเจ้าหน้าที่ */}
             <div className={`rounded-2xl border p-4 transition-all ${staff.trim() ? 'border-green-500/40 bg-green-500/5' : 'border-amber-500/40 bg-amber-500/5'}`}>
@@ -773,24 +773,23 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
               {staff.trim() && <p className="text-green-400 text-xs mt-1.5 flex items-center gap-1"><CheckCircle2 size={11}/> พร้อมโอน</p>}
             </div>
 
-            {/* Step 2 — เลือกงาน */}
+            {/* Step 2 — เลือกงาน (กริด · คลิกเข้าดูรายละเอียด) */}
+            {!machine && (
             <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full text-[10px] flex items-center justify-center font-black bg-brand-600 text-white">2</span>
-                เลือกงาน / เครื่อง
-              </p>
+              <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full text-[10px] flex items-center justify-center font-black bg-brand-600 text-white">2</span>
+                  เลือกงาน — คลิกเพื่อดูม้วน (เรียงตาม ขนาด · ลูกค้า · เครื่อง)
+                </p>
+                <button onClick={() => { setMachine('__ALL__'); setLotNo(''); setWoFilter(''); setSelected(new Set()) }}
+                  className="text-xs font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded-lg">
+                  📋 ดูทุกงานรวม ({rolls.filter(r=>!r.transferred).length} {typeFilter==='scrap'?'ถุง':'ม้วน'})
+                </button>
+              </div>
               {loading ? <p className="text-slate-600 text-xs">กำลังโหลด...</p> : jobs.length === 0 ? (
                 <p className="text-slate-600 text-sm py-2">ยังไม่มีงานวันนี้</p>
               ) : (
-                <div className="space-y-1.5">
-                  {/* ทุกงาน */}
-                  <button onClick={() => { setMachine(''); setLotNo(''); setWoFilter('') }}
-                    className={`w-full text-left p-3 rounded-xl border transition-all ${!machine ? 'border-brand-500 bg-brand-500/15' : 'border-slate-700 hover:border-slate-500 hover:bg-slate-800/50'}`}>
-                    <div className="flex items-center justify-between">
-                      <span className="text-white font-bold text-sm">ทุกงาน</span>
-                      <span className="text-slate-400 text-xs">{rolls.filter(r=>!r.transferred).length} {typeFilter==='scrap'?'ถุง':'ม้วน'}รอ</span>
-                    </div>
-                  </button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
                   {/* แต่ละงาน */}
                   {jobs.map(j => {
                     const isSel      = machine === j.machine_no && lotNo === j.lot_no && woFilter === (j.work_order ?? '')
@@ -832,18 +831,28 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                 </div>
               )}
             </div>
+            )}
 
           </div>
 
-          {/* ══ RIGHT COLUMN — Step 3 รายการม้วน ══════════════════════════ */}
-          <div className="flex-1 space-y-3">
+          {/* ══ Step 3 รายการม้วน — โชว์เมื่อคลิกงานแล้ว ══════════════════ */}
+          {machine && (
+          <div className="space-y-3">
+
+            {/* ปุ่มกลับ */}
+            <button onClick={() => { setMachine(''); setLotNo(''); setWoFilter(''); setSelected(new Set()) }}
+              className="flex items-center gap-1.5 text-sm font-bold text-brand-300 hover:text-brand-200 bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-xl">
+              ← กลับไปเลือกงาน
+            </button>
 
             {/* Step 3 header */}
             <div className="flex items-center justify-between">
               <p className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
                 <span className="w-5 h-5 rounded-full text-[10px] flex items-center justify-center font-black bg-brand-600 text-white">3</span>
                 เลือก{typeFilter==='scrap'?'ถุงเศษ':'ม้วน'}ที่จะโอน
-                {machine && <span className="text-brand-300 normal-case font-normal">— เครื่อง {machine}</span>}
+                {machine && machine !== '__ALL__'
+                  ? <span className="text-brand-300 normal-case font-normal">— เครื่อง {machine}</span>
+                  : <span className="text-brand-300 normal-case font-normal">— ทุกงานรวม</span>}
               </p>
               <div className="flex items-center gap-2">
                 <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
@@ -1061,6 +1070,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
             </div>
 
           </div>
+          )}
         </div>
         )}
       </div>

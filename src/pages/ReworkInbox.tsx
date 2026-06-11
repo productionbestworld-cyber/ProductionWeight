@@ -185,7 +185,10 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
 
   const filtered = rolls.filter(r => {
     if (!search) return true
-    const blob = `${r.machine_no} ${r.lot_no} ${r.work_order} ${r.sale_order} ${r.product_name} ${r.customer} ${r.item_code} ${r.mat_code}`.toLowerCase()
+    const w = (r.width_cm ?? '').toString().trim()
+    const t = (r.thick_mc ?? '').toString().trim()
+    const sizeBlob = w || t ? `${w}x${t} ${w}*${t} ${w} ${t}` : ''
+    const blob = `${r.machine_no} ${r.lot_no} ${r.work_order} ${r.sale_order} ${r.product_name} ${r.customer} ${r.item_code} ${r.mat_code} ${sizeBlob}`.toLowerCase()
     return blob.includes(search.toLowerCase())
   })
 
@@ -303,7 +306,7 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
           <div className="relative flex-1 min-w-[200px] max-w-md">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"/>
             <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="ค้นหา WO/SO/Lot/สินค้า/ลูกค้า..."
+              placeholder="ค้นหา WO/SO/Lot/สินค้า/ลูกค้า/ขนาด..."
               className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-sm text-white outline-none focus:border-amber-500"/>
           </div>
           {/* เลือกการจัดกลุ่ม */}
@@ -414,6 +417,7 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
                                 )}
                                 {r.work_order && <span className="bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded font-bold">WO {r.work_order}</span>}
                                 {r.sale_order && <span className="bg-blue-500/15 text-blue-300 px-1.5 py-0.5 rounded font-bold">SO {r.sale_order}</span>}
+                                {(r.width_cm || r.thick_mc) && <span className="bg-brand-500/20 text-brand-200 px-1.5 py-0.5 rounded font-bold">{(r.width_cm ?? '')}{r.thick_mc ? `×${r.thick_mc}` : ''}</span>}
                                 <span className="font-mono text-slate-500">Lot {r.lot_no}</span>
                                 <span className="text-slate-600">· เครื่อง {r.machine_no || '—'}</span>
                                 <span className="text-slate-600">· {fmtDateTime(r.rework_received_at || r.created_at)}</span>

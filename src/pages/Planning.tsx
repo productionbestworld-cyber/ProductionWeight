@@ -178,7 +178,7 @@ export default function Planning({ dept }: { dept?: string }) {
                 { header:'ดี+กรอ รวม (kg)', value:(j:Job)=>+(j.goodKg+j.badKg).toFixed(1) },
                 { header:'ม้วนกรอ (kg)', value:(j:Job)=>+j.badKg.toFixed(1) },
                 { header:'เศษ (kg)', value:(j:Job)=>+j.scrapKg.toFixed(1) },
-                { header:'คงเหลือขาด (kg)', value:(j:Job)=>+Math.max(0, j.target - j.goodKg).toFixed(1) },
+                { header:'คงเหลือขาด ไม่รวมกรอ (kg)', value:(j:Job)=>+Math.max(0, j.target - j.goodKg).toFixed(1) },
               ]}
               fileName="แผนงาน_ติดตามผลิต" sheetName="ติดตามงาน" label="📥 Export" />
             <button onClick={load} className="flex items-center gap-1.5 text-slate-400 hover:text-white text-xs bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-lg">
@@ -227,7 +227,7 @@ export default function Planning({ dept }: { dept?: string }) {
             <table className="w-full text-sm">
               <thead className="bg-slate-800/40 text-[10px] text-slate-500 uppercase tracking-wider">
                 <tr>
-                  {['เครื่อง','สถานะ','สินค้า / WO / SO / Lot','เริ่มผลิต','จบงาน','เป้า','ผลิตได้','ดี+กรอ รวม','กรอ','เศษ','คงเหลือ (ขาด)','%'].map(h => (
+                  {['เครื่อง','สถานะ','สินค้า / WO / SO / Lot','เริ่มผลิต','จบงาน','เป้า','ผลิตได้','ดี+กรอ รวม','กรอ','เศษ','คงเหลือ ขาด (ไม่รวมกรอ)','%'].map(h => (
                     <th key={h} className="px-3 py-2 text-left font-semibold whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -316,7 +316,7 @@ export default function Planning({ dept }: { dept?: string }) {
                 <div><p className="text-slate-500">ม้วนดี</p><p className="text-green-400 font-black">{fmt(detail.goodKg)} <span className="text-[10px] text-slate-600">({detail.goodRolls})</span></p></div>
                 <div><p className="text-slate-500">กรอ</p><p className="text-amber-400 font-black">{fmt(detail.badKg)} <span className="text-[10px] text-slate-600">({detail.badRolls})</span></p></div>
                 <div><p className="text-slate-500">เศษ</p><p className="text-red-400 font-black">{fmt(detail.scrapKg)}</p></div>
-                <div><p className="text-slate-500">คงเหลือขาด</p><p className="text-orange-400 font-black">{detail.target ? fmt(Math.max(0, detail.target - detail.goodKg)) : '—'}</p></div>
+                <div><p className="text-slate-500">คงเหลือขาด <span className="text-[9px] text-slate-600">(ไม่รวมกรอ)</span></p><p className="text-orange-400 font-black">{detail.target ? fmt(Math.max(0, detail.target - detail.goodKg)) : '—'}</p></div>
               </div>
               <div className="overflow-y-auto">
                 <table className="w-full text-sm">

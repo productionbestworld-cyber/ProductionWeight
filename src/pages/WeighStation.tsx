@@ -600,12 +600,24 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
     const machineNos = profiles.map(p => p.machine_no).filter(Boolean)
     if (machineNos.length === 0) return
 
-    supabase.from('production_rolls')
-      .select('machine_no, lot_no, work_order, weight, roll_type')
-      .in('roll_type', ['good', 'bad'])
-      .in('machine_no', machineNos)
-      .then(({ data }) => {
-        if (!data) return
+    // ดึงทีละหน้า (page ละ 1000) จนครบ — กันเพดาน 1000 แถวของ Supabase ตัดข้อมูลเงียบ ๆ
+    // (ก่อนหน้านี้ดึงครั้งเดียวไม่ใส่ limit/order → พอม้วนรวมเกิน 1000 ยอด "ดี" จะหายบางส่วน)
+    ;(async () => {
+      const all: any[] = []
+      const PAGE = 1000
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabase.from('production_rolls')
+          .select('machine_no, lot_no, work_order, weight, roll_type')
+          .in('roll_type', ['good', 'bad'])
+          .in('machine_no', machineNos)
+          .order('id', { ascending: true })
+          .range(from, from + PAGE - 1)
+        if (error || !data) break
+        all.push(...data)
+        if (data.length < PAGE) break
+      }
+      {
+        const data = all
         // สร้าง map lot_no / work_order / fresh_start ปัจจุบันต่อเครื่อง
         const lotMap: Record<string, string> = {}
         const woMap:  Record<string, string> = {}
@@ -630,7 +642,8 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
           else if (r.roll_type === 'bad') { map[key].badKg += r.weight ?? 0; map[key].badRolls += 1 }
         })
         setProgress(map)
-      })
+      }
+    })()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profiles.length, profiles.map(p=>p.machine_no+p.lotNo+p.woNo+((p as any).freshStart?'1':'0')).join(',')])
 

@@ -42,11 +42,25 @@ export default function Planning({ dept }: { dept?: string }) {
 
   async function load() {
     setLoading(true)
-    const [{ data: profs }, { data: rolls }, { data: sums }] = await Promise.all([
+    // ดึงม้วนทีละหน้า (page ละ 1000) จนครบ — Supabase บังคับ max-rows = 1000 ต่อ query
+    // (.limit(8000) จะถูก cap เหลือ 1000 เงียบ ๆ → ม้วนใหม่หาย ยอดผลิตขาด)
+    async function fetchAllRolls() {
+      const all: any[] = []
+      const PAGE = 1000
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabase.from('production_rolls')
+          .select('id, machine_no, lot_no, work_order, sale_order, product_name, customer, width_cm, width_unit, thick_mc, roll_type, roll_no, weight, gross_weight, core_weight, remark, inspector, created_at, section')
+          .order('created_at', { ascending: true }).order('id', { ascending: true })
+          .range(from, from + PAGE - 1)
+        if (error || !data) break
+        all.push(...data)
+        if (data.length < PAGE) break
+      }
+      return all
+    }
+    const [{ data: profs }, rolls, { data: sums }] = await Promise.all([
       supabase.from('machine_profiles').select('machine_no, lot_no, work_order, sale_order, product_name, cust_name, width_cm, width_unit, thick_mc, planned_qty, section'),
-      supabase.from('production_rolls')
-        .select('id, machine_no, lot_no, work_order, sale_order, product_name, customer, width_cm, width_unit, thick_mc, roll_type, roll_no, weight, gross_weight, core_weight, remark, inspector, created_at, section')
-        .order('created_at', { ascending: true }).limit(8000),
+      fetchAllRolls(),
       supabase.from('job_summaries').select('machine_no, lot_no, work_order, planned_qty, closed_at').limit(2000),
     ])
 

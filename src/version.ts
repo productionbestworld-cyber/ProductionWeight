@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.3.6'
+export const APP_VERSION = '1.3.7'
 export const APP_BUILD_DATE = '2026-06-11'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.3.7', date: '2026-06-11',
+    items: [
+      'หน้าวางแผน + คลัง: แก้ยอดผลิต/สต็อกขาด เมื่อม้วนเกิน 1000 (Supabase จำกัด 1000 แถว/query → ดึงทีละหน้าจนครบ)',
+    ],
+  },
   {
     version: '1.3.6', date: '2026-06-11',
     items: [

@@ -298,6 +298,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   const [showDone,    setShowDone]    = useState(false)
   const [search,      setSearch]      = useState('')
   const [docSearch,   setDocSearch]   = useState('')   // ค้นหาในประวัติการโอน
+  const [docType,     setDocType]     = useState<'all'|'good'|'bad'|'scrap'>('all')  // กรองประเภทในประวัติ
   const [loading,     setLoading]     = useState(true)
   const [saving,      setSaving]      = useState(false)
   const [selectedDoc, setSelectedDoc] = useState<any | null>(null)
@@ -609,14 +610,32 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
             <div className={`bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden flex-shrink-0 ${selectedDoc ? 'w-96' : 'flex-1'}`}>
               {(() => {
                 const q = docSearch.trim().toLowerCase()
-                const fdocs = q
-                  ? docs.filter(d => `${d.doc_no ?? ''} ${d.product_name ?? ''} ${d.customer ?? ''} ${d.size ?? ''} ${d.work_order ?? ''} ${d.sale_order ?? ''} ${d.lot_no ?? ''} ${d.machine_no ?? ''} ${d.transferred_by ?? ''} ${d.transfer_type ?? ''}`.toLowerCase().includes(q))
-                  : docs
+                const matchType = (d: any) => docType === 'all'
+                  ? true
+                  : docType === 'scrap' ? String(d.transfer_type ?? '').startsWith('scrap')
+                  : (d.transfer_type ?? 'good') === docType
+                const fdocs = docs.filter(d => matchType(d) && (!q ||
+                  `${d.doc_no ?? ''} ${d.product_name ?? ''} ${d.customer ?? ''} ${d.size ?? ''} ${d.work_order ?? ''} ${d.sale_order ?? ''} ${d.lot_no ?? ''} ${d.machine_no ?? ''} ${d.transferred_by ?? ''} ${d.transfer_type ?? ''}`.toLowerCase().includes(q)))
+                const cnt = (t: 'good'|'bad'|'scrap') => docs.filter(d => t==='scrap' ? String(d.transfer_type??'').startsWith('scrap') : (d.transfer_type??'good')===t).length
                 return (<>
               <div className="px-4 py-3 border-b border-slate-800 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <p className="text-white font-semibold text-sm">📦 ประวัติการโอน — จัดตามงาน</p>
-                  <p className="text-slate-500 text-[10px]">{fdocs.length}{q && `/${docs.length}`} ใบ · {fmt(fdocs.reduce((s,d)=>s+(d.total_kg??0),0))} Kgs.</p>
+                  <p className="text-slate-500 text-[10px]">{fdocs.length}{(q||docType!=='all') && `/${docs.length}`} ใบ · {fmt(fdocs.reduce((s,d)=>s+(d.total_kg??0),0))} Kgs.</p>
+                </div>
+                {/* กรองประเภท */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {([
+                    ['all',`ทั้งหมด (${docs.length})`,'bg-slate-700 text-white'],
+                    ['good',`✅ ม้วนดี (${cnt('good')})`,'bg-blue-500/25 text-blue-200'],
+                    ['bad',`🔄 กรอ (${cnt('bad')})`,'bg-orange-500/25 text-orange-200'],
+                    ['scrap',`🗑 เศษ (${cnt('scrap')})`,'bg-red-500/25 text-red-200'],
+                  ] as const).map(([k,label,cls]) => (
+                    <button key={k} onClick={()=>setDocType(k as any)}
+                      className={`text-[11px] font-bold px-2.5 py-1 rounded-lg transition-all ${docType===k ? cls+' ring-1 ring-white/30' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+                      {label}
+                    </button>
+                  ))}
                 </div>
                 <div className="relative">
                   <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500"/>
@@ -627,7 +646,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                 </div>
               </div>
               {fdocs.length === 0 ? (
-                <div className="py-16 text-center text-slate-600 text-sm">{q ? 'ไม่พบใบโอนที่ค้นหา' : 'ยังไม่มีการโอน'}</div>
+                <div className="py-16 text-center text-slate-600 text-sm">{(q||docType!=='all') ? 'ไม่พบใบโอนที่ตรงเงื่อนไข' : 'ยังไม่มีการโอน'}</div>
               ) : (
                 <div className="max-h-[70vh] overflow-y-auto divide-y divide-slate-800/50">
                   {[...fdocs].sort((a,b)=>(b.transferred_at||'').localeCompare(a.transferred_at||'')).map(d => {

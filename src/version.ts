@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.3.17'
+export const APP_VERSION = '1.3.18'
 export const APP_BUILD_DATE = '2026-06-11'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.3.18', date: '2026-06-11',
+    items: [
+      'หน้าวางแผน: เพิ่มคอลัมน์ "ดี+กรอ รวม" (ผลิตได้ + ม้วนกรอ) ทั้งในตารางและไฟล์ Export',
+    ],
+  },
   {
     version: '1.3.17', date: '2026-06-11',
     items: [

@@ -175,6 +175,7 @@ export default function Planning({ dept }: { dept?: string }) {
                 { header:'เป้า (kg)', value:'target' },
                 { header:'ผลิตได้ (kg)', value:(j:Job)=>+j.goodKg.toFixed(1) },
                 { header:'ม้วนดี', value:'goodRolls' },
+                { header:'ดี+กรอ รวม (kg)', value:(j:Job)=>+(j.goodKg+j.badKg).toFixed(1) },
                 { header:'ม้วนกรอ (kg)', value:(j:Job)=>+j.badKg.toFixed(1) },
                 { header:'เศษ (kg)', value:(j:Job)=>+j.scrapKg.toFixed(1) },
                 { header:'คงเหลือขาด (kg)', value:(j:Job)=>+Math.max(0, j.target - j.goodKg).toFixed(1) },
@@ -226,16 +227,16 @@ export default function Planning({ dept }: { dept?: string }) {
             <table className="w-full text-sm">
               <thead className="bg-slate-800/40 text-[10px] text-slate-500 uppercase tracking-wider">
                 <tr>
-                  {['เครื่อง','สถานะ','สินค้า / WO / SO / Lot','เริ่มผลิต','จบงาน','เป้า','ผลิตได้','กรอ','เศษ','คงเหลือ (ขาด)','%'].map(h => (
+                  {['เครื่อง','สถานะ','สินค้า / WO / SO / Lot','เริ่มผลิต','จบงาน','เป้า','ผลิตได้','ดี+กรอ รวม','กรอ','เศษ','คงเหลือ (ขาด)','%'].map(h => (
                     <th key={h} className="px-3 py-2 text-left font-semibold whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/50">
                 {loading ? (
-                  <tr><td colSpan={11} className="py-16 text-center text-slate-500">กำลังโหลด...</td></tr>
+                  <tr><td colSpan={12} className="py-16 text-center text-slate-500">กำลังโหลด...</td></tr>
                 ) : filtered.length === 0 ? (
-                  <tr><td colSpan={11} className="py-16 text-center text-slate-600">ไม่มีงาน</td></tr>
+                  <tr><td colSpan={12} className="py-16 text-center text-slate-600">ไม่มีงาน</td></tr>
                 ) : filtered.map(j => {
                   const remain = Math.max(0, j.target - j.goodKg)
                   const pct = j.target > 0 ? Math.min(100, Math.round(j.goodKg / j.target * 100)) : 0
@@ -264,6 +265,7 @@ export default function Planning({ dept }: { dept?: string }) {
                       <td className="px-3 py-2 text-slate-300 text-xs whitespace-nowrap">{j.active ? '—' : dt(j.closedAt || j.end)}</td>
                       <td className="px-3 py-2 text-right text-slate-300 whitespace-nowrap">{j.target ? fmt(j.target,0) : '—'}</td>
                       <td className="px-3 py-2 text-right whitespace-nowrap"><b className="text-green-400">{fmt(j.goodKg)}</b><span className="text-slate-600 text-[10px]"> · {j.goodRolls}ม้วน</span></td>
+                      <td className="px-3 py-2 text-right whitespace-nowrap"><b className="text-emerald-300">{fmt(j.goodKg+j.badKg)}</b><span className="text-slate-600 text-[10px]"> · {j.goodRolls+j.badRolls}ม้วน</span></td>
                       <td className="px-3 py-2 text-right text-amber-400 whitespace-nowrap">{j.badKg ? fmt(j.badKg) : '—'}</td>
                       <td className="px-3 py-2 text-right text-red-400 whitespace-nowrap">{j.scrapKg ? fmt(j.scrapKg) : '—'}</td>
                       <td className="px-3 py-2 text-right whitespace-nowrap">

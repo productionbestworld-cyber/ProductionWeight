@@ -623,23 +623,24 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                     const dt = d.transferred_at ? new Date(d.transferred_at) : null
                     return (
                       <button key={d.id} onClick={()=>openDoc(d)}
-                        className={`w-full text-left px-4 py-2.5 transition-colors border-l-4 ${isSel?'bg-brand-600/20 border-brand-500':'border-transparent hover:bg-slate-800/40'}`}>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-brand-300 font-mono text-xs font-bold">{d.doc_no}</span>
+                        className={`w-full text-left px-4 py-3 transition-colors border-l-4 ${isSel?'bg-brand-600/20 border-brand-500':'border-transparent hover:bg-slate-800/40'}`}>
+                        {/* แถวบน: ขนาด (เด่นสุด) + ประเภท + น้ำหนัก */}
+                        <div className="flex items-center gap-1.5 mb-1">
+                          {d.size
+                            ? <span className="text-sm font-black bg-brand-500/25 text-brand-100 px-2 py-0.5 rounded">{d.size}</span>
+                            : <span className="text-[10px] text-slate-600">ไม่ระบุขนาด</span>}
                           <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${typeBadge}`}>{typeLbl}</span>
                           <span className="ml-auto text-green-300 font-black text-sm">{fmt(d.total_kg)} <span className="text-[10px] text-slate-500 font-normal">Kg · {d.total_rolls} {unit}</span></span>
                         </div>
-                        <p className="text-white text-xs font-semibold truncate flex items-center gap-1.5">
-                          {d.product_name||'—'}
-                          {d.size && <span className="text-[10px] font-black bg-brand-500/25 text-brand-100 px-1.5 py-0.5 rounded shrink-0">{d.size}</span>}
-                        </p>
+                        {/* ลูกค้า (เด่นรอง) */}
+                        {d.customer && <p className="text-white text-xs font-bold truncate">👥 {d.customer}</p>}
+                        <p className="text-slate-400 text-[10px] mt-0.5 truncate">{d.product_name||'—'}</p>
                         <div className="flex items-center gap-1.5 flex-wrap text-[10px] mt-1">
                           {d.work_order && <span className="bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded font-bold">WO {d.work_order}</span>}
                           {d.sale_order && <span className="bg-blue-500/15 text-blue-300 px-1.5 py-0.5 rounded font-bold">SO {d.sale_order}</span>}
                           <span className="font-mono text-slate-500">Lot {d.lot_no}</span>
                         </div>
-                        {d.customer && <p className="text-slate-400 text-[10px] mt-0.5 truncate">👥 {d.customer}</p>}
-                        <p className="text-slate-600 text-[10px] mt-0.5">🕐 {dt?dt.toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit',year:'2-digit'})+' '+dt.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}):'—'} · โดย {d.transferred_by||'—'}</p>
+                        <p className="text-slate-600 text-[10px] mt-1">📄 {d.doc_no} · 🕐 {dt?dt.toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit',year:'2-digit'})+' '+dt.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}):'—'} · โดย {d.transferred_by||'—'}</p>
                       </button>
                     )
                   })}
@@ -652,10 +653,14 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
               <div className="flex-1 bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden flex flex-col">
                 {/* panel header */}
                 <div className="px-5 py-3 border-b border-slate-800 flex items-center justify-between bg-brand-600/10">
-                  <div>
-                    <p className="text-brand-300 font-mono font-bold">{selectedDoc.doc_no}</p>
-                    <p className="text-slate-400 text-xs mt-0.5">
-                      {new Date(selectedDoc.transferred_at).toLocaleDateString('th-TH')} · {fmtTime(selectedDoc.transferred_at)} · โดย <b className="text-white">{selectedDoc.transferred_by}</b>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      {selectedDoc.size && <span className="text-sm font-black bg-brand-500/25 text-brand-100 px-2 py-0.5 rounded">{selectedDoc.size}</span>}
+                      {selectedDoc.customer && <span className="text-white font-bold text-sm truncate">👥 {selectedDoc.customer}</span>}
+                    </div>
+                    {selectedDoc.product_name && <p className="text-slate-300 text-xs truncate">{selectedDoc.product_name}</p>}
+                    <p className="text-slate-500 text-[11px] mt-0.5">
+                      📄 <span className="text-brand-300 font-mono">{selectedDoc.doc_no}</span> · {new Date(selectedDoc.transferred_at).toLocaleDateString('th-TH')} · {fmtTime(selectedDoc.transferred_at)} · โดย <b className="text-slate-300">{selectedDoc.transferred_by}</b>
                     </p>
                   </div>
                   <div className="flex items-center gap-2">

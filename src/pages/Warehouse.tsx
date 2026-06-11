@@ -260,18 +260,26 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
     (!fCustomer || r.customer === fCustomer) &&
     (!fLot      || r.lot_no === fLot) &&
     (!fSize     || sizeLabel(r) === fSize) &&
-    (!search    || String(r.roll_no).includes(search) || (r.lot_no ?? '').toLowerCase().includes(search.toLowerCase()))
+    (!search    || String(r.roll_no).includes(search) || (r.lot_no ?? '').toLowerCase().includes(search.toLowerCase())
+      || ((r as any).work_order ?? '').toLowerCase().includes(search.toLowerCase())
+      || ((r as any).sale_order ?? '').toLowerCase().includes(search.toLowerCase()))
   ), [stock, fSection, fProduct, fCustomer, fLot, fSize, search])
 
-  // group stock by lot
+  // group stock by lot + WO (กัน 2 งานปน Lot เดียว) + เก็บ SO / วันเริ่ม-จบ
   const stockByLot = useMemo(() => {
-    const map = new Map<string, { lot: string; product: string; customer: string; size: string; rolls: Roll[] }>()
+    const map = new Map<string, { lot: string; product: string; customer: string; size: string; wo: string; so: string; start: string; end: string; rolls: Roll[] }>()
     filteredStock.forEach(r => {
-      const k = `${r.lot_no ?? '?'}__${r.product_name ?? '?'}`
-      if (!map.has(k)) map.set(k, { lot: r.lot_no ?? '?', product: r.product_name ?? '?', customer: r.customer ?? '?', size: sizeLabel(r), rolls: [] })
-      map.get(k)!.rolls.push(r)
+      const wo = ((r as any).work_order ?? '').trim()
+      const so = ((r as any).sale_order ?? '').trim()
+      const k = `${r.lot_no ?? '?'}__${r.product_name ?? '?'}__${wo}`
+      if (!map.has(k)) map.set(k, { lot: r.lot_no ?? '?', product: r.product_name ?? '?', customer: r.customer ?? '?', size: sizeLabel(r), wo, so, start: r.created_at, end: r.created_at, rolls: [] })
+      const g = map.get(k)!
+      if (r.created_at && (!g.start || r.created_at < g.start)) g.start = r.created_at
+      if (r.created_at && (!g.end   || r.created_at > g.end))   g.end   = r.created_at
+      if (!g.so && so) g.so = so
+      g.rolls.push(r)
     })
-    return Array.from(map.values()).sort((a, b) => a.lot.localeCompare(b.lot))
+    return Array.from(map.values()).sort((a, b) => a.lot.localeCompare(b.lot) || a.wo.localeCompare(b.wo))
   }, [filteredStock])
 
   // ── เศษ (scrap) — เชื่อมจากงานผลิต/กรอ จัดกลุ่มตาม Lot/งาน ──
@@ -550,10 +558,11 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
             {loading ? <div className="text-slate-500 text-sm py-8 text-center">กำลังโหลด...</div>
             : stockByLot.length === 0 ? <div className="bg-slate-900 border border-slate-800 rounded-2xl py-16 text-center text-slate-500">ไม่มีสต็อกคงเหลือ</div>
             : stockByLot.map(group => {
-              const key = `${group.lot}__${group.product}`
+              const key = `${group.lot}__${group.product}__${group.wo}`
               const isOpen = expandedLots.has(key)
               const totalKg = group.rolls.reduce((s,r) => s+(r.weight??0), 0)
-              const ncInLot = ncByLotKey.get(key) ?? []
+              const ncInLot = ncByLotKey.get(`${group.lot}__${group.product}`) ?? []
+              const dtShort = (iso?: string) => iso ? new Date(iso).toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit',year:'2-digit'})+' '+new Date(iso).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}) : '—'
               return (
                 <div key={key} className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
                   {ncInLot.length > 0 && (
@@ -566,11 +575,18 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                     <button onClick={() => toggleLot(key)} className="flex items-center gap-3 flex-1 text-left hover:opacity-80 transition-opacity">
                       {isOpen ? <ChevronDown size={16} className="text-slate-400"/> : <ChevronRight size={16} className="text-slate-400"/>}
                       <div>
-                        <p className="text-white font-semibold text-sm">{group.product}</p>
-                        <p className="text-slate-500 text-xs">
-                          Lot: <span className="text-slate-300 font-mono">{group.lot}</span>
-                          {group.size && <span className="ml-1.5 text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono">{group.size}</span>}
-                          <span className="ml-1.5">· {group.customer}</span>
+                        <p className="text-white font-semibold text-sm flex items-center gap-1.5 flex-wrap">
+                          {group.product}
+                          {group.size && <span className="text-[11px] font-black bg-brand-500/20 text-brand-200 border border-brand-500/30 px-2 py-0.5 rounded">{group.size}</span>}
+                        </p>
+                        <p className="text-slate-500 text-xs flex items-center gap-1.5 flex-wrap mt-0.5">
+                          {group.wo && <span className="text-[10px] font-bold bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded">WO {group.wo}</span>}
+                          {group.so && <span className="text-[10px] font-bold bg-blue-500/15 text-blue-300 px-1.5 py-0.5 rounded">SO {group.so}</span>}
+                          <span>Lot: <span className="text-slate-300 font-mono">{group.lot}</span></span>
+                          <span>· {group.customer}</span>
+                        </p>
+                        <p className="text-slate-600 text-[10px] mt-0.5">
+                          🕐 เริ่ม {dtShort(group.start)} → จบ {dtShort(group.end)}
                         </p>
                       </div>
                     </button>
@@ -866,11 +882,16 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                             <span className="bg-brand-600 text-white font-black text-xs px-2 py-1 rounded-lg w-12 text-center flex-shrink-0">{r.machine_no||'?'}</span>
                             {/* คลิกที่ม้วนเพื่อดูรายละเอียด */}
                             <div onClick={() => setExpandedRoll(isOpen ? null : r.id)} className="flex-1 min-w-0 cursor-pointer">
-                              <div className="flex items-baseline gap-2">
+                              <div className="flex items-baseline gap-2 flex-wrap">
                                 <span className="font-mono font-black text-white">ม้วน #{r.roll_no}</span>
+                                {sizeLabel(r) && <span className="text-[9px] font-black bg-brand-500/20 text-brand-200 px-1 py-0.5 rounded">{sizeLabel(r)}</span>}
                                 <span className="text-slate-500 text-xs font-mono">Lot {r.lot_no}</span>
                               </div>
                               <p className="text-slate-500 text-xs truncate">{r.product_name||'—'}</p>
+                              <div className="flex items-center gap-1 flex-wrap text-[9px] mt-0.5">
+                                {(r as any).work_order && <span className="bg-amber-500/15 text-amber-300 px-1 py-0.5 rounded font-bold">WO {(r as any).work_order}</span>}
+                                {(r as any).sale_order && <span className="bg-blue-500/15 text-blue-300 px-1 py-0.5 rounded font-bold">SO {(r as any).sale_order}</span>}
+                              </div>
                             </div>
                             <div onClick={() => setExpandedRoll(isOpen ? null : r.id)} className="text-right flex-shrink-0 cursor-pointer">
                               <p className="font-black text-lg text-brand-300 leading-none">{fmt(r.weight)}</p>

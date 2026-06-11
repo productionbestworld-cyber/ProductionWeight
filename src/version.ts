@@ -1,10 +1,17 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.3.4'
-export const APP_BUILD_DATE = '2026-06-09'
+export const APP_VERSION = '1.3.5'
+export const APP_BUILD_DATE = '2026-06-11'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.3.5', date: '2026-06-11',
+    items: [
+      'หน้าโอนเข้าคลัง + คลัง: โชว์ SO / WO / ขนาด ในรายการม้วน (ไม่ต้องกางดูทีละม้วน)',
+      'หน้าคลัง: ค้นหาด้วย WO / SO ได้ + แยกกลุ่มสต็อกตาม WO กัน 2 งานปน Lot เดียว',
+    ],
+  },
   {
     version: '1.3.4', date: '2026-06-10',
     items: [

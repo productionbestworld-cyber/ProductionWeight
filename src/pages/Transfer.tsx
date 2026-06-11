@@ -373,7 +373,11 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
     const jobRolls = rolls.filter(r => r.machine_no === mNo && r.lot_no === lot && (r.work_order ?? '') === wo)
     const pending  = jobRolls.filter(r => !r.transferred).length
     const sample   = jobRolls[0]
-    return { machine_no: mNo, lot_no: lot, work_order: wo, product: sample?.product_name, customer: sample?.customer, total: jobRolls.length, pending }
+    const dates = jobRolls.map(r => r.created_at).filter(Boolean).sort()
+    const size = sample?.width_cm && sample?.thick_mc ? `${sample.width_cm}${sample.width_unit ?? 'cm'}×${sample.thick_mc}mc` : ''
+    return { machine_no: mNo, lot_no: lot, work_order: wo, so: sample?.sale_order ?? '', size,
+             start: dates[0] ?? '', end: dates[dates.length-1] ?? '',
+             product: sample?.product_name, customer: sample?.customer, total: jobRolls.length, pending }
   }).filter(j => j.pending > 0)  // ← ซ่อน job ที่โอนครบแล้ว
 
   const filtered = rolls.filter(r => {
@@ -860,12 +864,17 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                             {isRunning ? '● กำลังเดิน' : '■ จบงานแล้ว'}
                           </span>
                         </div>
-                        <p className="text-white text-xs font-semibold leading-tight truncate">{j.product || '—'}</p>
-                        <p className="text-slate-500 text-[10px] mt-0.5 truncate">{j.customer || ''}</p>
-                        <p className="text-slate-600 text-[10px]">
-                          {j.work_order && <span className="text-amber-400 font-bold">WO {j.work_order} · </span>}
-                          Lot {String(j.lot_no).slice(-8)} · รวม {j.total} {typeFilter==='scrap'?'ถุง':'ม้วน'}
+                        <p className="text-white text-xs font-semibold leading-tight truncate flex items-center gap-1">
+                          {j.product || '—'}
+                          {(j as any).size && <span className="text-[9px] font-black bg-brand-500/20 text-brand-200 px-1 py-0.5 rounded shrink-0">{(j as any).size}</span>}
                         </p>
+                        <p className="text-slate-500 text-[10px] mt-0.5 truncate">{j.customer || ''}</p>
+                        <div className="flex items-center gap-1 flex-wrap text-[9px] mt-0.5">
+                          {j.work_order && <span className="bg-amber-500/15 text-amber-300 px-1 py-0.5 rounded font-bold">WO {j.work_order}</span>}
+                          {(j as any).so && <span className="bg-blue-500/15 text-blue-300 px-1 py-0.5 rounded font-bold">SO {(j as any).so}</span>}
+                          <span className="text-slate-600 font-mono">Lot {String(j.lot_no).slice(-8)}</span>
+                        </div>
+                        {(j as any).start && <p className="text-slate-600 text-[9px] mt-0.5">🕐 {new Date((j as any).start).toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit'})} {new Date((j as any).start).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})} → {new Date((j as any).end).toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit'})} {new Date((j as any).end).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})}</p>}
                         <div className="flex items-center justify-between mt-1">
                           <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold">รอโอน {j.pending} {typeFilter==='scrap'?'ถุง':'ม้วน'}</span>
                         </div>
@@ -1014,6 +1023,11 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                             {isDone && <span className="text-[10px] text-green-400">✓ โอนแล้ว {r.transferred_by && `· ${r.transferred_by}`}</span>}
                           </div>
                           <p className="text-slate-500 text-xs truncate">{r.product_name || '—'}{r.lot_no ? ` · Lot ${r.lot_no}` : ''}</p>
+                          <div className="flex items-center gap-1 flex-wrap text-[9px] mt-0.5">
+                            {r.width_cm && r.thick_mc && <span className="font-black bg-brand-500/20 text-brand-200 px-1 py-0.5 rounded">{r.width_cm}{r.width_unit ?? 'cm'}×{r.thick_mc}mc</span>}
+                            {r.work_order && <span className="bg-amber-500/15 text-amber-300 px-1 py-0.5 rounded font-bold">WO {r.work_order}</span>}
+                            {r.sale_order && <span className="bg-blue-500/15 text-blue-300 px-1 py-0.5 rounded font-bold">SO {r.sale_order}</span>}
+                          </div>
                         </div>
 
                         {/* Weight */}

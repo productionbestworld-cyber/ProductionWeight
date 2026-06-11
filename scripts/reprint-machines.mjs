@@ -6,7 +6,10 @@ import { writeFileSync } from 'node:fs'
 const url='https://belwjdajuaxbhaqtlhrj.supabase.co'
 const key='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJlbHdqZGFqdWF4YmhhcXRsaHJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3NzgzNzYsImV4cCI6MjA5NDM1NDM3Nn0.aM-DKa8v0OlQQW6MsDzmCrEFY0d8rEVgzuemZ8UKZJA'
 const APP='https://production-weight-best-world.vercel.app'  // ใช้ทำ QR (โดเมน production)
-const MACHINES=['BL10']
+const MACHINES=['BL05']
+const NAME_OVERRIDE='PE SHRINK FILM 75CM 60-70MC'  // '' = ใช้ชื่อจากม้วน · ใส่ชื่อ = บังคับใช้ชื่อนี้
+const LOT_ONLY='69BL050025106'   // '' = ทุก lot · ใส่ = เฉพาะ lot นี้
+const WO_ONLY='69/06/048'   // '' = ทุก WO · ใส่ = เฉพาะ WO นี้
 const sb=createClient(url,key)
 
 const fmt=(n,d=2)=>{ const x=Number(n); return isNaN(x)?(0).toFixed(d):x.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}) }
@@ -21,11 +24,13 @@ const profByM=new Map(profs.map(p=>[p.machine_no,p]))
 
 const jobs=new Map()  // jobKey -> {meta, labels[]}
 for(const m of MACHINES){
-  const mp=profByM.get(m); if(!mp||!mp.lot_no) continue
+  const mp=profByM.get(m); if(!mp) continue
+  const useLot = LOT_ONLY || mp.lot_no; if(!useLot) continue
   const curWO=String(mp.work_order??'').trim()
   const {data:rolls}=await sb.from('production_rolls').select('*')
-    .eq('machine_no',m).eq('lot_no',mp.lot_no).eq('roll_type','good').order('roll_no')
+    .eq('machine_no',m).eq('lot_no',useLot).eq('roll_type','good').order('roll_no')
   for(const r of (rolls||[])){
+    if(WO_ONLY && String(r.work_order??'').trim()!==WO_ONLY) continue
     const isRunning = String(r.work_order??'').trim()===curWO
     const jobKey=`${m}|${r.lot_no}|${r.work_order??''}`
     const dec=mp.decimal_places??2
@@ -34,16 +39,20 @@ for(const m of MACHINES){
     const exp=(()=>{const d=new Date(r.created_at);d.setMonth(d.getMonth()+6);return thai(d)})()
     const core=Number(r.core_weight)||0, gross=Number(r.gross_weight)||0, net=Number(r.weight)||0
     const qr=await QRCode.toDataURL(`${APP}/?roll=${r.id}`,{width:144,margin:1,errorCorrectionLevel:'M'})
+    // ใช้ข้อมูล "ของม้วนตอนชั่งจริง" (r) ก่อน · ถ้าไม่มีค่อย fallback profile (mp)
+    const MAT=r.mat_code||mp.mat_code||'', PC=r.product_code||mp.product_code||''
+    const PN=NAME_OVERRIDE||r.product_name||mp.product_name||''
+    const W=r.width_cm||mp.width_cm||'', WU=r.width_unit||mp.width_unit||'cm', TH=r.thick_mc||mp.thick_mc||''
     const D={
       header:(mp.header_text?.trim()||'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด'),
-      mat:`Mat Code&nbsp;&nbsp;<b style="font-size:1.15em">${mp.mat_code||''}</b>`,
+      mat:`Mat Code&nbsp;&nbsp;<b style="font-size:1.15em">${MAT}</b>`,
       mfg:`MFG Date&nbsp;&nbsp;<b style="font-size:1.15em">${mfgDate}</b>${showExp?`&nbsp;&nbsp;&nbsp;EXP&nbsp;&nbsp;<b style="font-size:1.15em">${exp}</b>`:''}`,
       rollno:`Roll No.&nbsp;&nbsp;<b style="font-size:1.15em">${r.roll_no}</b>`,
-      prodcode:mp.product_code?`<span style="font-weight:400">Product Code</span>&nbsp;&nbsp;<b>${mp.product_code}</b>`:'',
-      prodname:`<span style="font-weight:400">Product Name</span>&nbsp;&nbsp;<b>${mp.product_name||''}</b>`,
-      machine:`เครื่อง&nbsp;&nbsp;<b>${mp.machine_no}</b>`,
+      prodcode:PC?`<span style="font-weight:400">Product Code</span>&nbsp;&nbsp;<b>${PC}</b>`:'',
+      prodname:`<span style="font-weight:400">Product Name</span>&nbsp;&nbsp;<b>${PN}</b>`,
+      machine:`เครื่อง&nbsp;&nbsp;<b>${r.machine_no||mp.machine_no}</b>`,
       core:`Core Weight&nbsp;&nbsp;<b>${fmt(core,dec)}</b>`,
-      size:`Size&nbsp;&nbsp;<b style="font-size:1.2em">${mp.width_cm||''}</b>&nbsp;${mp.width_unit||'cm'}&nbsp;×&nbsp;<b style="font-size:1.2em">${mp.thick_mc||''}</b>&nbsp;mc`,
+      size:`Size&nbsp;&nbsp;<b style="font-size:1.2em">${W}</b>&nbsp;${WU}&nbsp;×&nbsp;<b style="font-size:1.2em">${TH}</b>&nbsp;mc`,
       lotno:`Lot No&nbsp;&nbsp;<b>${r.lot_no}</b>`,
       length:`Length&nbsp;&nbsp;<b>${mp.length||'—'}</b>&nbsp;M.${mp.pcs?`&nbsp;&nbsp;<b>${mp.pcs}</b>&nbsp;Pcs.`:''}`,
       gross:`Gross Weight&nbsp;&nbsp;<b>${fmt(gross,dec)} Kgs.</b>`,

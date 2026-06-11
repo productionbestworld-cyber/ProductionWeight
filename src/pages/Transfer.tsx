@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Fragment } from 'react'
 import { Package, Search, CheckCircle2, ArrowRightFromLine, RefreshCw, Wind, Printer, FileText, Download } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import * as XLSX from 'xlsx'
@@ -434,6 +434,8 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
       const lots        = [...new Set(selectedRolls.map(r => r.lot_no).filter(Boolean))]
       const wos         = [...new Set(selectedRolls.map(r => r.work_order).filter(Boolean))]
       const sos         = [...new Set(selectedRolls.map(r => r.sale_order).filter(Boolean))]
+      const custs       = [...new Set(selectedRolls.map(r => r.customer).filter(Boolean))]
+      const sz          = (() => { const s = selectedRolls[0]; return s?.width_cm && s?.thick_mc ? `${s.width_cm}${s.width_unit ?? 'cm'}×${s.thick_mc}mc` : '' })()
 
       // 1. สร้าง transfer_document
       const { data: doc, error: docErr } = await supabase.from('transfer_documents').insert({
@@ -447,6 +449,8 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
         lot_no:         lots.join(', '),
         work_order:     wos.join(', '),
         sale_order:     sos.join(', '),
+        customer:       custs.join(', '),
+        size:           sz,
         transfer_type:  typeFilter, // good | bad | scrap
       }).select().single()
       if (docErr) throw docErr
@@ -493,6 +497,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
     setDocLoading(true)
     const { data } = await supabase.from('production_rolls')
       .select('*').eq('transfer_doc_id', doc.id)
+      .order('work_order', { ascending: true })
       .order('roll_no', { ascending: true })
       .order('created_at', { ascending: true })
     setDocRolls(data ?? [])
@@ -600,129 +605,39 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
               </div>
               {docs.length === 0 ? (
                 <div className="py-16 text-center text-slate-600 text-sm">ยังไม่มีการโอน</div>
-              ) : (() => {
-                // จัดกลุ่ม 3 ระดับ: WO > SO > Lot
-                const woMap = new Map<string, Map<string, Map<string, any[]>>>()
-                for (const d of docs) {
-                  const wo  = (d.work_order ?? '').split(',')[0].trim() || '(ไม่ระบุ WO)'
-                  const so  = (d.sale_order ?? '').split(',')[0].trim() || '(ไม่ระบุ SO)'
-                  const lot = (d.lot_no ?? '').split(',')[0].trim() || '?'
-                  if (!woMap.has(wo)) woMap.set(wo, new Map())
-                  if (!woMap.get(wo)!.has(so)) woMap.get(wo)!.set(so, new Map())
-                  if (!woMap.get(wo)!.get(so)!.has(lot)) woMap.get(wo)!.get(so)!.set(lot, [])
-                  woMap.get(wo)!.get(so)!.get(lot)!.push(d)
-                }
-                const woList = [...woMap.entries()].map(([wo, soMap]) => {
-                  const sos = [...soMap.entries()].map(([so, lotMap]) => {
-                    const lots = [...lotMap.entries()].map(([lot, items]) => ({
-                      lot, items,
-                      totalKg: items.reduce((s, x) => s + (x.total_kg ?? 0), 0),
-                      totalRolls: items.reduce((s, x) => s + (x.total_rolls ?? 0), 0),
-                    }))
-                    return { so, lots, totalKg: lots.reduce((s, x) => s + x.totalKg, 0) }
-                  })
-                  const allItems = sos.flatMap(s => s.lots.flatMap(l => l.items))
-                  const totalKg  = sos.reduce((s, x) => s + x.totalKg, 0)
-                  const goodKg   = allItems.filter(x => (x.transfer_type ?? 'good') === 'good').reduce((s, x) => s + (x.total_kg ?? 0), 0)
-                  const badKg    = allItems.filter(x => x.transfer_type === 'bad').reduce((s, x) => s + (x.total_kg ?? 0), 0)
-                  const scrapKg  = allItems.filter(x => x.transfer_type === 'scrap').reduce((s, x) => s + (x.total_kg ?? 0), 0)
-                  const latest   = allItems.reduce((mx, x) => x.transferred_at > mx ? x.transferred_at : mx, allItems[0]?.transferred_at ?? '')
-                  const product  = allItems.find(x => x.product_name)?.product_name ?? ''
-                  return { wo, sos, totalKg, goodKg, badKg, scrapKg, latest, product, totalDocs: allItems.length }
-                }).sort((a, b) => b.latest.localeCompare(a.latest))
-
-                return (
-                  <div className="divide-y divide-slate-800/50 max-h-[75vh] overflow-y-auto">
-                    {woList.map(wg => {
-                      const woKey = `wo:${wg.wo}`
-                      const woOpen = openGroups[woKey] ?? true
-                      return (
-                        <div key={wg.wo}>
-                          {/* ── WO LEVEL ─────────────────── */}
-                          <button onClick={() => setOpenGroups(p => ({ ...p, [woKey]: !woOpen }))}
-                            className="w-full text-left px-4 py-3 hover:bg-slate-800/40 transition-colors border-l-4 border-amber-500">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-amber-400 text-sm font-bold">{woOpen ? '▼' : '▶'}</span>
-                              <span className="text-xs font-black px-3 py-1 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow">📋 WO {wg.wo}</span>
-                              <span className="text-[10px] bg-slate-700 text-slate-200 px-2 py-0.5 rounded font-bold">{wg.sos.length} SO</span>
-                              <span className="text-[10px] bg-slate-700 text-slate-200 px-2 py-0.5 rounded font-bold">{wg.totalDocs} ใบ</span>
-                              <span className="ml-auto text-green-300 font-black text-sm">{fmt(wg.totalKg)} Kg</span>
-                            </div>
-                            {wg.product && <p className="text-xs text-slate-400 truncate mb-1.5">{wg.product}</p>}
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              {wg.goodKg  > 0 && <span className="text-[10px] bg-blue-500/15 text-blue-300 border border-blue-500/30 px-1.5 py-0.5 rounded font-bold">✅ FG {fmt(wg.goodKg)} Kg</span>}
-                              {wg.badKg   > 0 && <span className="text-[10px] bg-orange-500/15 text-orange-300 border border-orange-500/30 px-1.5 py-0.5 rounded font-bold">🔄 กรอ {fmt(wg.badKg)} Kg</span>}
-                              {wg.scrapKg > 0 && <span className="text-[10px] bg-red-500/15 text-red-300 border border-red-500/30 px-1.5 py-0.5 rounded font-bold">🗑 เศษ {fmt(wg.scrapKg)} Kg</span>}
-                            </div>
-                          </button>
-
-                          {woOpen && wg.sos.map(sg => {
-                            const soKey = `${woKey}|so:${sg.so}`
-                            const soOpen = openGroups[soKey] ?? true
-                            return (
-                              <div key={sg.so} className="ml-5 border-l-2 border-blue-500/30">
-                                {/* ── SO LEVEL ─────────────────── */}
-                                <button onClick={() => setOpenGroups(p => ({ ...p, [soKey]: !soOpen }))}
-                                  className="w-full text-left px-4 py-2 bg-slate-900/40 hover:bg-slate-800/40 transition-colors">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-blue-400 text-xs">{soOpen ? '▼' : '▶'}</span>
-                                    <span className="text-xs font-bold px-2 py-0.5 rounded bg-blue-500/30 text-blue-200">SO {sg.so}</span>
-                                    <span className="text-[10px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded">{sg.lots.length} Lot</span>
-                                    <span className="ml-auto text-slate-300 font-bold text-xs">{fmt(sg.totalKg)} Kg</span>
-                                  </div>
-                                </button>
-
-                                {soOpen && sg.lots.map(lg => {
-                                  const lotKey = `${soKey}|lot:${lg.lot}`
-                                  const lotOpen = openGroups[lotKey] ?? true
-                                  return (
-                                    <div key={lg.lot} className="ml-5 border-l-2 border-slate-700">
-                                      {/* ── LOT LEVEL ─────────────────── */}
-                                      <button onClick={() => setOpenGroups(p => ({ ...p, [lotKey]: !lotOpen }))}
-                                        className="w-full text-left px-4 py-1.5 hover:bg-slate-800/30 transition-colors">
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-slate-500 text-xs">{lotOpen ? '▼' : '▶'}</span>
-                                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-700 text-slate-200">Lot {lg.lot}</span>
-                                          <span className="text-[10px] text-slate-500">{lg.items.length} ใบ · {fmt(lg.totalKg)} Kg</span>
-                                        </div>
-                                      </button>
-
-                                      {lotOpen && (
-                                        <div className="bg-slate-950/50 px-3 py-2 space-y-1">
-                                          {lg.items.map(d => {
-                                            const isSel = selectedDoc?.id === d.id
-                                            const tt = d.transfer_type ?? 'good'
-                                            const typeBadge = tt === 'bad' ? 'bg-orange-500/30 text-orange-200' : tt === 'scrap' ? 'bg-red-500/30 text-red-200' : 'bg-blue-500/30 text-blue-200'
-                                            const typeLbl   = tt === 'bad' ? '🔄 กรอ' : tt === 'scrap' ? '🗑 เศษ' : '✅ FG'
-                                            const unit      = tt === 'scrap' ? 'ถุง' : 'ม้วน'
-                                            return (
-                                              <button key={d.id} onClick={() => openDoc(d)}
-                                                className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${isSel ? 'bg-brand-600/25 border border-brand-500/50' : 'bg-slate-900 border border-slate-800 hover:border-slate-700'}`}>
-                                                <div className="flex items-center justify-between gap-2 mb-0.5">
-                                                  <span className="text-brand-300 font-mono text-[11px] font-bold">{d.doc_no}</span>
-                                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${typeBadge}`}>{typeLbl}</span>
-                                                </div>
-                                                <div className="flex items-center justify-between">
-                                                  <span className="text-slate-500 text-[10px]">{new Date(d.transferred_at).toLocaleString('th-TH', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })} · <b className="text-slate-400">{d.transferred_by}</b></span>
-                                                  <span className="text-slate-300 text-xs font-bold">{fmt(d.total_kg)} <span className="text-slate-500">Kg · {d.total_rolls} {unit}</span></span>
-                                                </div>
-                                              </button>
-                                            )
-                                          })}
-                                        </div>
-                                      )}
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            )
-                          })}
+              ) : (
+                <div className="max-h-[75vh] overflow-y-auto divide-y divide-slate-800/50">
+                  {[...docs].sort((a,b)=>(b.transferred_at||'').localeCompare(a.transferred_at||'')).map(d => {
+                    const isSel = selectedDoc?.id === d.id
+                    const tt = d.transfer_type ?? 'good'
+                    const typeBadge = tt==='bad'?'bg-orange-500/20 text-orange-300':tt==='scrap'?'bg-red-500/20 text-red-300':'bg-blue-500/20 text-blue-300'
+                    const typeLbl = tt==='bad'?'🔄 กรอ':tt==='scrap'?'🗑 เศษ':'✅ FG'
+                    const unit = tt==='scrap'?'ถุง':'ม้วน'
+                    const dt = d.transferred_at ? new Date(d.transferred_at) : null
+                    return (
+                      <button key={d.id} onClick={()=>openDoc(d)}
+                        className={`w-full text-left px-4 py-2.5 transition-colors border-l-4 ${isSel?'bg-brand-600/20 border-brand-500':'border-transparent hover:bg-slate-800/40'}`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-brand-300 font-mono text-xs font-bold">{d.doc_no}</span>
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${typeBadge}`}>{typeLbl}</span>
+                          <span className="ml-auto text-green-300 font-black text-sm">{fmt(d.total_kg)} <span className="text-[10px] text-slate-500 font-normal">Kg · {d.total_rolls} {unit}</span></span>
                         </div>
-                      )
-                    })}
-                  </div>
-                )
-              })()}
+                        <p className="text-white text-xs font-semibold truncate flex items-center gap-1.5">
+                          {d.product_name||'—'}
+                          {d.size && <span className="text-[10px] font-black bg-brand-500/25 text-brand-100 px-1.5 py-0.5 rounded shrink-0">{d.size}</span>}
+                        </p>
+                        <div className="flex items-center gap-1.5 flex-wrap text-[10px] mt-1">
+                          {d.work_order && <span className="bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded font-bold">WO {d.work_order}</span>}
+                          {d.sale_order && <span className="bg-blue-500/15 text-blue-300 px-1.5 py-0.5 rounded font-bold">SO {d.sale_order}</span>}
+                          <span className="font-mono text-slate-500">Lot {d.lot_no}</span>
+                        </div>
+                        {d.customer && <p className="text-slate-400 text-[10px] mt-0.5 truncate">👥 {d.customer}</p>}
+                        <p className="text-slate-600 text-[10px] mt-0.5">🕐 {dt?dt.toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit',year:'2-digit'})+' '+dt.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}):'—'} · โดย {d.transferred_by||'—'}</p>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
             </div>
 
             {/* ── Drill-down panel (right) ── */}
@@ -781,8 +696,30 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/50">
-                        {docRolls.map((r, i) => (
-                          <tr key={r.id} className="hover:bg-slate-800/30">
+                        {docRolls.map((r, i) => {
+                          const prevWo = i > 0 ? (docRolls[i-1].work_order ?? '') : null
+                          const curWo = r.work_order ?? ''
+                          const showWoHeader = curWo !== prevWo
+                          const woRolls = docRolls.filter(x => (x.work_order ?? '') === curWo)
+                          const ws = woRolls[0] ?? r
+                          const woSize = ws.width_cm && ws.thick_mc ? `${ws.width_cm}${ws.width_unit ?? 'cm'}×${ws.thick_mc}mc` : ''
+                          return (
+                          <Fragment key={r.id}>
+                          {showWoHeader && (
+                            <tr className="bg-amber-500/10 border-y border-amber-500/20">
+                              <td colSpan={9} className="px-3 py-2">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-[11px] font-black bg-amber-500/25 text-amber-200 px-2 py-0.5 rounded">📋 WO {curWo || '(ไม่ระบุ)'}</span>
+                                  {ws.sale_order && <span className="text-[11px] font-bold bg-blue-500/20 text-blue-200 px-2 py-0.5 rounded">SO {ws.sale_order}</span>}
+                                  {woSize && <span className="text-[11px] font-black bg-brand-500/25 text-brand-100 px-2 py-0.5 rounded">{woSize}</span>}
+                                  <span className="text-xs text-slate-200 font-semibold">{ws.customer || '—'}</span>
+                                  <span className="text-slate-400 text-xs">· {ws.product_name || ''}</span>
+                                  <span className="ml-auto text-[11px] text-slate-300">{woRolls.length} ม้วน · <b className="text-green-300">{fmt(woRolls.reduce((s,x)=>s+(x.weight??0),0))}</b> Kgs.</span>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                          <tr className="hover:bg-slate-800/30">
                             <td className="px-3 py-2.5 text-slate-600 text-xs">{i+1}</td>
                             <td className="px-3 py-2.5"><span className="text-[10px] bg-brand-500/20 text-brand-300 font-bold px-1.5 py-0.5 rounded">{r.machine_no||'?'}</span></td>
                             <td className="px-3 py-2.5 text-white font-mono font-bold">{String(r.roll_type).startsWith('scrap') ? 'ถุงเศษ' : `#${r.roll_no}`}</td>
@@ -793,7 +730,9 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                             <td className="px-3 py-2.5 text-slate-400 text-xs">{r.inspector||'—'}</td>
                             <td className="px-3 py-2.5 text-slate-500 text-xs">{new Date(r.created_at).toLocaleString('th-TH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</td>
                           </tr>
-                        ))}
+                          </Fragment>
+                          )
+                        })}
                       </tbody>
                       <tfoot>
                         <tr className="border-t border-slate-700 bg-green-500/5">

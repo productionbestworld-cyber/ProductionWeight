@@ -2434,7 +2434,8 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       setLastRoll({ ...data, weighType: actualType })
       setWeighedRolls(prev => [...prev, data].filter(Boolean))
       // ม้วนต้นทาง: ชั่งได้แล้ว → ปิดม้วน (ที่เหลือเป็นเศษ) → หายจากลิสต์ กันชั่งซ้ำ
-      if (useSrc) {
+      // ⚠ เฉพาะตอนเซฟสำเร็จ (online) — ถ้าออฟไลน์ ม้วนใหม่ยังไม่ลง DB จึงไม่หักม้วนต้นทาง
+      if (useSrc && inserted) {
         const sc = Math.max(0, (useSrc.weight ?? 0) - saveWeight)
         await supabase.from('production_rolls').update({
           rework_status: 'reworked',
@@ -2444,7 +2445,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         setSrcRolls(prev => prev.filter(x => x.id !== useSrc.id))
       }
       // ม้วนนอกระบบ: บวกเบิกมาเข้าเป้างาน (ให้คิดเศษถูก) + เคลียร์ช่องสำหรับม้วนถัดไป
-      if (useManual && reworkJobId) {
+      if (useManual && reworkJobId && inserted) {
         const { data: j } = await supabase.from('rework_jobs').select('planned_qty').eq('id', reworkJobId).maybeSingle()
         const newPlanned = ((parseFloat(j?.planned_qty ?? '0') || 0) + useManual.kg).toFixed(2)
         await supabase.from('rework_jobs').update({ planned_qty: newPlanned }).eq('id', reworkJobId)

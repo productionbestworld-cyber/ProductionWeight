@@ -379,6 +379,11 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
              start: dates[0] ?? '', end: dates[dates.length-1] ?? '',
              product: sample?.product_name, customer: sample?.customer, total: jobRolls.length, pending }
   }).filter(j => j.pending > 0)  // ← ซ่อน job ที่โอนครบแล้ว
+    // คนโอนยึด ขนาด → ลูกค้า → เครื่อง เป็นหลัก
+    .sort((a, b) =>
+      (a.size || '').localeCompare(b.size || '') ||
+      (a.customer || '').localeCompare(b.customer || '') ||
+      (a.machine_no || '').localeCompare(b.machine_no || ''))
 
   const filtered = rolls.filter(r => {
     if (!showDone && r.transferred) return false
@@ -795,21 +800,23 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                       <button key={`${j.machine_no}-${j.lot_no}-${j.work_order}`}
                         onClick={() => { setMachine(j.machine_no); setLotNo(j.lot_no); setWoFilter(j.work_order ?? ''); setSelected(new Set()) }}
                         className={`w-full text-left p-3 rounded-xl border transition-all ${isSel ? 'border-brand-500 bg-brand-500/15' : 'border-slate-700 hover:border-slate-500 hover:bg-slate-800/50'}`}>
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="bg-brand-600 text-white font-black text-xs px-2 py-0.5 rounded">เครื่อง {j.machine_no}</span>
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                        {/* แถวบน: ขนาด (เด่นสุด) + เครื่อง + สถานะ */}
+                        <div className="flex items-center gap-1.5 mb-1">
+                          {(j as any).size
+                            ? <span className="text-sm font-black bg-brand-500/25 text-brand-100 px-2 py-0.5 rounded">{(j as any).size}</span>
+                            : <span className="text-[10px] text-slate-600">ไม่ระบุขนาด</span>}
+                          <span className="bg-brand-600 text-white font-black text-[10px] px-1.5 py-0.5 rounded">{j.machine_no}</span>
+                          <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-bold ${
                             isRunning
                               ? 'bg-green-500/20 text-green-400 animate-pulse'
                               : 'bg-slate-700 text-slate-400'
                           }`}>
-                            {isRunning ? '● กำลังเดิน' : '■ จบงานแล้ว'}
+                            {isRunning ? '● เดิน' : '■ จบ'}
                           </span>
                         </div>
-                        <p className="text-white text-xs font-semibold leading-tight truncate flex items-center gap-1">
-                          {j.product || '—'}
-                          {(j as any).size && <span className="text-[9px] font-black bg-brand-500/20 text-brand-200 px-1 py-0.5 rounded shrink-0">{(j as any).size}</span>}
-                        </p>
-                        <p className="text-slate-500 text-[10px] mt-0.5 truncate">{j.customer || ''}</p>
+                        {/* ลูกค้า (เด่นรอง) */}
+                        <p className="text-white text-xs font-bold leading-tight truncate">👥 {j.customer || '—'}</p>
+                        <p className="text-slate-400 text-[10px] mt-0.5 truncate">{j.product || '—'}</p>
                         <div className="flex items-center gap-1 flex-wrap text-[9px] mt-0.5">
                           {j.work_order && <span className="bg-amber-500/15 text-amber-300 px-1 py-0.5 rounded font-bold">WO {j.work_order}</span>}
                           {(j as any).so && <span className="bg-blue-500/15 text-blue-300 px-1 py-0.5 rounded font-bold">SO {(j as any).so}</span>}
@@ -950,7 +957,11 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                     pendingIds: items.filter(x=>!x.transferred).map(x=>x.id),
                     totalKg: items.reduce((a,x)=>a+(x.weight??0),0),
                   }
-                }).sort((a,b)=> (a.machine||'').localeCompare(b.machine||'') || (a.lot||'').localeCompare(b.lot||''))
+                }).sort((a,b)=>
+                  (a.size||'').localeCompare(b.size||'') ||
+                  (a.customer||'').localeCompare(b.customer||'') ||
+                  (a.machine||'').localeCompare(b.machine||'') ||
+                  (a.lot||'').localeCompare(b.lot||''))
 
                 return (
                 <div className="divide-y divide-slate-800/60">
@@ -966,18 +977,20 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                             onChange={e => setSelected(prev => { const n = new Set(prev); g.pendingIds.forEach(id => e.target.checked ? n.add(id) : n.delete(id)); return n })}
                             className="w-4 h-4 accent-brand-500 shrink-0"/>
                         )}
+                        {g.size
+                          ? <span className="text-base font-black px-2.5 py-1 rounded-lg bg-brand-500/25 text-brand-100 shrink-0">{g.size}</span>
+                          : <span className="text-[10px] px-2 py-1 rounded-lg bg-slate-800 text-slate-600 shrink-0">ไม่ระบุขนาด</span>}
                         <span className="text-xs font-black px-2 py-1 rounded-lg bg-brand-600 text-white shrink-0">{g.machine || '?'}</span>
                         <button onClick={() => setOpenGroups(p => ({ ...p, [g.key]: !open }))} className="flex-1 min-w-0 text-left">
                           <p className="text-white font-bold text-sm truncate flex items-center gap-1.5">
                             <span className="text-brand-400">{open ? '▼' : '▶'}</span>
-                            {g.product}
-                            {g.size && <span className="text-[10px] font-black bg-brand-500/25 text-brand-100 px-1.5 py-0.5 rounded shrink-0">{g.size}</span>}
+                            👥 {g.customer || '—'}
                           </p>
                           <div className="flex items-center gap-1.5 flex-wrap text-[10px] mt-0.5 pl-4">
+                            <span className="text-slate-400 truncate max-w-[180px]">{g.product}</span>
                             {g.wo && <span className="bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded font-bold">WO {g.wo}</span>}
                             {g.so && <span className="bg-blue-500/15 text-blue-300 px-1.5 py-0.5 rounded font-bold">SO {g.so}</span>}
                             <span className="font-mono text-slate-500">Lot {g.lot}</span>
-                            {g.customer && <span className="text-slate-400">· {g.customer}</span>}
                             {g.start && <span className="text-slate-600">· 🕐 {fmtTime(g.start)}{g.end && g.end!==g.start ? `–${fmtTime(g.end)}` : ''}</span>}
                           </div>
                         </button>

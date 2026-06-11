@@ -101,6 +101,32 @@ export async function backfillProductMatCore(itemCode?: string, matCode?: string
   }
 }
 
+// จำลูกค้าที่พิมพ์เอง → เพิ่มเข้าคลังลูกค้าอัตโนมัติ (ถ้ายังไม่มีชื่อนี้)
+// คืนค่า cust_code ที่ใช้ (ของเดิมถ้ามี / ที่เพิ่งสร้าง) เพื่อให้ผู้เรียกเก็บลงม้วนได้
+export async function backfillCustomer(custName?: string, custCode?: string): Promise<string | null> {
+  const name = (custName ?? '').trim()
+  if (!name) return (custCode ?? '').trim() || null
+  try {
+    // มีอยู่แล้ว (เทียบชื่อแบบ trim) → คืนรหัสเดิม ไม่เพิ่มซ้ำ
+    const { data: existing } = await supabase.from('customers').select('cust_code, cust_name')
+    const hit = (existing ?? []).find(c => (c.cust_name ?? '').trim() === name)
+    if (hit) return (hit.cust_code ?? '').trim() || null
+    // รหัสถัดไป = max(เลข) + 1
+    const nums = (existing ?? [])
+      .map(c => (c.cust_code ?? '').trim())
+      .filter(s => /^[0-9]+$/.test(s)).map(Number)
+    const next = (nums.length ? Math.max(...nums) : 0) + 1
+    const code = (custCode ?? '').trim() || String(next)
+    const { error } = await supabase.from('customers')
+      .insert({ cust_code: code, cust_name: name, note: 'เพิ่มอัตโนมัติจากการตั้งเครื่อง' })
+    if (error) { console.warn('[backfillCustomer]', error.message); return code }
+    return code
+  } catch (e) {
+    console.warn('[backfillCustomer]', e)
+    return (custCode ?? '').trim() || null
+  }
+}
+
 // ─── Main Page ───────────────────────────────────────────────────────────────
 type Tab = 'customers' | 'products'
 

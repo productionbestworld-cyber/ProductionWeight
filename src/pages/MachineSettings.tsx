@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Plus, Trash2, Save, ChevronDown, ChevronUp, RefreshCw, X, Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { fetchProducts, addProductIfMissing, backfillProductMatCore, type Product } from './Products'
+import { fetchProducts, addProductIfMissing, backfillProductMatCore, backfillCustomer, type Product } from './Products'
 
 // ── Display helpers ───────────────────────────────────────────────────────────
 // แสดงขนาดให้ตรงกับหน่วยที่ผู้ใช้เลือก — ใช้ทุกหน้าทั่วระบบ
@@ -694,6 +694,8 @@ export default function MachineSettings({ dept }: { dept?: 'blow'|'print'|'rewin
         .upsert(profileToDb(p), { onConflict: 'machine_no' })
       // จำ Mat Code / แกน / ชื่อสินค้า ที่พิมพ์เอง กลับเข้า master (เฉพาะตอน master ว่าง)
       backfillProductMatCore(p.itemCode, p.matCode, p.coreWeight, p.productName)
+      // จำลูกค้าที่พิมพ์เอง → เพิ่มเข้าคลังลูกค้าอัตโนมัติ (ถ้ายังไม่มีชื่อนี้)
+      backfillCustomer(p.custName, p.custCode)
     }
     saveProfiles(profiles)
     setSaved(true)

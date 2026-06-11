@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase'
 import { loadProfiles, saveProfiles, fmtSize, convertWidth, type MachineProfile } from './MachineSettings'
 import ReworkJobList from './ReworkJobList'
 import { loadLongLayout, loadShortLayout, loadWasteLayout, type FieldConfig } from './LabelDesigner'
-import { fetchProducts, backfillProductMatCore, addProductIfMissing, type Product } from './Products'
+import { fetchProducts, backfillProductMatCore, backfillCustomer, addProductIfMissing, type Product } from './Products'
 import { fetchFlag } from './Admin'
 import ReworkInbox from './ReworkInbox'
 import ExportButton from '../components/ExportButton'
@@ -1395,6 +1395,8 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
       if (error) throw new Error(error.message)
       // จำ Mat Code / แกน / ชื่อสินค้า ที่พิมพ์เอง กลับเข้า master (เฉพาะตอน master ว่าง)
       backfillProductMatCore(p.itemCode, p.matCode, p.coreWeight, p.productName)
+      // จำลูกค้าที่พิมพ์เอง → เพิ่มเข้าคลังลูกค้าอัตโนมัติ
+      backfillCustomer(p.custName, p.custCode)
       saveAllSuggestions(p)
       onSaved()
     } catch (e: any) {
@@ -2454,6 +2456,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
 
       // ── จำค่าที่กรอกเอง: ถ้า master ยังไม่มี Mat Code/แกน → เติมกลับให้ครั้งหน้า auto-fill ──
       backfillProductMatCore(profile.itemCode, profile.matCode, profile.coreWeight, profile.productName)
+      backfillCustomer((profile as any).custName, (profile as any).custCode)
 
       // บันทึก log ทุกการชั่ง (await + retry 2 ครั้ง — log สำคัญสำหรับ recovery)
       const logPayload = {

@@ -297,6 +297,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   const [woFilter,    setWoFilter]    = useState<string>('')   // แยกงานตามใบสั่งผลิต (กัน 2 สินค้าปน Lot เดียว)
   const [showDone,    setShowDone]    = useState(false)
   const [search,      setSearch]      = useState('')
+  const [docSearch,   setDocSearch]   = useState('')   // ค้นหาในประวัติการโอน
   const [loading,     setLoading]     = useState(true)
   const [saving,      setSaving]      = useState(false)
   const [selectedDoc, setSelectedDoc] = useState<any | null>(null)
@@ -606,15 +607,30 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
 
             {/* ── รายการใบโอน — จัดกลุ่มตาม Machine + Lot ── */}
             <div className={`bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden flex-shrink-0 ${selectedDoc ? 'w-96' : 'flex-1'}`}>
-              <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
-                <p className="text-white font-semibold text-sm">📦 ประวัติการโอน — จัดตามงาน</p>
-                <p className="text-slate-500 text-[10px]">{docs.length} ใบ · {fmt(docs.reduce((s,d)=>s+(d.total_kg??0),0))} Kgs.</p>
+              {(() => {
+                const q = docSearch.trim().toLowerCase()
+                const fdocs = q
+                  ? docs.filter(d => `${d.doc_no ?? ''} ${d.product_name ?? ''} ${d.customer ?? ''} ${d.size ?? ''} ${d.work_order ?? ''} ${d.sale_order ?? ''} ${d.lot_no ?? ''} ${d.machine_no ?? ''} ${d.transferred_by ?? ''} ${d.transfer_type ?? ''}`.toLowerCase().includes(q))
+                  : docs
+                return (<>
+              <div className="px-4 py-3 border-b border-slate-800 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <p className="text-white font-semibold text-sm">📦 ประวัติการโอน — จัดตามงาน</p>
+                  <p className="text-slate-500 text-[10px]">{fdocs.length}{q && `/${docs.length}`} ใบ · {fmt(fdocs.reduce((s,d)=>s+(d.total_kg??0),0))} Kgs.</p>
+                </div>
+                <div className="relative">
+                  <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500"/>
+                  <input value={docSearch} onChange={e => setDocSearch(e.target.value)}
+                    placeholder="ค้นหา: เลขใบ / สินค้า / ลูกค้า / ขนาด / WO / SO / Lot / เครื่อง / ผู้โอน..."
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-8 pr-8 py-1.5 text-xs text-white outline-none focus:border-brand-500"/>
+                  {docSearch && <button onClick={()=>setDocSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white text-xs">✕</button>}
+                </div>
               </div>
-              {docs.length === 0 ? (
-                <div className="py-16 text-center text-slate-600 text-sm">ยังไม่มีการโอน</div>
+              {fdocs.length === 0 ? (
+                <div className="py-16 text-center text-slate-600 text-sm">{q ? 'ไม่พบใบโอนที่ค้นหา' : 'ยังไม่มีการโอน'}</div>
               ) : (
-                <div className="max-h-[75vh] overflow-y-auto divide-y divide-slate-800/50">
-                  {[...docs].sort((a,b)=>(b.transferred_at||'').localeCompare(a.transferred_at||'')).map(d => {
+                <div className="max-h-[70vh] overflow-y-auto divide-y divide-slate-800/50">
+                  {[...fdocs].sort((a,b)=>(b.transferred_at||'').localeCompare(a.transferred_at||'')).map(d => {
                     const isSel = selectedDoc?.id === d.id
                     const tt = d.transfer_type ?? 'good'
                     const typeBadge = tt==='bad'?'bg-orange-500/20 text-orange-300':tt==='scrap'?'bg-red-500/20 text-red-300':'bg-blue-500/20 text-blue-300'
@@ -646,6 +662,8 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                   })}
                 </div>
               )}
+                </>)
+              })()}
             </div>
 
             {/* ── Drill-down panel (right) ── */}

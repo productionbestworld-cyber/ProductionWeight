@@ -387,7 +387,9 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
     if (woFilter && (r.work_order ?? '') !== woFilter) return false
     if (search) {
       const q = search.toLowerCase()
-      if (!String(r.roll_no).includes(q) && !(r.remark??'').toLowerCase().includes(q)) return false
+      const w = (r.width_cm ?? '').toString().trim(), t = (r.thick_mc ?? '').toString().trim()
+      const blob = `${r.roll_no} ${r.remark ?? ''} ${r.product_name ?? ''} ${r.customer ?? ''} ${r.work_order ?? ''} ${r.sale_order ?? ''} ${r.lot_no ?? ''} ${w}x${t} ${w}*${t} ${w} ${t}`.toLowerCase()
+      if (!blob.includes(q)) return false
     }
     return true
   }).sort((a, b) => {
@@ -927,14 +929,71 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                   <p className="text-slate-400 font-semibold">โอนครบแล้ว!</p>
                   <p className="text-slate-600 text-xs mt-1">ไม่มี{typeFilter==='scrap'?'ถุงเศษ':'ม้วน'}รอโอนในงานนี้</p>
                 </div>
-              ) : (
+              ) : (() => {
+                // จัดกลุ่มม้วนตามงาน: เครื่อง + Lot + WO (กัน 2 งานปนกันในลิสต์เดียว)
+                const gmap = new Map<string, any[]>()
+                for (const r of filtered) {
+                  const k = `${r.machine_no ?? '?'}__${r.lot_no ?? '?'}__${r.work_order ?? ''}`
+                  if (!gmap.has(k)) gmap.set(k, [])
+                  gmap.get(k)!.push(r)
+                }
+                const grps = [...gmap.entries()].map(([key, items]) => {
+                  const s = items[0]
+                  const dates = items.map(r => r.created_at).filter(Boolean).sort()
+                  return {
+                    key, items,
+                    machine: s.machine_no, lot: s.lot_no, wo: s.work_order ?? '', so: s.sale_order ?? '',
+                    product: items.find(x=>x.product_name)?.product_name ?? '—',
+                    customer: items.find(x=>x.customer)?.customer ?? '',
+                    size: s.width_cm && s.thick_mc ? `${s.width_cm}${s.width_unit ?? 'cm'}×${s.thick_mc}mc` : '',
+                    start: dates[0] ?? '', end: dates[dates.length-1] ?? '',
+                    pendingIds: items.filter(x=>!x.transferred).map(x=>x.id),
+                    totalKg: items.reduce((a,x)=>a+(x.weight??0),0),
+                  }
+                }).sort((a,b)=> (a.machine||'').localeCompare(b.machine||'') || (a.lot||'').localeCompare(b.lot||''))
+
+                return (
                 <div className="divide-y divide-slate-800/60">
-                  {filtered.map(r => {
+                  {grps.map(g => {
+                    const open = openGroups[g.key] ?? true
+                    const allSel = g.pendingIds.length > 0 && g.pendingIds.every(id => selected.has(id))
+                    return (
+                    <div key={g.key} className="bg-slate-900">
+                      {/* ── หัวงาน ── */}
+                      <div className="flex items-center gap-3 px-4 py-2.5 bg-slate-800/30 border-l-4 border-brand-500">
+                        {g.pendingIds.length > 0 && (
+                          <input type="checkbox" checked={allSel} title="เลือกทั้งงาน"
+                            onChange={e => setSelected(prev => { const n = new Set(prev); g.pendingIds.forEach(id => e.target.checked ? n.add(id) : n.delete(id)); return n })}
+                            className="w-4 h-4 accent-brand-500 shrink-0"/>
+                        )}
+                        <span className="text-xs font-black px-2 py-1 rounded-lg bg-brand-600 text-white shrink-0">{g.machine || '?'}</span>
+                        <button onClick={() => setOpenGroups(p => ({ ...p, [g.key]: !open }))} className="flex-1 min-w-0 text-left">
+                          <p className="text-white font-bold text-sm truncate flex items-center gap-1.5">
+                            <span className="text-brand-400">{open ? '▼' : '▶'}</span>
+                            {g.product}
+                            {g.size && <span className="text-[10px] font-black bg-brand-500/25 text-brand-100 px-1.5 py-0.5 rounded shrink-0">{g.size}</span>}
+                          </p>
+                          <div className="flex items-center gap-1.5 flex-wrap text-[10px] mt-0.5 pl-4">
+                            {g.wo && <span className="bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded font-bold">WO {g.wo}</span>}
+                            {g.so && <span className="bg-blue-500/15 text-blue-300 px-1.5 py-0.5 rounded font-bold">SO {g.so}</span>}
+                            <span className="font-mono text-slate-500">Lot {g.lot}</span>
+                            {g.customer && <span className="text-slate-400">· {g.customer}</span>}
+                            {g.start && <span className="text-slate-600">· 🕐 {fmtTime(g.start)}{g.end && g.end!==g.start ? `–${fmtTime(g.end)}` : ''}</span>}
+                          </div>
+                        </button>
+                        <div className="text-right shrink-0">
+                          <p className="text-brand-300 font-black text-sm leading-none">{fmt(g.totalKg)} <span className="text-[10px] text-slate-500 font-normal">Kg</span></p>
+                          <p className="text-[10px] text-slate-500">{g.pendingIds.length} รอโอน / {g.items.length} ม้วน</p>
+                        </div>
+                      </div>
+
+                      {/* ── ม้วนในงาน ── */}
+                      {open && g.items.map(r => {
                     const isSel  = selected.has(r.id)
                     const isDone = r.transferred
                     return (
                       <div key={r.id} onClick={() => !isDone && toggleOne(r.id)}
-                        className={`flex items-center gap-3 px-4 py-3 transition-colors ${
+                        className={`flex items-center gap-3 pl-8 pr-4 py-2.5 transition-colors ${
                           isDone  ? 'opacity-40 cursor-default' :
                           isSel   ? 'bg-brand-500/12 cursor-pointer' :
                                     'hover:bg-slate-800/50 cursor-pointer'
@@ -950,22 +1009,11 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                           }
                         </div>
 
-                        {/* Machine badge */}
-                        <span className={`text-xs font-black px-2 py-1 rounded-lg w-12 text-center flex-shrink-0 ${isDone ? 'bg-slate-800 text-slate-500' : 'bg-brand-600 text-white'}`}>
-                          {r.machine_no || '?'}
-                        </span>
-
                         {/* Roll info */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-baseline gap-2">
                             <span className={`font-mono font-black text-base ${isDone ? 'text-slate-500' : 'text-white'}`}>{String(r.roll_type).startsWith('scrap') ? 'ถุงเศษ' : `ม้วน #${r.roll_no}`}</span>
                             {isDone && <span className="text-[10px] text-green-400">✓ โอนแล้ว {r.transferred_by && `· ${r.transferred_by}`}</span>}
-                          </div>
-                          <p className="text-slate-500 text-xs truncate">{r.product_name || '—'}{r.lot_no ? ` · Lot ${r.lot_no}` : ''}</p>
-                          <div className="flex items-center gap-1 flex-wrap text-[9px] mt-0.5">
-                            {r.width_cm && r.thick_mc && <span className="font-black bg-brand-500/20 text-brand-200 px-1 py-0.5 rounded">{r.width_cm}{r.width_unit ?? 'cm'}×{r.thick_mc}mc</span>}
-                            {r.work_order && <span className="bg-amber-500/15 text-amber-300 px-1 py-0.5 rounded font-bold">WO {r.work_order}</span>}
-                            {r.sale_order && <span className="bg-blue-500/15 text-blue-300 px-1 py-0.5 rounded font-bold">SO {r.sale_order}</span>}
                           </div>
                         </div>
 
@@ -990,9 +1038,13 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                         )}
                       </div>
                     )
+                      })}
+                    </div>
+                    )
                   })}
                 </div>
-              )}
+                )
+              })()}
             </div>
 
           </div>

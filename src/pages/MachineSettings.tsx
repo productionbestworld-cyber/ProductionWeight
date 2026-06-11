@@ -693,7 +693,7 @@ export default function MachineSettings({ dept }: { dept?: 'blow'|'print'|'rewin
       await supabase.from('machine_profiles')
         .upsert(profileToDb(p), { onConflict: 'machine_no' })
       // จำ Mat Code / แกน / ชื่อสินค้า ที่พิมพ์เอง กลับเข้า master (เฉพาะตอน master ว่าง)
-      backfillProductMatCore(p.itemCode, p.matCode, p.coreWeight, p.productName)
+      backfillProductMatCore(p.itemCode, p.matCode, p.coreWeight, p.productName, (p as any).productCode)
       // จำลูกค้าที่พิมพ์เอง → เพิ่มเข้าคลังลูกค้าอัตโนมัติ (ถ้ายังไม่มีชื่อนี้)
       backfillCustomer(p.custName, p.custCode)
     }

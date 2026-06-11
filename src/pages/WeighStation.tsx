@@ -1394,7 +1394,7 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
       }, { onConflict: 'machine_no' })
       if (error) throw new Error(error.message)
       // จำ Mat Code / แกน / ชื่อสินค้า ที่พิมพ์เอง กลับเข้า master (เฉพาะตอน master ว่าง)
-      backfillProductMatCore(p.itemCode, p.matCode, p.coreWeight, p.productName)
+      backfillProductMatCore(p.itemCode, p.matCode, p.coreWeight, p.productName, (p as any).productCode)
       // จำลูกค้าที่พิมพ์เอง → เพิ่มเข้าคลังลูกค้าอัตโนมัติ
       backfillCustomer(p.custName, p.custCode)
       saveAllSuggestions(p)
@@ -2455,7 +2455,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       }
 
       // ── จำค่าที่กรอกเอง: ถ้า master ยังไม่มี Mat Code/แกน → เติมกลับให้ครั้งหน้า auto-fill ──
-      backfillProductMatCore(profile.itemCode, profile.matCode, profile.coreWeight, profile.productName)
+      backfillProductMatCore(profile.itemCode, profile.matCode, profile.coreWeight, profile.productName, (profile as any).productCode)
       backfillCustomer((profile as any).custName, (profile as any).custCode)
 
       // บันทึก log ทุกการชั่ง (await + retry 2 ครั้ง — log สำคัญสำหรับ recovery)

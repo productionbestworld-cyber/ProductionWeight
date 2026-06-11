@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.3.20'
+export const APP_VERSION = '1.3.21'
 export const APP_BUILD_DATE = '2026-06-11'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.3.21', date: '2026-06-11',
+    items: [
+      'จำ Product Code ที่พิมพ์เองกลับเข้าคลังสินค้าด้วย (เฉพาะตอน master ว่าง) — ครบชุด: Item Code · Mat Code · Product Code · Product Name · แกน · ลูกค้า เก็บสะสมเป็นฐานข้อมูลอัตโนมัติ',
+    ],
+  },
   {
     version: '1.3.20', date: '2026-06-11',
     items: [

@@ -406,6 +406,12 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
                                   const ti = inboundInfo(r.inbound_type)
                                   return <span className={`px-1.5 py-0.5 rounded font-bold ${ti.badge}`} title={ti.desc}>{ti.emoji} {ti.label}</span>
                                 })()}
+                                {(r.review_status === 'approved_rework' || r.review_decision_by) && (
+                                  <span className="bg-purple-500/20 text-purple-200 px-1.5 py-0.5 rounded font-bold"
+                                    title={`ผจก พิจารณาให้กรอ${r.review_decision_by ? ' · โดย '+r.review_decision_by : ''}${r.review_decision_at ? ' · '+fmtDateTime(r.review_decision_at) : ''}${r.review_action_reason ? '\nเหตุผล: '+r.review_action_reason : ''}`}>
+                                    ⚖ ผจก พิจารณา{r.review_decision_by ? ` (${r.review_decision_by})` : ''}
+                                  </span>
+                                )}
                                 {r.work_order && <span className="bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded font-bold">WO {r.work_order}</span>}
                                 {r.sale_order && <span className="bg-blue-500/15 text-blue-300 px-1.5 py-0.5 rounded font-bold">SO {r.sale_order}</span>}
                                 <span className="font-mono text-slate-500">Lot {r.lot_no}</span>

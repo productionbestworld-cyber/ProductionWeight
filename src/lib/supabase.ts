@@ -16,3 +16,19 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 }
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+
+// ── ดึงทุกแถวแบบแบ่งหน้า (page ละ 1000) จนครบ ──────────────────────────────
+// Supabase บังคับ server max-rows = 1000 ต่อ query — .limit(8000) หรือ select เปล่า
+// จะถูก cap เหลือ 1000 เงียบ ๆ ทำให้ยอดรวม/สต็อกขาด พอข้อมูลเกิน 1000 แถว
+// makeQuery: คืน query ใหม่ทุกครั้ง (ใส่ .select/.eq/.order ได้ตามต้องการ แต่ "อย่า" ใส่ .range)
+export async function fetchAll<T = any>(makeQuery: () => any): Promise<T[]> {
+  const all: T[] = []
+  const PAGE = 1000
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await makeQuery().range(from, from + PAGE - 1)
+    if (error || !data) break
+    all.push(...(data as T[]))
+    if (data.length < PAGE) break
+  }
+  return all
+}

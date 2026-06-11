@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { exportToExcel } from '../lib/exportExcel'
 import { History as HistoryIcon, Search, RefreshCw, X, FileText, Download, Trash2, Activity, ChevronRight, ChevronDown } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase, fetchAll } from '../lib/supabase'
 
 function fmt(n: number | null | undefined, d = 2) {
   if (n == null || isNaN(n as number)) return (0).toFixed(d)
@@ -75,9 +75,10 @@ export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
     if (data && data.length > 0) {
       const lots = [...new Set(data.map(s => s.lot_no).filter(Boolean))] as string[]
       if (lots.length > 0) {
-        const { data: rolls } = await supabase.from('production_rolls')
+        const rolls = await fetchAll(() => supabase.from('production_rolls')
           .select('machine_no,lot_no,roll_type,weight,transferred')
           .in('lot_no', lots)
+          .order('id', { ascending: true }))
         if (rolls) {
           const map: typeof xferStatus = {}
           const empty = () => ({ total: 0, done: 0, kg: 0, doneKg: 0 })

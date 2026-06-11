@@ -4,7 +4,7 @@ import {
   BarChart as HBarChart,
 } from 'recharts'
 import * as XLSX from 'xlsx'
-import { supabase } from '../lib/supabase'
+import { supabase, fetchAll } from '../lib/supabase'
 import { RotateCcw, Upload, X, Download, FileSpreadsheet } from 'lucide-react'
 import ExportButton from '../components/ExportButton'
 
@@ -144,16 +144,21 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
     const from = new Date(dateFrom); from.setHours(0,0,0,0)
     const to   = new Date(dateTo);   to.setHours(23,59,59,999)
     const [
-      { data: rData }, { data: jData }, { data: tData },
-      { data: mpData }, { data: pkData }, { data: cData }, { data: pData },
-      { data: wlData }, { data: dlData }, { data: rwData },
+      rData,
+      [
+        { data: jData }, { data: tData },
+        { data: mpData }, { data: pkData }, { data: cData }, { data: pData },
+        { data: wlData }, { data: dlData }, { data: rwData },
+      ],
     ] = await Promise.all([
-      supabase
+      // ม้วนหลัก (ฐานคำนวณ KPI) — ดึงทีละหน้าจนครบ กันเพดาน 1000 แถวตัดข้อมูล
+      fetchAll<Roll>(() => supabase
         .from('production_rolls')
         .select('*')
         .gte('created_at', from.toISOString())
         .lte('created_at', to.toISOString())
-        .order('created_at', { ascending: true }),
+        .order('created_at', { ascending: true })),
+      Promise.all([
       supabase
         .from('job_summaries')
         .select('*')
@@ -173,6 +178,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
       supabase.from('weigh_logs').select('*').gte('created_at', from.toISOString()).lte('created_at', to.toISOString()).order('created_at', { ascending: false }).limit(500),
       supabase.from('roll_deletion_logs').select('*').gte('deleted_at', from.toISOString()).lte('deleted_at', to.toISOString()).order('deleted_at', { ascending: false }),
       supabase.from('production_rolls').select('*').eq('roll_type', 'bad').not('rework_status', 'is', null).order('rework_received_at', { ascending: false }),
+      ]),
     ])
     setRolls((rData ?? []) as Roll[])
     setJobs(jData ?? [])
@@ -199,13 +205,13 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
       // silent reload — ไม่แสดง loading spinner
       const from = new Date(dateFrom); from.setHours(0,0,0,0)
       const to   = new Date(dateTo);   to.setHours(23,59,59,999)
-      supabase
+      fetchAll<Roll>(() => supabase
         .from('production_rolls')
         .select('id,roll_type,weight,gross_weight,core_weight,length,pcs,machine_no,lot_no,product_name,product_code,item_code,customer,cust_code,width_cm,width_unit,thick_mc,inspector,work_order,sale_order,created_at,roll_no,section,remark,review_status,review_action,review_action_reason,review_decision_by,rework_status,rework_remark,transferred,transferred_at,inbound_type')
         .gte('created_at', from.toISOString())
         .lte('created_at', to.toISOString())
-        .order('created_at', { ascending: true })
-        .then(({ data }) => { if (data) setRolls(data as Roll[]) })
+        .order('created_at', { ascending: true }))
+        .then(data => { if (data.length) setRolls(data) })
       supabase
         .from('job_summaries')
         .select('*')
@@ -240,8 +246,8 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
     if (tab !== 'compare') return
     const days = compPeriod === '1d' ? 1 : compPeriod === '7d' ? 7 : compPeriod === '15d' ? 15 : compPeriod === '1m' ? 30 : compPeriod === '3m' ? 90 : compPeriod === '6m' ? 180 : 365
     const from = new Date(); from.setDate(from.getDate() - days); from.setHours(0,0,0,0)
-    supabase.from('production_rolls').select('*').gte('created_at', from.toISOString())
-      .then(({ data }) => setCompRolls((data ?? []) as Roll[]))
+    fetchAll<Roll>(() => supabase.from('production_rolls').select('*').gte('created_at', from.toISOString()).order('created_at', { ascending: true }))
+      .then(data => setCompRolls(data))
   }, [tab, compPeriod])
 
   // dropdown options

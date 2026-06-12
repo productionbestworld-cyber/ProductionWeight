@@ -1922,7 +1922,7 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
     if (!ic) return
     // ม้วนเสียที่เบิกมา = bad + reworking + สินค้าเดียวกัน
     const { data: src } = await supabase.from('production_rolls')
-      .select('id, lot_no, roll_no, weight, core_weight, work_order, sale_order, remark')
+      .select('id, lot_no, roll_no, weight, core_weight, work_order, sale_order, remark, inbound_type, product_name, customer, width_cm, width_unit, thick_mc, machine_no, review_action_reason, review_decision_by')
       .eq('roll_type', 'bad').eq('item_code', ic).eq('rework_status', 'reworking')
       .order('created_at', { ascending: true })
     setSrcRolls(src ?? [])
@@ -2850,8 +2850,28 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                         <button onClick={() => finishSource(s)} title="กรอไม่ได้/เป็นเศษทั้งม้วน → เอาออกจากลิสต์"
                           className="text-[10px] bg-red-700/70 hover:bg-red-600 text-white px-2 py-0.5 rounded font-bold shrink-0">🗑 เศษทั้งม้วน</button>
                       </div>
+                      {/* รายละเอียดเต็มของม้วนต้นทาง */}
+                      <div className="flex items-center gap-1 flex-wrap text-[9px] mt-1">
+                        {(() => {
+                          const nc = ({ qc_reject:'🚫 NC ตรวจไม่ผ่าน', warehouse_damage:'📦 NC เสียจากคลัง' } as any)[s.inbound_type]
+                          return nc ? <span className="bg-rose-500/20 text-rose-300 px-1.5 py-0.5 rounded font-bold">{nc}</span> : null
+                        })()}
+                        {s.work_order && <span className="bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded font-bold">WO {s.work_order}</span>}
+                        {s.sale_order && <span className="bg-blue-500/15 text-blue-300 px-1.5 py-0.5 rounded font-bold">SO {s.sale_order}</span>}
+                        {s.width_cm && s.thick_mc && <span className="bg-brand-500/20 text-brand-200 px-1.5 py-0.5 rounded font-bold">{s.width_cm}{s.width_unit ?? 'cm'}×{s.thick_mc}mc</span>}
+                        {s.machine_no && <span className="text-slate-500">เครื่อง {s.machine_no}</span>}
+                      </div>
+                      {(s.product_name || s.customer) && (
+                        <p className="text-[9px] text-slate-400 mt-0.5 truncate">{s.product_name}{s.customer ? ` · ${s.customer}` : ''}</p>
+                      )}
+                      {s.remark && (
+                        <p className="text-[9px] text-rose-300/90 mt-0.5 leading-tight" title={s.remark}>⚠ เหตุผล: {s.remark}</p>
+                      )}
+                      {s.review_decision_by && (
+                        <p className="text-[9px] text-purple-300/80 mt-0.5">⚖ ผจก: {s.review_decision_by}{s.review_action_reason ? ` · ${s.review_action_reason}` : ''}</p>
+                      )}
                       <div className="flex justify-between text-[10px] mt-0.5 text-slate-400">
-                        <span>{s.work_order ? `WO ${s.work_order}` : ''}{s.sale_order ? ` · SO ${s.sale_order}` : ''}</span>
+                        <span>แกน {fmt(s.core_weight ?? 0, dec)} Kg</span>
                         <span>กรอได้ <b className="text-green-300">{fmt(done,dec)}</b> · เหลือ <b className="text-amber-300">{fmt(left,dec)}</b></span>
                       </div>
                     </div>

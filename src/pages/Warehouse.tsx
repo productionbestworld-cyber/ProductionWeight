@@ -281,20 +281,35 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
       || ((r as any).sale_order ?? '').toLowerCase().includes(search.toLowerCase()))
   ), [stock, fSection, fProduct, fCustomer, fLot, fSize, search])
 
+  // ม้วนกรอ (ผลผลิตจากแผนกกรอ) = ม้วนดีที่มี rework_source ติดมา
+  const isReworkRoll = (r: any) => !!(r.rework_source_roll_id || r.rework_source_lot)
+
   // group stock by lot + WO (กัน 2 งานปน Lot เดียว) + เก็บ SO / วันเริ่ม-จบ
+  // ม้วนกรอจะถูกจับเข้ากลุ่ม Lot เป่าเดิม (rework_source_lot) ให้อยู่กับม้วนดีของ WO นั้น
   const stockByLot = useMemo(() => {
-    const map = new Map<string, { lot: string; product: string; customer: string; size: string; wo: string; so: string; start: string; end: string; rolls: Roll[] }>()
+    const map = new Map<string, { lot: string; product: string; customer: string; size: string; wo: string; so: string; start: string; end: string; rolls: Roll[]; goodN: number; reworkN: number }>()
     filteredStock.forEach(r => {
+      const rew = isReworkRoll(r)
+      const groupLot = (rew && ((r as any).rework_source_lot ?? '').trim()) ? ((r as any).rework_source_lot as string).trim() : (r.lot_no ?? '?')
       const wo = ((r as any).work_order ?? '').trim()
       const so = ((r as any).sale_order ?? '').trim()
-      const k = `${r.lot_no ?? '?'}__${r.product_name ?? '?'}__${wo}`
-      if (!map.has(k)) map.set(k, { lot: r.lot_no ?? '?', product: r.product_name ?? '?', customer: r.customer ?? '?', size: sizeLabel(r), wo, so, start: r.created_at, end: r.created_at, rolls: [] })
+      const k = `${groupLot}__${r.product_name ?? '?'}__${wo}`
+      if (!map.has(k)) map.set(k, { lot: groupLot, product: r.product_name ?? '?', customer: r.customer ?? '?', size: sizeLabel(r), wo, so, start: r.created_at, end: r.created_at, rolls: [], goodN: 0, reworkN: 0 })
       const g = map.get(k)!
       if (r.created_at && (!g.start || r.created_at < g.start)) g.start = r.created_at
       if (r.created_at && (!g.end   || r.created_at > g.end))   g.end   = r.created_at
       if (!g.so && so) g.so = so
       g.rolls.push(r)
+      rew ? g.reworkN++ : g.goodN++
     })
+    // เรียงในกลุ่ม: ม้วนเป่าดีก่อน (ตามเลขม้วน) → ม้วนกรออยู่ท้าย
+    for (const g of map.values()) {
+      g.rolls.sort((a, b) => {
+        const ra = isReworkRoll(a) ? 1 : 0, rb = isReworkRoll(b) ? 1 : 0
+        if (ra !== rb) return ra - rb
+        return (a.roll_no ?? 0) - (b.roll_no ?? 0) || (a.created_at || '').localeCompare(b.created_at || '')
+      })
+    }
     return Array.from(map.values()).sort((a, b) => a.lot.localeCompare(b.lot) || a.wo.localeCompare(b.wo))
   }, [filteredStock])
 
@@ -601,8 +616,10 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                           <span>Lot: <span className="text-slate-300 font-mono">{group.lot}</span></span>
                           <span>· {group.customer}</span>
                         </p>
-                        <p className="text-slate-600 text-[10px] mt-0.5">
-                          🕐 เริ่ม {dtShort(group.start)} → จบ {dtShort(group.end)}
+                        <p className="text-slate-600 text-[10px] mt-0.5 flex items-center gap-2 flex-wrap">
+                          <span>🕐 เริ่ม {dtShort(group.start)} → จบ {dtShort(group.end)}</span>
+                          <span className="text-green-400 font-bold">🌬 เป่าดี {group.goodN}</span>
+                          {group.reworkN > 0 && <span className="text-amber-400 font-bold">🔄 กรอ {group.reworkN}</span>}
                         </p>
                       </div>
                     </button>
@@ -633,7 +650,12 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                           {[
                             ...group.rolls.map((r:any) => ({ r, nc:false })),
                             ...ncInLot.map((r:any) => ({ r, nc:true })),
-                          ].sort((a,b) => (b.r.roll_no??0) - (a.r.roll_no??0))
+                          ].sort((a,b) => {
+                            // ม้วนเป่าดีก่อน → ม้วนกรออยู่ท้าย; ในแต่ละกลุ่มเรียงเลขม้วนน้อย→มาก
+                            const ra = isReworkRoll(a.r) ? 1 : 0, rb = isReworkRoll(b.r) ? 1 : 0
+                            if (ra !== rb) return ra - rb
+                            return (a.r.roll_no??0) - (b.r.roll_no??0)
+                          })
                           .map(({ r, nc }, idx) => {
                             // ── ม้วนที่แจ้ง NC ออกไปแล้ว — แทรกในตาราง ขีดคร่อม ──
                             if (nc) return (
@@ -657,6 +679,7 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                               className={`cursor-pointer ${isOpen ? 'bg-slate-800/40' : 'hover:bg-slate-800/30'}`}>
                               <td className="px-4 py-2.5 text-slate-500 text-xs">{idx + 1}</td>
                               <td className="px-4 py-2.5 font-mono font-bold text-white">{isOpen ? '▲' : '▼'} #{r.roll_no}
+                                {isReworkRoll(r) && <span className="ml-1.5 text-[9px] bg-amber-500/25 text-amber-200 px-1.5 py-0.5 rounded font-bold" title={(r as any).rework_remark || `กรอจาก Lot ${(r as any).rework_source_lot||''}`}>🔄 กรอ</span>}
                                 {((r as any).remark || '').includes('คืน NC') && <span className="ml-1.5 text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold" title={(r as any).remark}>↩ เคยถูก NC</span>}
                               </td>
                               <td className="px-4 py-2.5"><span className="text-[10px] bg-brand-500/20 text-brand-300 font-bold px-1.5 py-0.5 rounded">{r.machine_no||'—'}</span></td>

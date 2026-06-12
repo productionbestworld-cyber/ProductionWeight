@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.3.25'
+export const APP_VERSION = '1.3.26'
 export const APP_BUILD_DATE = '2026-06-11'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.3.26', date: '2026-06-11',
+    items: [
+      'แก้แกนกรอยังโชว์ 1.25: query ม้วนต้นทางไม่ได้ดึง core_weight มา เลยตกไปใช้ค่า default — เพิ่มให้ดึงแกนจริง ตอนนี้เลือกม้วนต้นทาง 1.22 จะโชว์ 1.22 ถูกต้อง',
+    ],
+  },
   {
     version: '1.3.25', date: '2026-06-11',
     items: [

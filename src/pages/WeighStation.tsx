@@ -1918,7 +1918,7 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
     if (!ic) return
     // ม้วนเสียที่เบิกมา = bad + reworking + สินค้าเดียวกัน
     const { data: src } = await supabase.from('production_rolls')
-      .select('id, lot_no, roll_no, weight, work_order, sale_order, remark')
+      .select('id, lot_no, roll_no, weight, core_weight, work_order, sale_order, remark')
       .eq('roll_type', 'bad').eq('item_code', ic).eq('rework_status', 'reworking')
       .order('created_at', { ascending: true })
     setSrcRolls(src ?? [])

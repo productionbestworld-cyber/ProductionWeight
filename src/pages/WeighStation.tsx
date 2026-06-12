@@ -2845,7 +2845,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
           {isRework && isGood && (
             <div className="space-y-1.5 bg-slate-900 border border-blue-500/30 rounded-xl p-2.5">
               <p className="text-blue-300 text-xs font-bold">📌 กำลังกรอจากม้วนต้นทางไหน? (ติ๊กก่อนชั่ง)</p>
-              <div className="space-y-1 max-h-44 overflow-y-auto">
+              <div className="space-y-1 max-h-[55vh] overflow-y-auto">
                 {srcRolls.map(s => {
                   const done = srcProg[s.id] ?? 0
                   const left = Math.max(0, (s.weight ?? 0) - done)

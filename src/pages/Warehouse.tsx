@@ -1096,11 +1096,28 @@ function ReturnToReworkModal({ roll, onClose, onDone }:
     // log เป็นแค่ paper trail — ถ้า insert ไม่ได้ (เช่น column ยังไม่ครบ) ก็ไม่ขวางการแจ้ง NC
     if (logErr) console.warn('roll_deletion_logs insert failed (non-fatal):', logErr.message)
 
+    // ── กัน roll_no ชน: เปลี่ยน good→bad แล้วเลขม้วนอาจซ้ำกับ "ม้วนกรอ" เดิมใน Lot/WO เดียวกัน
+    //    (unique index = machine+lot+wo+roll_no+roll_type) → หาเลข bad ที่ว่างก่อน
+    let ncRollNo = roll.roll_no
+    const { data: existBad } = await supabase.from('production_rolls')
+      .select('roll_no, work_order')
+      .eq('machine_no', roll.machine_no).eq('lot_no', roll.lot_no).eq('roll_type', 'bad')
+    const sameWoBad = (existBad ?? []).filter((x:any) => (x.work_order ?? '') === (roll.work_order ?? ''))
+    const takenBad = new Set(sameWoBad.map((x:any) => x.roll_no))
+    let ncNote = reason.trim()
+    if (takenBad.has(ncRollNo)) {
+      const maxBad = Math.max(0, ...sameWoBad.map((x:any) => x.roll_no ?? 0))
+      const origNo = roll.roll_no
+      ncRollNo = maxBad + 1
+      ncNote = `${reason.trim()} (เดิมม้วนดี #${origNo})`
+    }
+
     // ── 2) ม้วนเข้า NC = รอพิจารณา (ReviewQueue) ไม่เด้งเข้ากรอตรงๆ ──
     //     ผจก ตัดสินทีหลังว่าจะ ส่งกรอ / เศษ / เก็บไว้
     const { error: updErr } = await supabase.from('production_rolls').update({
       roll_type:       'bad',
-      remark:          reason.trim(),
+      roll_no:         ncRollNo,
+      remark:          ncNote,
       inbound_type:    inboundType,
       review_status:   'pending_review',
       review_action:   null,

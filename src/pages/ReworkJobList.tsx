@@ -80,13 +80,35 @@ export function jobToProfile(job: ReworkJob, machine_no: string): MachineProfile
 function fmt(n: number, d = 2) { return Number(n ?? 0).toFixed(d) }
 
 // สร้าง Lot รูปแบบเดียวกับฝั่งผลิต: yy + เครื่อง + รหัสลูกค้า(4) + เดือน
-export function genReworkLot(machine: string, custCode: string): string {
+export function genReworkLot(machine: string, custCode: string, seq?: number): string {
   const yy = String((new Date().getFullYear() + 543) % 100).padStart(2, '0')
   const mm = String(new Date().getMonth() + 1).padStart(2, '0')
   const mc = (machine ?? '').toUpperCase()
-  const cc = (custCode ?? '').replace(/\D/g, '').padStart(4, '0').slice(-4)
   if (!mc) return ''
-  return `${yy}${mc}${cc}${mm}`
+  // ช่องกลาง 4 หลัก: ถ้ามีเลขรัน (seq) ใช้เลขรัน (กัน Lot ชนกันเมื่อ cust_code ว่าง)
+  // ไม่งั้น fallback เป็น cust_code (พฤติกรรมเดิม)
+  const mid = (seq != null && seq > 0)
+    ? String(seq).padStart(4, '0').slice(-4)
+    : (custCode ?? '').replace(/\D/g, '').padStart(4, '0').slice(-4)
+  return `${yy}${mc}${mid}${mm}`
+}
+
+// หาเลขรันถัดไปของ Lot กรอ สำหรับเครื่อง+เดือนนี้ (กัน Lot ชนกัน)
+export async function nextReworkSeq(machine: string): Promise<number> {
+  const yy = String((new Date().getFullYear() + 543) % 100).padStart(2, '0')
+  const mm = String(new Date().getMonth() + 1).padStart(2, '0')
+  const mc = (machine ?? '').toUpperCase()
+  const prefix = `${yy}${mc}`
+  const { data } = await supabase.from('rework_jobs').select('lot_no').like('lot_no', `${prefix}%${mm}`)
+  let max = 0
+  for (const r of data ?? []) {
+    const lot = (r.lot_no ?? '') as string
+    if (lot.startsWith(prefix) && lot.endsWith(mm) && lot.length === prefix.length + 4 + mm.length) {
+      const mid = parseInt(lot.slice(prefix.length, prefix.length + 4), 10)
+      if (!isNaN(mid) && mid > max) max = mid
+    }
+  }
+  return max + 1
 }
 
 export default function ReworkJobList({ onPickJob }: { onPickJob: (profile: MachineProfile, job: ReworkJob) => void }) {
@@ -156,16 +178,16 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
       .order('created_at', { ascending: false })
     const list = (data ?? []) as ReworkJob[]
     setJobs(list)
-    // ดึง progress (ม้วน good ของแต่ละ lot)
+    // ดึง progress (ม้วน good ของแต่ละ lot) — แยกตาม Lot + WO กัน 2 งานปน Lot เดียว
     const lots = list.map(j => j.lot_no).filter(Boolean)
     if (lots.length) {
       const { data: rolls } = await supabase.from('production_rolls')
-        .select('lot_no, weight, roll_type')
+        .select('lot_no, work_order, weight, roll_type')
         .in('lot_no', lots)
         .eq('roll_type', 'good')
       const p: Record<string,{rolls:number,kg:number}> = {}
       for (const r of rolls ?? []) {
-        const k = r.lot_no
+        const k = `${r.lot_no}__${r.work_order ?? ''}`
         if (!p[k]) p[k] = { rolls: 0, kg: 0 }
         p[k].rolls += 1
         p[k].kg    += r.weight ?? 0
@@ -174,6 +196,8 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
     }
     setLoading(false)
   }
+  // คีย์ progress = Lot + WO (กันงานคนละ WO แต่ Lot เดียวกันยอดปน)
+  const progKey = (j: { lot_no?: string; work_order?: string }) => `${j.lot_no ?? ''}__${j.work_order ?? ''}`
   async function loadMachines() {
     const { data } = await supabase.from('machine_profiles').select('machine_no').eq('section','rewind').order('machine_no')
     setMachines((data ?? []) as any)
@@ -251,8 +275,8 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
               { header:'ลูกค้า', value: j => j.cust_name ?? '', width:24 },
               { header:'Item Code', value: j => j.item_code ?? '' },
               { header:'เป้าผลิต (kg)', value: j => j.planned_qty ?? '' },
-              { header:'กรอได้ (kg)', value: j => progress[j.lot_no]?.kg ?? 0 },
-              { header:'ม้วนกรอได้', value: j => progress[j.lot_no]?.rolls ?? 0 },
+              { header:'กรอได้ (kg)', value: j => progress[progKey(j)]?.kg ?? 0 },
+              { header:'ม้วนกรอได้', value: j => progress[progKey(j)]?.rolls ?? 0 },
               { header:'ผู้รับ', value: j => j.inspector ?? '' },
               { header:'สร้างเมื่อ', value: j => j.created_at ? new Date(j.created_at).toLocaleString('th-TH') : '', width:18 },
             ]}
@@ -290,7 +314,7 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
       ) : (
         <div className="grid grid-cols-3 2xl:grid-cols-4 gap-2 overflow-y-auto pb-3">
           {filtered.map(j => {
-            const p = progress[j.lot_no] ?? { rolls: 0, kg: 0 }
+            const p = progress[progKey(j)] ?? { rolls: 0, kg: 0 }
             const planned = parseFloat(j.planned_qty ?? '') || 0
             const pct = planned > 0 ? Math.min(100, Math.round((p.kg / planned) * 100)) : 0
             const remaining = Math.max(0, planned - p.kg)
@@ -403,7 +427,7 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
       )}
 
       {closeFor && (() => {
-        const prog = progress[closeFor.lot_no ?? ''] ?? { rolls: 0, kg: 0 }
+        const prog = progress[progKey(closeFor)] ?? { rolls: 0, kg: 0 }
         return (
           <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => !closing && setCloseFor(null)}>
             <div className="bg-slate-900 border-2 border-brand-500/40 rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>

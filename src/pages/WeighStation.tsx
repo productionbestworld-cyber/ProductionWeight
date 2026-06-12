@@ -1779,6 +1779,8 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
       })
   }, [initialProfile.machine_no])
   const [gross,        setGross]        = useState(0)
+  const [netMode,      setNetMode]      = useState(false)  // กรอ: กรอกน้ำหนักสุทธิเอง (Bridge ไม่ต่อ → ใส่หลังบ้าน)
+  const [rawWeight,    setRawWeight]    = useState('')     // ข้อความดิบตอนพิมพ์เอง (กันพิมพ์ "." ไม่ติด)
   const [testRandomEnabled, setTestRandomEnabled] = useState(false)
 
   // โหลด feature flag "ปุ่มสุ่มค่าทดสอบ" จาก Admin → app_settings
@@ -1886,6 +1888,8 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
 
   // ── แผนกกรอ: สาเหตุที่ม้วนนี้เสีย/มาจากอะไร (กรอกตอนชั่งออก = กรอสำเร็จ) ──
   const isRework = profile.section === 'rewind'
+  // กรอ: "รอบ" การกรอใน Lot+WO เดียวกัน — โชว์เลขม้วนเริ่ม 1 ใหม่ต่อรอบ (roll_no จริงยังต่อเนื่องกัน index ไม่ชน)
+  const [reworkRound, setReworkRound]   = useState(1)
   const [reworkCause, setReworkCause]   = useState('')
   const [reworkJobId, setReworkJobId]   = useState<string | null>(null)
   useEffect(() => {
@@ -2051,6 +2055,10 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
   const remaining = Math.max(0, planned - weighedKg)
   const pct       = planned > 0 ? Math.min(100, Math.round((weighedKg / planned) * 100)) : 0
   const done      = planned > 0 && weighedKg >= planned
+  // กรอ: เลขม้วนถัดไปที่จะ "โชว์" (เริ่ม 1 ใหม่ต่อรอบ) — roll_no จริงยังเป็น rollNo เดิม
+  const reworkDispNo = isRework
+    ? weighedRolls.filter((r:any)=>r?.roll_type==='good' && (r.rework_batch??1)===reworkRound).length + 1
+    : rollNo
   // ── ยอดสรุป: ม้วนดี (FG) vs ม้วนดี+กรอ รวม ──
   const goodCnt   = weighedRolls.filter((r:any)=>r?.roll_type==='good').length
   const badCnt    = weighedRolls.filter((r:any)=>r?.roll_type==='bad').length
@@ -2079,8 +2087,8 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
           .filter((q: any) => q.machine_no === profile.machine_no && q.lot_no === profile.lotNo)
           .map((q: any) => ({ ...q, id: `offline_${q.created_at}_${q.roll_no}`, _offline: true }))
         let merged = [...(data ?? []), ...offlineForThis]
-        // เริ่มงานใหม่ (SO เดียวคนละ WO): นับเฉพาะม้วนของ WO นี้ — ไม่ต่อจาก WO เดิมใน Lot เดียวกัน
-        if ((profile as any).freshStart) {
+        // กรอ (หรือ freshStart): นับเฉพาะม้วนของ WO นี้ — Lot เดียวกันคนละ WO ไม่ปนกัน
+        if ((profile as any).freshStart || isRework) {
           merged = merged.filter((r: any) => (r.work_order ?? '') === (profile.woNo ?? ''))
         }
         if (!merged.length) {
@@ -2090,6 +2098,8 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
         const total = goodRolls.reduce((s: number, r: any) => s + (r.weight ?? 0), 0)
         setWeighedKg(parseFloat(total.toFixed(dec)))
         setWeighedRolls(merged)
+        // กรอ: ตั้งรอบปัจจุบัน = รอบล่าสุดที่มีในข้อมูล (ม้วนใหม่ต่อในรอบนั้น จนกว่าจะกดเริ่มรอบใหม่)
+        if (isRework) setReworkRound(Math.max(1, ...merged.map((r:any)=>r.rework_batch ?? 1)))
         const badRolls = merged.filter((r: any) => r.roll_type === 'bad')
         // ใช้เลขที่หายไปก่อน เพื่อทดแทนม้วนที่ถูกลบ
         setRollNo(nextRollNo(goodRolls))
@@ -2392,6 +2402,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         rework_source_roll_id: useSrc ? useSrc.id : null,
         rework_source_lot:     useSrc ? useSrc.lot_no : (useManual ? useManual.text : null),
         rework_source_weight:  (useSrc || useManual) ? srcKg : null,
+        rework_batch:          isRework ? reworkRound : null,
         item_code:    profile.itemCode    ?? '',
         product_code: profile.productCode ?? '',
         mat_code:     profile.matCode     ?? '',
@@ -2526,7 +2537,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         readScale() // สุ่มน้ำหนักใหม่อัตโนมัติ — ไม่ต้องกดปุ่มสุ่มซ้ำ
       } else {
         if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
-        setGross(0)
+        setGross(0); setRawWeight('')
         // ต่อเครื่องชั่งจริง: ล็อกจนกว่าจะยกของออก (น้ำหนักตก) กันชั่งเบิ้ล
         if (serialConnected) {
           grossAtSaveRef.current = gross
@@ -2599,6 +2610,18 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       setDeleting(false)
       if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return }
     }
+    // ── ม้วนกรอ: ลบแล้วคืนม้วนต้นทางให้กลับมาเลือกกรอใหม่ได้ ──
+    if (r.rework_source_roll_id) {
+      const { error: srcErr } = await supabase.from('production_rolls')
+        .update({
+          rework_status: 'reworking',
+          rework_remark: `คืนสถานะ (ลบม้วนกรอ #${r.roll_no}: ${deleteReason.trim()})`,
+        })
+        .eq('id', r.rework_source_roll_id)
+      if (srcErr) console.warn('คืนม้วนต้นทางไม่สำเร็จ:', srcErr.message)
+      // เด้งม้วนต้นทางกลับเข้ารายการเลือกกรอ
+      loadSrcRolls()
+    }
     setDeleteModal(null)
     setDeleteReason('')
     setDeleteBy('')
@@ -2655,6 +2678,21 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                 <div className={`h-full rounded-full ${progressColor}`} style={{width:`${pct}%`}}/>
               </div>
             </div>
+          )}
+          {isRework && (
+            <button
+              onClick={() => {
+                const maxB = Math.max(1, ...weighedRolls.map((r:any)=>r.rework_batch ?? 1))
+                const cur = weighedRolls.filter((r:any)=>(r.rework_batch??1)===reworkRound).length
+                // ถ้ารอบปัจจุบันยังว่าง ไม่ต้องขึ้นรอบใหม่ซ้ำ
+                if (cur === 0 && reworkRound > maxB) { alert('รอบนี้ยังไม่มีม้วน — เริ่มม้วน 1 ได้เลย'); return }
+                setReworkRound(maxB + 1)
+                alert(`เริ่มรอบใหม่ (รอบ ${maxB + 1}) — ม้วนถัดไปจะโชว์เป็น 1`)
+              }}
+              className="flex items-center gap-1.5 text-xs bg-slate-800 border border-amber-500/40 hover:bg-amber-500/15 px-2.5 py-1.5 rounded-lg font-bold text-amber-300"
+              title="เริ่มนับม้วนใหม่ (1) ใน Lot+WO เดิม — โชว์เลขรอบใหม่ + ป้าย (รอบ N)">
+              🔄 เริ่มม้วน 1 ใหม่ {reworkRound > 1 && `· รอบ ${reworkRound}`}
+            </button>
           )}
           <button onClick={() => setShowCloseModal(true)}
             className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg transition-colors font-semibold ${
@@ -2907,15 +2945,31 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                 </button>
               </div>
             </div>
+            {/* กรอ: สลับกรอกน้ำหนักสุทธิเอง (เมื่อ Bridge ไม่ต่อ / แก้หลังบ้าน) */}
+            {isRework && isGood && !isScrap && (
+              <button onClick={() => { const on = !netMode; setNetMode(on); setRawWeight(on ? (net ? String(net) : '') : (gross ? String(gross) : '')); setStable(true) }}
+                className={`mb-2 text-[11px] font-bold px-3 py-1 rounded-full border transition-colors ${netMode ? 'bg-brand-500/20 border-brand-500/50 text-brand-200' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'}`}>
+                {netMode ? '✓ กรอกน้ำหนักสุทธิเอง (Net)' : '⌨ กรอกน้ำหนักสุทธิเอง'}
+              </button>
+            )}
             <input
-              type="number" step="0.01" inputMode="decimal"
-              value={serialConnected && !simMode ? (gross ? gross.toFixed(dec) : '') : (gross || '')}
-              onChange={e => { setGross(parseFloat(e.target.value)||0); setStable(true) }}
+              type="text" inputMode="decimal"
+              value={netMode
+                ? rawWeight
+                : (serialConnected && !simMode ? (gross ? gross.toFixed(dec) : '') : rawWeight)}
+              onChange={e => {
+                const s = e.target.value.replace(/[^0-9.]/g, '')   // อนุญาตเลขกับจุด
+                setRawWeight(s)
+                const v = parseFloat(s) || 0
+                // โหมด Net: ตั้ง gross = net + core เพื่อให้ net (=gross−core) ตรงกับที่พิมพ์
+                setGross(netMode ? parseFloat((v + core).toFixed(dec)) : v)
+                setStable(true)
+              }}
               placeholder="0.00"
-              readOnly={serialConnected && !simMode}
-              className="w-full font-mono text-[72px] font-black tracking-tight leading-none mb-1 text-white bg-transparent text-center outline-none placeholder-slate-700 focus:bg-slate-800/50 rounded-xl"
+              readOnly={!netMode && serialConnected && !simMode}
+              className={`w-full font-mono text-[72px] font-black tracking-tight leading-none mb-1 bg-transparent text-center outline-none placeholder-slate-700 focus:bg-slate-800/50 rounded-xl ${netMode ? 'text-brand-300' : 'text-white'}`}
             />
-            <p className="text-slate-500 text-xs font-semibold mb-2">Kgs.</p>
+            <p className="text-slate-500 text-xs font-semibold mb-2">{netMode ? 'Kgs. (สุทธิ — กรอกเอง)' : 'Kgs.'}</p>
             {serialConnected && rawSerial && (
               <div className="bg-slate-950 border border-slate-800 rounded px-2 py-1 mb-3 font-mono text-[9px] text-slate-500 truncate text-left" title={rawSerial}>
                 📥 {rawSerial.replace(/[\r\n]/g, '·').slice(-80)}
@@ -2961,7 +3015,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
               <div className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 flex items-center gap-2 shrink-0">
                 <span className="text-slate-500 text-xs">{isBad ? 'กรอ' : 'Roll'}</span>
                 <span className="text-white font-black w-7 text-center">
-                  {isBad ? badRollNo : rollNo}
+                  {isBad ? badRollNo : reworkDispNo}
                 </span>
               </div>
             )}
@@ -2977,7 +3031,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
               {saving ? 'บันทึก...' : awaitingClear ? '⬆ ยกม้วนออกก่อน' : !stable ? 'รอค่านิ่ง...' :
                 isScrap ? `บันทึกเศษ ${fmt(gross,dec)} Kgs.` :
                 isBad   ? `กรอ ${badRollNo} · ${fmt(saveWeight,dec)} Kgs.` :
-                          `Roll ${rollNo} · ${fmt(saveWeight,dec)} Kgs.`}
+                          `Roll ${reworkDispNo}${reworkRound>1?` (รอบ ${reworkRound})`:''} · ${fmt(saveWeight,dec)} Kgs.`}
             </button>
           </div>
 
@@ -3118,6 +3172,16 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
               <div ref={goodListRef} className="flex-1 overflow-y-auto divide-y divide-slate-800/40">
                 {(() => {
                   const goods = weighedRolls.filter((r:any)=>r.roll_type==='good')
+                  // กรอ: เลขโชว์ต่อรอบ (rework_batch) — แต่ละรอบเริ่ม 1 ใหม่ (roll_no จริงยังต่อเนื่อง)
+                  const dispNoMap = new Map<string, number>()
+                  if (isRework) {
+                    const byBatch = new Map<number, any[]>()
+                    for (const g of goods) { const b = g.rework_batch ?? 1; if(!byBatch.has(b)) byBatch.set(b,[]); byBatch.get(b)!.push(g) }
+                    for (const arr of byBatch.values()) {
+                      arr.sort((a:any,b:any)=>(a.roll_no??0)-(b.roll_no??0)).forEach((g:any,i:number)=>dispNoMap.set(g.id, i+1))
+                    }
+                  }
+                  const hasRounds = isRework && new Set(goods.map((g:any)=>g.rework_batch ?? 1)).size > 1
                   // ม้วนทดแทน: roll นี้ถูกสร้างหลังจากม้วนเลขใหญ่กว่ามีอยู่แล้ว
                   const isReplacement = (r:any) =>
                     goods.some((x:any) => (x.roll_no ?? 0) > (r.roll_no ?? 0) && new Date(x.created_at) < new Date(r.created_at))
@@ -3141,7 +3205,8 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                           <div>{time}</div>
                         </div>
                         <div className="px-3 py-2.5">
-                          <span className={`font-bold font-mono ${isRep ? 'text-amber-300' : isDone?'text-slate-500 line-through':'text-white'}`}>{r.roll_no}</span>
+                          <span className={`font-bold font-mono ${isRep ? 'text-amber-300' : isDone?'text-slate-500 line-through':'text-white'}`}>{isRework ? (dispNoMap.get(r.id) ?? r.roll_no) : r.roll_no}</span>
+                          {hasRounds && <span className="ml-1 text-[9px] text-amber-400 font-bold">(รอบ {r.rework_batch ?? 1})</span>}
                           {isRep && <span className="ml-1 text-[9px] text-amber-400 font-bold">🔁 ทดแทน</span>}
                           {!isRep && isNew && <span className="ml-1 text-[9px] text-green-400">NEW</span>}
                           {isDone && <span className="ml-1 text-[9px] text-green-400">📦</span>}

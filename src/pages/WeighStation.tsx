@@ -2367,7 +2367,11 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         : useManual
         ? `🔁 กรอแทนจาก ${useManual.text}${useManual.kg ? ` · หยิบมา ${fmt(srcKg,dec)} · ชั่งได้ ${fmt(cumKg,dec)} · เศษ ${fmt(scrapKg,dec)} Kg` : ''}`
         : (isRework && isGood ? `🔁 กรอจาก ${(profile as any).sourceLotNo ? `Lot ${(profile as any).sourceLotNo}` : 'ม้วนเสีย'}` : '')
-      const rollRemark = isBad ? badReason : isScrap ? scrapReason : (reworkNote || null)
+      // ม้วนกรอ: ฝังเหตุผลที่ม้วนเสีย (มาจากม้วนต้นทาง) ต่อท้ายโน้ตกรอ ให้เห็นบนฉลาก/คลัง
+      const reworkRemark = (isRework && isGood)
+        ? [reworkNote, reworkCause.trim() ? `เหตุผล: ${reworkCause.trim()}` : ''].filter(Boolean).join(' · ')
+        : reworkNote
+      const rollRemark = isBad ? badReason : isScrap ? scrapReason : (reworkRemark || null)
       // อ้างอิง WO/SO: ม้วนในระบบ → ตามต้นทาง · ม้วนนอกระบบ → ออกเป็น Lot/ออเดอร์ที่กำลังชั่ง
       const useWo = useSrc ? (useSrc.work_order ?? profile.woNo ?? '') : (profile.woNo ?? '')
       const useSo = useSrc ? (useSrc.sale_order ?? profile.soNo ?? '') : (profile.soNo ?? '')

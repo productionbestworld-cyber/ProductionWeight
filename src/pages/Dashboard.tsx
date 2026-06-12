@@ -1821,10 +1821,12 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
           }
 
           // ม้วนดี (FG) ที่ชั่งออกมาต่อ lot — ใช้วัด "กรอได้จริง" โดยไม่แตะสถานะม้วนต้นทาง
+          // กรอได้จริง = ม้วนดี (FG) ที่ชั่งออก — key = lot + WO (กัน lot แชร์ข้าม WO นับรวมผิด)
+          const lotKey = (lot?: string, wo?: string) => `${lot ?? ''}__${wo ?? ''}`
           const rollsByLot = new Map<string, { rolls: number; kg: number }>()
           for (const r of rolls) {
             if (r.roll_type !== 'good') continue
-            const k = r.lot_no
+            const k = lotKey(r.lot_no, (r as any).work_order)
             const v = rollsByLot.get(k) ?? { rolls: 0, kg: 0 }
             v.rolls += 1; v.kg += r.weight ?? 0
             rollsByLot.set(k, v)
@@ -1837,7 +1839,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
           const salvagedKgOf = (r: any) => {
             const j = jobBySourceRoll.get(r.id)
             if (!j) return 0
-            return rollsByLot.get(j.lot_no)?.kg ?? 0
+            return rollsByLot.get(lotKey(j.lot_no, j.work_order))?.kg ?? 0
           }
 
           const summary = (list: any[]) => {
@@ -1966,7 +1968,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
           const byRewinder = new Map<string, { jobs: number; kg: number }>()
           for (const j of reworkJobs) {
             const name = (j.rewinder_name ?? '').trim() || '(ไม่ระบุ)'
-            const prog = rollsByLot.get(j.lot_no) ?? { rolls: 0, kg: 0 }
+            const prog = rollsByLot.get(lotKey(j.lot_no, j.work_order)) ?? { rolls: 0, kg: 0 }
             const v = byRewinder.get(name) ?? { jobs: 0, kg: 0 }
             v.jobs += 1; v.kg += prog.kg
             byRewinder.set(name, v)
@@ -1976,7 +1978,11 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
           // ── KPI รวม + แยกตามสินค้า ──
           const totalIn    = P.totalKg + E.totalKg
           const totalGood  = P.reworkedKg + E.reworkedKg
-          const totalScrap = Math.max(0, totalIn - totalGood)
+          // เศษรวม = ไม่นับม้วนที่ยัง "รอกรอ" (reworking/pending) — นับเฉพาะที่จบแล้ว
+          const inProcessKg = [...fromProd, ...fromExt]
+            .filter(r => r.rework_status !== 'reworked' && r.rework_status !== 'scrapped')
+            .reduce((s, r) => s + (r.weight ?? 0), 0)
+          const totalScrap = Math.max(0, totalIn - totalGood - inProcessKg)
           const yieldPct   = totalIn ? (totalGood / totalIn * 100) : 0
           const activeJobCount = reworkJobs.filter(j => (j.status ?? 'active') === 'active').length
           const pendingRolls   = reworkRolls.filter(r => !r.is_legacy && (!r.rework_status || r.rework_status === 'pending'))
@@ -1984,13 +1990,22 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
           const prodMap = new Map<string, any>()
           for (const r of [...fromProd, ...fromExt]) {
             const k = (r.product_name ?? '').trim() || (r.item_code ?? '').trim() || '(ไม่ระบุ)'
-            const v = prodMap.get(k) ?? { k, item: r.item_code ?? '', received: 0, salvaged: 0 }
+            const v = prodMap.get(k) ?? { k, item: r.item_code ?? '', received: 0, salvaged: 0, doneIn: 0, scrappedKg: 0, pending: 0 }
             v.received += r.weight ?? 0
             v.salvaged += salvagedKgOf(r)
+            // เศษ = นับเฉพาะม้วนที่ "จบกระบวนการ" แล้ว (กรอเสร็จ/ทำลาย) — ม้วนที่ยังรอกรอ (reworking) ไม่ใช่เศษ
+            if (r.rework_status === 'reworked') v.doneIn += r.weight ?? 0
+            else if (r.rework_status === 'scrapped') v.scrappedKg += r.weight ?? 0
+            else v.pending += r.weight ?? 0   // reworking / pending = ยังไม่จบ
             prodMap.set(k, v)
           }
           const productRows = [...prodMap.values()]
-            .map(v => ({ ...v, scrap: Math.max(0, v.received - v.salvaged), pct: v.received ? v.salvaged / v.received * 100 : 0 }))
+            .map(v => ({
+              ...v,
+              // เศษ = ทำลายทั้งม้วน + เศษเจียนของม้วนที่กรอเสร็จ (เบิกของที่จบ − กรอได้)  (ไม่นับที่ยังรอกรอ)
+              scrap: Math.max(0, v.scrappedKg + Math.max(0, v.doneIn - v.salvaged)),
+              pct: v.received ? Math.min(999, v.salvaged / v.received * 100) : 0,
+            }))
             .sort((a, b) => b.received - a.received)
 
           return (
@@ -2151,9 +2166,9 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {jobsWithReason.map(j => {
-                          const prog = rollsByLot.get(j.lot_no) ?? { rolls: 0, kg: 0 }
+                          const prog = rollsByLot.get(lotKey(j.lot_no, j.work_order)) ?? { rolls: 0, kg: 0 }
                           const isOpen = expandedJob === j.id
-                          const lotRolls = rolls.filter(r => r.roll_type === 'good' && r.lot_no === j.lot_no)
+                          const lotRolls = rolls.filter(r => r.roll_type === 'good' && r.lot_no === j.lot_no && ((r as any).work_order ?? '') === (j.work_order ?? ''))
                             .sort((a,b)=>(a.roll_no??0)-(b.roll_no??0))
                           return (
                             <Fragment key={j.id}>

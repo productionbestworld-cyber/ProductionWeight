@@ -8,6 +8,17 @@ import { supabase, fetchAll } from '../lib/supabase'
 import { RotateCcw, Upload, X, Download, FileSpreadsheet } from 'lucide-react'
 import ExportButton from '../components/ExportButton'
 
+// นับถอยหลังแยกเป็น component ของตัวเอง — re-render แค่ตัวเลขนี้ทุกวินาที
+// (ไม่ทำให้ทั้ง Dashboard re-render → ตารางไม่กระตุก/เลื่อนไม่เด้ง)
+function RefreshCountdown() {
+  const [c, setC] = useState(30)
+  useEffect(() => {
+    const t = setInterval(() => setC(p => p <= 1 ? 30 : p - 1), 1_000)
+    return () => clearInterval(t)
+  }, [])
+  return <span>อีก <b className="text-gray-600">{c}</b> วิ</span>
+}
+
 // ─── helpers ────────────────────────────────────────────────────────────────
 function fmtKg(n: number) {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
@@ -195,12 +206,9 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
     setLoading(false)
   }
 
-  const [countdown, setCountdown] = useState(30)
-
   // polling ทุก 30 วินาที
   useEffect(() => {
     load()
-    setCountdown(30)
     const interval = setInterval(() => {
       // silent reload — ไม่แสดง loading spinner
       const from = new Date(dateFrom); from.setHours(0,0,0,0)
@@ -234,11 +242,8 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
         .then(({ data }) => { if (data) setReworkRolls(data) })
       supabase.from('rework_jobs').select('*').order('created_at', { ascending: false })
         .then(({ data }) => { if (data) setReworkJobs(data) })
-      setCountdown(30)
     }, 30_000)
-    // countdown timer
-    const ticker = setInterval(() => setCountdown(c => c <= 1 ? 30 : c - 1), 1_000)
-    return () => { clearInterval(interval); clearInterval(ticker) }
+    return () => { clearInterval(interval) }
   }, [dateFrom, dateTo])
 
   // โหลด rolls สำหรับ compare tab ตาม compPeriod (แยกจาก filter หลัก)
@@ -593,7 +598,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                 รีเฟรชเดี๋ยวนี้
               </button>
               <span className="text-gray-300">·</span>
-              <span>อีก <b className="text-gray-600">{countdown}</b> วิ</span>
+              <RefreshCountdown/>
             </div>
           </div>
         </div>

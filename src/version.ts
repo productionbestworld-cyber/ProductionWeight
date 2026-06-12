@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.3.27'
+export const APP_VERSION = '1.3.28'
 export const APP_BUILD_DATE = '2026-06-11'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.3.28', date: '2026-06-12',
+    items: [
+      'Dashboard: แก้ตารางเด้ง/กระตุกตอนเลื่อนดู — แยกตัวนับถอยหลังออกเป็น component ของตัวเอง (เดิมนับวินาทีทำให้ทั้งหน้า re-render ทุกวิ scroll เลยเด้ง)',
+    ],
+  },
   {
     version: '1.3.27', date: '2026-06-12',
     items: [

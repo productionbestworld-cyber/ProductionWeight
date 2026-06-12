@@ -456,21 +456,19 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
           onPick={async (machine_no) => {
             const job = pickFor
             // สร้าง Lot จากเครื่องที่เลือก ถ้ายังไม่มี lot จริง (รูปแบบ yy+เครื่อง+ลูกค้า+เดือน)
+            // Lot กรอ = Lot ผลิตต้นทาง + รหัสเครื่องที่เลือก (เปลี่ยนตามเครื่องที่เลือกเสมอ)
             let lot = job.lot_no?.trim() ?? ''
-            if (!lot) {
-              // อ้างอิง Lot จากผลิตต้นทาง เปลี่ยนแค่รหัสเครื่องเป็นสถานีกรอ
-              const srcLot = ((job as any).source_lot_no ?? '').trim()
-              let gen = ''
-              if (srcLot) {
-                const { data: sr } = await supabase.from('production_rolls')
-                  .select('machine_no').eq('lot_no', srcLot).limit(1).maybeSingle()
-                gen = swapLotMachine(srcLot, sr?.machine_no ?? '', machine_no)
-              }
-              if (!gen) gen = genReworkLot(machine_no, job.cust_code ?? '')  // fallback ถ้าไม่มี Lot ต้นทาง
-              if (gen) {
-                lot = gen
-                await supabase.from('rework_jobs').update({ lot_no: gen }).eq('id', job.id)
-              }
+            const srcLot = ((job as any).source_lot_no ?? '').trim()
+            let gen = ''
+            if (srcLot) {
+              const { data: sr } = await supabase.from('production_rolls')
+                .select('machine_no').eq('lot_no', srcLot).limit(1).maybeSingle()
+              gen = swapLotMachine(srcLot, sr?.machine_no ?? '', machine_no)
+            }
+            if (!gen && !lot) gen = genReworkLot(machine_no, job.cust_code ?? '')  // fallback ถ้าไม่มี Lot ต้นทาง
+            if (gen && gen !== lot) {
+              lot = gen
+              await supabase.from('rework_jobs').update({ lot_no: gen }).eq('id', job.id)
             }
             const prof = jobToProfile({ ...job, lot_no: lot }, machine_no)
             setPickFor(null)

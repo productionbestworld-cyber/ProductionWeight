@@ -1842,6 +1842,18 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
             return rollsByLot.get(lotKey(j.lot_no, j.work_order))?.kg ?? 0
           }
 
+          // กรอได้จริง = ม้วนกรอที่ "ชั่งออกมา" (ม้วนดีที่มี rework_source) — จับตามสินค้า (ไม่ผูก job ที่อาจเพี้ยน)
+          const prodKeyOf = (r: any) => (r.product_name ?? '').trim() || (r.item_code ?? '').trim() || '(ไม่ระบุ)'
+          const outputByProduct = new Map<string, number>()
+          let outputTotalKg = 0
+          for (const r of rolls) {
+            if (r.roll_type !== 'good') continue
+            if (!((r as any).rework_source_lot || (r as any).rework_source_roll_id)) continue
+            const k = prodKeyOf(r)
+            outputByProduct.set(k, (outputByProduct.get(k) ?? 0) + (r.weight ?? 0))
+            outputTotalKg += r.weight ?? 0
+          }
+
           const summary = (list: any[]) => {
             // กรอได้ = กิโลม้วนดีที่ชั่งออกจากงานกรอของม้วนนั้น (สถานะเสียฝั่งผลิตคงไว้)
             const scrapped = list.filter(r => r.rework_status === 'scrapped')
@@ -1977,7 +1989,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
 
           // ── KPI รวม + แยกตามสินค้า ──
           const totalIn    = P.totalKg + E.totalKg
-          const totalGood  = P.reworkedKg + E.reworkedKg
+          const totalGood  = outputTotalKg   // กรอได้จริง = ม้วนกรอที่ชั่งออกมาทั้งหมด
           // เศษรวม = ไม่นับม้วนที่ยัง "รอกรอ" (reworking/pending) — นับเฉพาะที่จบแล้ว
           const inProcessKg = [...fromProd, ...fromExt]
             .filter(r => r.rework_status !== 'reworked' && r.rework_status !== 'scrapped')
@@ -1989,23 +2001,25 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
           const pendingKg      = pendingRolls.reduce((s, r) => s + (r.weight ?? 0), 0)
           const prodMap = new Map<string, any>()
           for (const r of [...fromProd, ...fromExt]) {
-            const k = (r.product_name ?? '').trim() || (r.item_code ?? '').trim() || '(ไม่ระบุ)'
-            const v = prodMap.get(k) ?? { k, item: r.item_code ?? '', received: 0, salvaged: 0, doneIn: 0, scrappedKg: 0, pending: 0 }
+            const k = prodKeyOf(r)
+            const v = prodMap.get(k) ?? { k, item: r.item_code ?? '', received: 0, doneIn: 0, scrappedKg: 0, pending: 0 }
             v.received += r.weight ?? 0
-            v.salvaged += salvagedKgOf(r)
-            // เศษ = นับเฉพาะม้วนที่ "จบกระบวนการ" แล้ว (กรอเสร็จ/ทำลาย) — ม้วนที่ยังรอกรอ (reworking) ไม่ใช่เศษ
+            // จัดสถานะม้วนต้นทาง: กรอเสร็จ / ทำลาย / ยังรอกรอ
             if (r.rework_status === 'reworked') v.doneIn += r.weight ?? 0
             else if (r.rework_status === 'scrapped') v.scrappedKg += r.weight ?? 0
-            else v.pending += r.weight ?? 0   // reworking / pending = ยังไม่จบ
+            else v.pending += r.weight ?? 0
             prodMap.set(k, v)
           }
           const productRows = [...prodMap.values()]
-            .map(v => ({
-              ...v,
-              // เศษ = ทำลายทั้งม้วน + เศษเจียนของม้วนที่กรอเสร็จ (เบิกของที่จบ − กรอได้)  (ไม่นับที่ยังรอกรอ)
-              scrap: Math.max(0, v.scrappedKg + Math.max(0, v.doneIn - v.salvaged)),
-              pct: v.received ? Math.min(999, v.salvaged / v.received * 100) : 0,
-            }))
+            .map(v => {
+              const salvaged = outputByProduct.get(v.k) ?? 0   // กรอได้จริง = ม้วนกรอที่ชั่งออกมา (ตามสินค้า)
+              return {
+                ...v, salvaged,
+                // เศษ = ทำลายทั้งม้วน + เศษเจียนของม้วนที่กรอเสร็จ (เบิกของที่จบ − กรอได้) · ไม่นับที่ยังรอกรอ
+                scrap: Math.max(0, v.scrappedKg + Math.max(0, v.doneIn - salvaged)),
+                pct: v.received ? Math.min(999, salvaged / v.received * 100) : 0,
+              }
+            })
             .sort((a, b) => b.received - a.received)
 
           return (

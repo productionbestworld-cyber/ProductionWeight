@@ -93,6 +93,18 @@ export function genReworkLot(machine: string, custCode: string, seq?: number): s
   return `${yy}${mc}${mid}${mm}`
 }
 
+// Lot กรอ = Lot ผลิตต้นทาง เปลี่ยนแค่รหัสเครื่องเป็นสถานีกรอ
+// เช่น source 69BL03000106 + เครื่องกรอ S01 → 69S01000106 (running/เดือนเดิม)
+export function swapLotMachine(sourceLot?: string, sourceMachine?: string, reworkMachine?: string): string {
+  const sl = (sourceLot ?? '').trim()
+  const sm = (sourceMachine ?? '').trim().toUpperCase()
+  const rm = (reworkMachine ?? '').trim().toUpperCase()
+  if (!sl || !sm || !rm) return ''
+  const idx = sl.toUpperCase().indexOf(sm)
+  if (idx === -1) return ''
+  return sl.slice(0, idx) + rm + sl.slice(idx + sm.length)
+}
+
 // หาเลขรันถัดไปของ Lot กรอ สำหรับเครื่อง+เดือนนี้ (กัน Lot ชนกัน)
 export async function nextReworkSeq(machine: string): Promise<number> {
   const yy = String((new Date().getFullYear() + 543) % 100).padStart(2, '0')
@@ -446,7 +458,15 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
             // สร้าง Lot จากเครื่องที่เลือก ถ้ายังไม่มี lot จริง (รูปแบบ yy+เครื่อง+ลูกค้า+เดือน)
             let lot = job.lot_no?.trim() ?? ''
             if (!lot) {
-              const gen = genReworkLot(machine_no, job.cust_code ?? '')
+              // อ้างอิง Lot จากผลิตต้นทาง เปลี่ยนแค่รหัสเครื่องเป็นสถานีกรอ
+              const srcLot = ((job as any).source_lot_no ?? '').trim()
+              let gen = ''
+              if (srcLot) {
+                const { data: sr } = await supabase.from('production_rolls')
+                  .select('machine_no').eq('lot_no', srcLot).limit(1).maybeSingle()
+                gen = swapLotMachine(srcLot, sr?.machine_no ?? '', machine_no)
+              }
+              if (!gen) gen = genReworkLot(machine_no, job.cust_code ?? '')  // fallback ถ้าไม่มี Lot ต้นทาง
               if (gen) {
                 lot = gen
                 await supabase.from('rework_jobs').update({ lot_no: gen }).eq('id', job.id)

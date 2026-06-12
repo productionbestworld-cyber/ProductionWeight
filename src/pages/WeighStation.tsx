@@ -2042,7 +2042,9 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
   const [stable,       setStable]       = useState(true)
   const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const core      = parseFloat(profile.coreWeight) || 0
+  // กรอ: ใช้แกนจริงของม้วนต้นทางที่เลือก (fallback แกนของงาน/มาสเตอร์) — กัน Net เพี้ยน
+  const srcCore   = (isRework && selSrc && (selSrc.core_weight ?? '').toString().trim()) ? parseFloat(String(selSrc.core_weight)) : NaN
+  const core      = (!isNaN(srcCore) ? srcCore : parseFloat(profile.coreWeight)) || 0
   const dec       = profile.decimal
   const planned   = parseFloat(profile.plannedQty) || 0
   const net       = parseFloat(Math.max(0, gross - core).toFixed(dec))

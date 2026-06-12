@@ -162,6 +162,8 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
   const [jobs, setJobs] = useState<ReworkJob[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [jobStatus, setJobStatus] = useState<'active'|'closed'>('active')   // log งานกรอที่ปิดแล้ว
+  const [reopening, setReopening] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [pickFor, setPickFor]       = useState<ReworkJob | null>(null)
   const [machines, setMachines]     = useState<{machine_no:string}[]>([])
@@ -174,8 +176,8 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
     setLoading(true)
     const { data } = await supabase.from('rework_jobs')
       .select('*')
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
+      .eq('status', jobStatus)
+      .order(jobStatus === 'closed' ? 'closed_at' : 'created_at', { ascending: false })
     const list = (data ?? []) as ReworkJob[]
     setJobs(list)
     // ดึง progress (ม้วน good ของแต่ละ lot) — แยกตาม Lot + WO กัน 2 งานปน Lot เดียว
@@ -203,7 +205,21 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
     setMachines((data ?? []) as any)
   }
 
-  useEffect(() => { load(); loadMachines() }, [])
+  useEffect(() => { loadMachines() }, [])
+  useEffect(() => { load() }, [jobStatus]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ดึงงานกรอที่ปิดแล้วกลับมาทำต่อ (เปิดงานใหม่ → active)
+  async function reopenJob(job: ReworkJob) {
+    if (!confirm(`ดึงงานกรอนี้กลับมาชั่งต่อ?\n\n${job.product_name}\nLot ${job.lot_no || '—'}\n\nงานจะกลับไปอยู่ในรายการ "งานกรอ" ให้เลือกเครื่องชั่งต่อได้`)) return
+    setReopening(job.id!)
+    const { error } = await supabase.from('rework_jobs')
+      .update({ status: 'active', closed_at: null, closed_by: null })
+      .eq('id', job.id!)
+    setReopening(null)
+    if (error) { alert('ดึงงานไม่สำเร็จ: ' + error.message); return }
+    alert('✓ ดึงงานกลับแล้ว — ไปที่แท็บ "กำลังทำ" เพื่อเลือกเครื่องชั่งต่อ')
+    setJobStatus('active')
+  }
 
   const filtered = jobs.filter(j => {
     if (!search.trim()) return true
@@ -259,8 +275,8 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
         <div>
           <h1 className="text-white font-bold text-xl flex items-center gap-2">
             🔁 งานกรอ (Rework Jobs)
-            <span className="text-xs font-bold px-3 py-1 rounded-full bg-green-500/20 text-green-300">
-              {filtered.length} งาน active
+            <span className={`text-xs font-bold px-3 py-1 rounded-full ${jobStatus==='closed' ? 'bg-slate-600/30 text-slate-300' : 'bg-green-500/20 text-green-300'}`}>
+              {filtered.length} {jobStatus==='closed' ? 'งานที่ปิดแล้ว' : 'งาน active'}
             </span>
           </h1>
           <p className="text-slate-400 text-sm mt-0.5">สร้างงาน → เลือก station ตอนชั่ง → ใบปะหน้าโชว์เครื่องที่เลือก</p>
@@ -292,12 +308,22 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
         </div>
       </div>
 
-      {/* Search */}
-      <div className="relative mb-3 max-w-md">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"/>
-        <input value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="ค้นหา lot/สินค้า/ลูกค้า/SO..."
-          className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-3 py-2 text-sm text-white outline-none focus:border-brand-500"/>
+      {/* Search + filter สถานะ */}
+      <div className="flex items-center gap-3 mb-3 flex-wrap">
+        <div className="relative max-w-md flex-1 min-w-[200px]">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"/>
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="ค้นหา lot/สินค้า/ลูกค้า/SO..."
+            className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-3 py-2 text-sm text-white outline-none focus:border-brand-500"/>
+        </div>
+        <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-1">
+          {([['active','🔁 กำลังทำ'],['closed','🏁 จบงานแล้ว (Log)']] as const).map(([k,label]) => (
+            <button key={k} onClick={()=>setJobStatus(k as any)}
+              className={`text-xs font-bold px-3 py-1.5 rounded transition-colors ${jobStatus===k ? 'bg-brand-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Job grid */}
@@ -307,8 +333,8 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center text-slate-500">
             <p className="text-4xl mb-2">📋</p>
-            <p>ยังไม่มีงานกรอ active</p>
-            <p className="text-xs mt-1">กด "+ สร้างงานใหม่" หรือ "รับจากผลิต" ที่หน้า ReworkInbox</p>
+            <p>{jobStatus==='closed' ? 'ยังไม่มีงานกรอที่ปิดแล้ว' : 'ยังไม่มีงานกรอ active'}</p>
+            <p className="text-xs mt-1">{jobStatus==='closed' ? 'งานที่กดปิดแล้วจะมาอยู่ที่นี่ — ดึงกลับมาชั่งต่อได้' : 'กด "+ สร้างงานใหม่" หรือ "รับจากผลิต" ที่หน้า ReworkInbox'}</p>
           </div>
         </div>
       ) : (
@@ -320,20 +346,26 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
             const remaining = Math.max(0, planned - p.kg)
             const isFromProduction = j.source === 'from_production'
             return (
-              <div key={j.id} className="bg-slate-900 border border-slate-700 hover:border-brand-500 rounded-2xl flex flex-col overflow-hidden transition-colors group relative">
-                <button onClick={() => setPickFor(j)} className="absolute inset-0 z-0"/>
+              <div key={j.id} className={`bg-slate-900 border rounded-2xl flex flex-col overflow-hidden transition-colors group relative ${jobStatus==='closed' ? 'border-slate-700' : 'border-slate-700 hover:border-brand-500'}`}>
+                {jobStatus === 'active' && <button onClick={() => setPickFor(j)} className="absolute inset-0 z-0"/>}
                 {/* top */}
-                <div className="flex items-center justify-between px-3 py-2 bg-brand-600/15 border-b border-brand-500/20 relative z-0 pointer-events-none">
-                  <span className="text-brand-300 font-bold text-xs">
-                    {isFromProduction ? '🏭 จากผลิต' : '⚙ สร้างเอง'}
+                <div className={`flex items-center justify-between px-3 py-2 border-b relative z-0 pointer-events-none ${jobStatus==='closed' ? 'bg-slate-800/40 border-slate-700' : 'bg-brand-600/15 border-brand-500/20'}`}>
+                  <span className={`font-bold text-xs ${jobStatus==='closed' ? 'text-slate-400' : 'text-brand-300'}`}>
+                    {jobStatus==='closed' ? '🏁 ปิดงานแล้ว' : isFromProduction ? '🏭 จากผลิต' : '⚙ สร้างเอง'}
                   </span>
                   <div className="flex gap-1 pointer-events-auto z-10">
-                    <button onClick={e => { e.stopPropagation(); closeJob(j) }}
-                      title="ปิดงาน" className="text-[10px] bg-slate-700/60 hover:bg-green-600 text-slate-300 hover:text-white px-1.5 py-0.5 rounded">✓</button>
-                    <button onClick={e => { e.stopPropagation(); deleteJob(j) }}
-                      title="ลบงาน" className="text-[10px] bg-slate-700/60 hover:bg-red-600 text-slate-300 hover:text-white px-1.5 py-0.5 rounded">
-                      <Trash2 size={10}/>
-                    </button>
+                    {jobStatus === 'closed' ? (
+                      <button onClick={e => { e.stopPropagation(); reopenJob(j) }} disabled={reopening===j.id}
+                        title="ดึงกลับมาชั่งต่อ" className="text-[10px] bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white px-2 py-0.5 rounded font-bold">
+                        {reopening===j.id ? '...' : '↩ ดึงกลับมาชั่ง'}</button>
+                    ) : (<>
+                      <button onClick={e => { e.stopPropagation(); closeJob(j) }}
+                        title="ปิดงาน" className="text-[10px] bg-slate-700/60 hover:bg-green-600 text-slate-300 hover:text-white px-1.5 py-0.5 rounded">✓</button>
+                      <button onClick={e => { e.stopPropagation(); deleteJob(j) }}
+                        title="ลบงาน" className="text-[10px] bg-slate-700/60 hover:bg-red-600 text-slate-300 hover:text-white px-1.5 py-0.5 rounded">
+                        <Trash2 size={10}/>
+                      </button>
+                    </>)}
                   </div>
                 </div>
                 {/* body */}

@@ -3326,19 +3326,30 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                 <span className="text-slate-500">{weighedRolls.filter((r:any)=>r?.roll_type==='bad' && (r as any).review_status !== 'pending_review').length} ม้วน</span>
                 <span className="text-orange-300 font-black">{fmt(weighedRolls.filter((r:any)=>r?.roll_type==='bad' && (r as any).review_status !== 'pending_review').reduce((s:number,r:any)=>s+(r.weight??0),0),dec)} Kgs.</span>
               </div>
-              {/* เศษ summary */}
+              {/* เศษ summary + รายถุง (คลิกเพื่อรีปริ้นใบปะหน้าเศษ) */}
               {weighedRolls.some((r:any)=>r.roll_type?.startsWith('scrap')) && (
-                <div className="border-t border-slate-700 bg-slate-800/30 px-3 py-2 space-y-1 shrink-0">
-                  <p className="text-amber-400 text-[9px] font-bold uppercase">เศษเสีย</p>
+                <div className="border-t border-slate-700 bg-slate-800/30 px-3 py-2 space-y-1.5 shrink-0 max-h-48 overflow-y-auto">
+                  <p className="text-amber-400 text-[9px] font-bold uppercase">เศษเสีย — คลิกถุงเพื่อรีปริ้นใบปะหน้า</p>
                   {(['scrap_clear','scrap_color','scrap_lump'] as const).map(t => {
                     const rows = weighedRolls.filter((r:any)=>r.roll_type===t)
                     if (!rows.length) return null
                     const label = t==='scrap_clear'?'ใส':t==='scrap_color'?'สี':'ก้อน'
                     const total = rows.reduce((s:number,r:any)=>s+(r.weight??0),0)
                     return (
-                      <div key={t} className="flex justify-between text-xs">
-                        <span className="text-slate-500">เศษ{label} ({rows.length})</span>
-                        <span className="text-amber-300 font-semibold">{fmt(total,dec)} Kgs.</span>
+                      <div key={t}>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-slate-500">เศษ{label} ({rows.length})</span>
+                          <span className="text-amber-300 font-semibold">{fmt(total,dec)} Kgs.</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1 mt-0.5">
+                          {rows.map((r:any, i:number) => (
+                            <button key={r.id} onClick={()=>setSelectedRoll(r)}
+                              title="คลิกเพื่อรีปริ้นใบปะหน้าเศษ"
+                              className="text-[10px] bg-slate-800 hover:bg-amber-500/20 border border-slate-700 hover:border-amber-500/50 text-slate-300 px-1.5 py-0.5 rounded">
+                              🖨 ถุง {i+1} · {fmt(r.weight??0,dec)}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     )
                   })}

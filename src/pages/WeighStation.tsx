@@ -1317,10 +1317,12 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
     setParking(true)
     try {
       // บันทึก snapshot ลง parked_jobs — รองรับหลายงานต่อเครื่อง (unique: machine_no + lot_no)
-      await supabase.from('parked_jobs').upsert(
+      const { error: parkErr } = await supabase.from('parked_jobs').upsert(
         { machine_no: profile.machine_no, lot_no: profile.lotNo, profile_snapshot: profile, parked_by: parkBy.trim(), parked_at: new Date().toISOString() },
         { onConflict: 'machine_no,lot_no' }
       )
+      // ⚠ ถ้าบันทึก parked ไม่สำเร็จ → หยุด ห้ามล้างงานออกจากเครื่อง (กันงานหาย)
+      if (parkErr) { alert('จอดงานไม่สำเร็จ — งานยังอยู่ที่เครื่อง:\n' + parkErr.message); setParking(false); return }
       // เคลียร์งานออกจากเครื่อง (เหลือแค่ machine_no + section)
       await supabase.from('machine_profiles').upsert({
         machine_no: profile.machine_no, section: profile.section ?? 'blow',
@@ -3450,10 +3452,11 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                   if (!by || !by.trim()) return
                   setClosing(true)
                   try {
-                    await supabase.from('parked_jobs').upsert(
+                    const { error: parkErr } = await supabase.from('parked_jobs').upsert(
                       { machine_no: profile.machine_no, lot_no: profile.lotNo, profile_snapshot: profile, parked_by: by.trim(), parked_at: new Date().toISOString() },
                       { onConflict: 'machine_no,lot_no' }
                     )
+                    if (parkErr) { alert('พักงานไม่สำเร็จ — งานยังอยู่ที่เครื่อง:\n' + parkErr.message); setClosing(false); return }
                     await supabase.from('machine_profiles').update({
                       cust_code:'', cust_name:'', cust_branch:'', cust_address:'',
                       item_code:'', mat_code:'', product_code:'', product_name:'',

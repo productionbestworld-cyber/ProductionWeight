@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.3.35'
+export const APP_VERSION = '1.3.36'
 export const APP_BUILD_DATE = '2026-06-11'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.3.36', date: '2026-06-14',
+    items: [
+      'แก้บั๊กพักงานทำให้งานหาย: ถ้าบันทึก parked_jobs ไม่สำเร็จ ระบบจะไม่ล้างงานออกจากเครื่อง (เดิมล้างทิ้งทั้งที่พักไม่สำเร็จ → งานหาย ดึงกลับไม่ได้) + แก้ unique constraint ของ parked_jobs ให้ upsert ทำงานถูกต้อง',
+    ],
+  },
   {
     version: '1.3.35', date: '2026-06-12',
     items: [

@@ -1042,13 +1042,13 @@ function ResumeClosedJobModal({ dept, machines, onClose, onResumed }: {
       if (machineNos.length) qr = qr.in('machine_no', machineNos)
       const { data: rolls } = await qr
 
-      // รวมข้อมูล — key = machine_no + '|' + lot_no
+      // รวมข้อมูล — key = machine_no + '|' + lot_no + '|' + work_order (แยกตามใบสั่งผลิต)
       const map = new Map<string, any>()
 
       // ใส่ summaries ก่อน (มี planned_qty + closed info)
       for (const s of summaries ?? []) {
         if (!s.machine_no || !s.lot_no) continue
-        const k = `${s.machine_no}|${s.lot_no}`
+        const k = `${s.machine_no}|${s.lot_no}|${s.work_order ?? ''}`
         map.set(k, {
           id:           s.id,
           machine_no:   s.machine_no,
@@ -1073,7 +1073,7 @@ function ResumeClosedJobModal({ dept, machines, onClose, onResumed }: {
       const latest: Record<string, string> = {}
       for (const r of rolls ?? []) {
         if (!r.machine_no || !r.lot_no) continue
-        const k = `${r.machine_no}|${r.lot_no}`
+        const k = `${r.machine_no}|${r.lot_no}|${r.work_order ?? ''}`
         if (r.roll_type === 'good') {
           aggKg[k]    = (aggKg[k] ?? 0) + (r.weight ?? 0)
           aggCount[k] = (aggCount[k] ?? 0) + 1
@@ -1100,7 +1100,7 @@ function ResumeClosedJobModal({ dept, machines, onClose, onResumed }: {
 
       // ใส่ aggregate kg + count + latest activity เข้าทุก row
       const enriched = Array.from(map.values()).map(row => {
-        const k = `${row.machine_no}|${row.lot_no}`
+        const k = `${row.machine_no}|${row.lot_no}|${row.work_order ?? ''}`
         return {
           ...row,
           good_kg:    row.good_kg    ?? aggKg[k]    ?? 0,
@@ -1133,9 +1133,10 @@ function ResumeClosedJobModal({ dept, machines, onClose, onResumed }: {
     )) return
     setRestoring(r.id)
     try {
-      // ดึงม้วนจริงจาก production_rolls เพื่อเอา width_unit/width_cm/thick_mc ล่าสุด
+      // ดึงม้วนจริงจาก production_rolls เพื่อเอา width_unit/width_cm/thick_mc ล่าสุด (เฉพาะ WO นี้)
       const { data: sample } = await supabase.from('production_rolls')
-        .select('*').eq('machine_no', r.machine_no).eq('lot_no', r.lot_no).limit(1).maybeSingle()
+        .select('*').eq('machine_no', r.machine_no).eq('lot_no', r.lot_no)
+        .eq('work_order', r.work_order ?? '').limit(1).maybeSingle()
 
       await supabase.from('machine_profiles').upsert({
         machine_no:    r.machine_no,
@@ -1157,10 +1158,12 @@ function ResumeClosedJobModal({ dept, machines, onClose, onResumed }: {
         product_code:  sample?.product_code ?? '',
         cust_code:     sample?.cust_code    ?? '',
         cust_branch:   sample?.cust_branch  ?? '',
+        // นับเฉพาะม้วนของ WO นี้ (Lot เดียวกันคนละ WO ไม่ปน) — ดึงงานเดิม/ใบสั่งผลิตเดิมเท่านั้น
+        fresh_start:   true,
         updated_at:    new Date().toISOString(),
       }, { onConflict: 'machine_no' })
 
-      alert(`✓ ดึงงาน "${r.product_name}" กลับมาที่เครื่อง ${r.machine_no} แล้ว — กดเข้าเครื่องเพื่อชั่งต่อ`)
+      alert(`✓ ดึงงาน "${r.product_name}" (WO ${r.work_order || '—'}) กลับมาที่เครื่อง ${r.machine_no} แล้ว — กดเข้าเครื่องเพื่อชั่งต่อ`)
       onResumed()
     } catch (e: any) {
       alert('ดึงงานไม่สำเร็จ: ' + (e?.message ?? e))
@@ -1226,6 +1229,7 @@ function ResumeClosedJobModal({ dept, machines, onClose, onResumed }: {
                       <td className="px-3 py-2">
                         <p className="text-slate-200 text-xs">{r.product_name || '—'}</p>
                         <p className="text-slate-500 text-[10px]">{r.customer || '—'}</p>
+                        {r.work_order && <span className="inline-block mt-0.5 text-[9px] font-bold bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded">WO {r.work_order}</span>}
                       </td>
                       <td className="px-3 py-2 text-right text-xs">
                         <p className="text-slate-400">{planned ? `${planned.toFixed(0)} Kg` : '—'}</p>

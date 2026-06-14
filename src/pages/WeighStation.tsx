@@ -757,8 +757,9 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
                         <p className="text-slate-400 text-xs truncate mt-0.5">{p.custName}</p>
                       </div>
 
-                      {/* SO + Lot + Size */}
+                      {/* WO + SO + Lot + Size */}
                       <div className="flex gap-1.5 flex-wrap">
+                        {p.woNo && <span className="text-[10px] bg-orange-500/15 text-orange-300 border border-orange-500/25 px-2 py-0.5 rounded font-bold">WO {p.woNo}</span>}
                         {p.soNo && <span className="text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/25 px-2 py-0.5 rounded font-bold">SO {p.soNo}</span>}
                         <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded font-mono border border-slate-700">Lot {p.lotNo.slice(-8)}</span>
                         {p.widthCm && <span className="text-[10px] bg-brand-500/15 text-brand-300 border border-brand-500/25 px-2 py-0.5 rounded font-bold">{fmtSize(p.widthCm, p.thickMc, p.widthUnit)}</span>}

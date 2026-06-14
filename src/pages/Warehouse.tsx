@@ -315,13 +315,14 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
 
   // ── เศษ (scrap) — เชื่อมจากงานผลิต/กรอ จัดกลุ่มตาม Lot/งาน ──
   const scrapByLot = useMemo(() => {
-    const map = new Map<string, { lot: string; product: string; customer: string; machine: string; rolls: any[] }>()
+    const map = new Map<string, { lot: string; product: string; customer: string; machine: string; wo: string; so: string; rolls: any[] }>()
     scrapRolls.forEach(r => {
-      const k = `${r.lot_no ?? '?'}__${r.product_name ?? '?'}`
-      if (!map.has(k)) map.set(k, { lot: r.lot_no ?? '(ไม่ระบุ Lot)', product: r.product_name ?? '—', customer: r.customer ?? '—', machine: r.machine_no ?? '—', rolls: [] })
+      const wo = ((r as any).work_order ?? '').trim()
+      const k = `${r.lot_no ?? '?'}__${r.product_name ?? '?'}__${wo}`
+      if (!map.has(k)) map.set(k, { lot: r.lot_no ?? '(ไม่ระบุ Lot)', product: r.product_name ?? '—', customer: r.customer ?? '—', machine: r.machine_no ?? '—', wo, so: ((r as any).sale_order ?? '').trim(), rolls: [] })
       map.get(k)!.rolls.push(r)
     })
-    return Array.from(map.values()).sort((a, b) => a.lot.localeCompare(b.lot))
+    return Array.from(map.values()).sort((a, b) => a.lot.localeCompare(b.lot) || a.wo.localeCompare(b.wo))
   }, [scrapRolls])
   // ── NC ที่ออกจากคลัง — จัดกลุ่มตาม Lot เพื่อแจ้งเตือนในแต่ละกลุ่มสต็อก ──
   const ncByLotKey = useMemo(() => {
@@ -422,6 +423,7 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
       ['รายงานสต็อกคลังสินค้า'],
       [],
       ['Lot :', lot,  '',  'สินค้า :', product],
+      ['WO :', (groupRolls[0] as any)?.work_order ?? '', '', 'SO :', (groupRolls[0] as any)?.sale_order ?? ''],
       ['ลูกค้า :', customer, '',  'จำนวน :', `${groupRolls.length} ม้วน`,  'น้ำหนักรวม (สุทธิ) :', `${totalKg.toFixed(2)} Kgs.`],
       ['วันที่ Export :', new Date().toLocaleDateString('th-TH')],
       [],
@@ -1003,14 +1005,16 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
           : (
             <div className="space-y-2">
               {scrapByLot.map(group => {
-                const key = `scrap__${group.lot}__${group.product}`
+                const key = `scrap__${group.lot}__${group.product}__${group.wo}`
                 const isOpen = expandedLots.has(key)
                 const subKg = group.rolls.reduce((s,r)=>s+(r.weight??0),0)
                 return (
                   <div key={key} className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
                     <button onClick={() => setExpandedLots(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })}
-                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-800/50 text-left">
+                      className="w-full flex items-center gap-2 px-4 py-3 hover:bg-slate-800/50 text-left flex-wrap">
                       {isOpen ? <ChevronDown size={16} className="text-slate-500"/> : <ChevronRight size={16} className="text-slate-500"/>}
+                      {group.wo && <span className="text-[10px] font-bold bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded">WO {group.wo}</span>}
+                      {group.so && <span className="text-[10px] font-bold bg-blue-500/15 text-blue-300 px-1.5 py-0.5 rounded">SO {group.so}</span>}
                       <span className="font-mono text-sm text-red-300">Lot {group.lot}</span>
                       <span className="text-sm text-slate-300">{group.product}</span>
                       <span className="text-xs text-slate-500">· {group.customer} · เครื่อง {group.machine}</span>

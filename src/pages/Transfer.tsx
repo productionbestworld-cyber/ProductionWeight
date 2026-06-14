@@ -1,6 +1,6 @@
 import { useEffect, useState, Fragment } from 'react'
 import { Package, Search, CheckCircle2, ArrowRightFromLine, RefreshCw, Wind, Printer, FileText, Download } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase, fetchAll } from '../lib/supabase'
 import * as XLSX from 'xlsx'
 
 // ── พิมพ์ใบโอนเข้าคลัง ─────────────────────────────────────────────────────────
@@ -328,17 +328,19 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
 
   async function loadRolls() {
     setLoading(true)
-    let q = supabase.from('production_rolls')
-      .select('*')
-      .order('created_at',{ ascending: false })
-      // ⚠ ไม่แสดงม้วน review_status='pending_review' (รอ ผจก พิจารณา)
-      .or('review_status.is.null,review_status.eq.approved_rework')
-    // กรองตาม type ที่เลือก
-    if (typeFilter === 'good')      q = q.eq('roll_type', 'good')
-    else if (typeFilter === 'bad')  q = q.eq('roll_type', 'bad')
-    else /* scrap */                q = q.like('roll_type', 'scrap%')
-    if (dept) q = q.or(`section.eq.${dept},section.is.null`)
-    const { data } = await q
+    // ⚠ ดึงทีละหน้าจนครบ (Supabase จำกัด 1000 แถว/query) — ไม่งั้นม้วนเก่าที่ยังไม่โอนหลุดหาย
+    const data = await fetchAll(() => {
+      let q = supabase.from('production_rolls')
+        .select('*')
+        .order('created_at',{ ascending: false })
+        // ⚠ ไม่แสดงม้วน review_status='pending_review' (รอ ผจก พิจารณา)
+        .or('review_status.is.null,review_status.eq.approved_rework')
+      if (typeFilter === 'good')      q = q.eq('roll_type', 'good')
+      else if (typeFilter === 'bad')  q = q.eq('roll_type', 'bad')
+      else /* scrap */                q = q.like('roll_type', 'scrap%')
+      if (dept) q = q.or(`section.eq.${dept},section.is.null`)
+      return q
+    })
     setRolls(data ?? [])
     setLoading(false)
   }

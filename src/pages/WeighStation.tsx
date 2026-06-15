@@ -1152,10 +1152,13 @@ function ResumeClosedJobModal({ dept, machines, onClose, onResumed }: {
         planned_qty:   r.planned_qty != null ? String(r.planned_qty) : '',
         inspector:     r.inspector   ?? '',
         section:       sample?.section ?? dept ?? 'blow',
-        // ดึง dimension จากม้วนจริง (ถ้ามี)
+        // ดึง dimension + ค่าที่เคยกรอก (เมตร/จำนวนชิ้น/แกน) จากม้วนจริง (ถ้ามี)
         width_cm:      sample?.width_cm   ?? '',
         width_unit:    sample?.width_unit ?? 'cm',
         thick_mc:      sample?.thick_mc   ?? '',
+        length:        sample?.length     ?? '',
+        pcs:           sample?.pcs        ?? '',
+        core_weight:   sample?.core_weight != null ? String(sample.core_weight) : '',
         product_code:  sample?.product_code ?? '',
         cust_code:     sample?.cust_code    ?? '',
         cust_branch:   sample?.cust_branch  ?? '',

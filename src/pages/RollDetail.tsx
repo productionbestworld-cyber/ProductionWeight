@@ -124,9 +124,8 @@ export default function RollDetail() {
           {showRemark     && <Row label="หมายเหตุ"   val={roll.remark} />}
           {/* หาดทิพย์ — โชว์ค่าเพิ่ม: วัสดุ + วันผลิต/วันหมดอายุต่อกัน */}
           {isHadthip && <Row label="HTC Material" val="LDPE" />}
-          {isHadthip
-            ? <Row label="วันผลิต / หมดอายุ" val={`${dateStr} → ${expStr}`} />
-            : <Row label="วันที่ผลิต" val={`${dateStr}  ${timeStr}`} />}
+          <Row label="วันที่ผลิต" val={isHadthip ? dateStr : `${dateStr}  ${timeStr}`} />
+          {isHadthip && <Row label="วันหมดอายุ (EXP)" val={expStr} />}
           <Row label="สถานะโอน"   val={roll.transferred ? `✓ โอนแล้ว · ${roll.transferred_by || ''}` : 'รอโอนเข้าคลัง'} />
         </div>
 

@@ -70,8 +70,9 @@ export default function RollDetail() {
   const dateStr    = createdAt.toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit', year:'numeric' })
   const timeStr    = createdAt.toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit' })
   const currentUrl = window.location.href
-  // วันหมดอายุ — เฉพาะลูกค้าหาดทิพย์ (cust 08): วันผลิต + 6 เดือน
-  const isHadthip  = (roll.cust_code ?? '').trim() === '08'
+  // ลูกค้าหาดทิพย์ — เช็กจากรหัส 08 หรือชื่อ (ม้วนเก่าไม่ได้เก็บ cust_code)
+  const isHadthip  = (roll.cust_code ?? '').trim() === '08' || (roll.customer ?? '').includes('หาดทิพย์')
+  // วันหมดอายุ = วันผลิต + 6 เดือน
   const expStr     = (() => { const d = new Date(roll.created_at); d.setMonth(d.getMonth() + 6); return d.toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit', year:'numeric' }) })()
 
   const typeLabel  = roll.roll_type === 'good' ? 'FG ✓' : roll.roll_type === 'scrap' ? 'ของเสีย' : 'กรอ/ซ่อม'
@@ -119,8 +120,11 @@ export default function RollDetail() {
           <Row label="เครื่องจักร" val={roll.machine_no   || '—'} />
           {roll.inspector && <Row label="ผู้ตรวจสอบ" val={roll.inspector} />}
           {showRemark     && <Row label="หมายเหตุ"   val={roll.remark} />}
-          <Row label="วันที่ผลิต"  val={`${dateStr}  ${timeStr}`} />
-          {isHadthip && <Row label="วันหมดอายุ (EXP)" val={expStr} />}
+          {/* หาดทิพย์ — โชว์ค่าเพิ่ม: วัสดุ + วันผลิต/วันหมดอายุต่อกัน */}
+          {isHadthip && <Row label="HTC Material" val="LDPE" />}
+          {isHadthip
+            ? <Row label="วันผลิต / หมดอายุ" val={`${dateStr} → ${expStr}`} />
+            : <Row label="วันที่ผลิต" val={`${dateStr}  ${timeStr}`} />}
           <Row label="สถานะโอน"   val={roll.transferred ? `✓ โอนแล้ว · ${roll.transferred_by || ''}` : 'รอโอนเข้าคลัง'} />
         </div>
 

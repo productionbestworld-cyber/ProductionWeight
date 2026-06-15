@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.3.48'
+export const APP_VERSION = '1.3.49'
 export const APP_BUILD_DATE = '2026-06-11'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.3.49', date: '2026-06-15',
+    items: [
+      'หน้าโอน: การ์ดงานโชว์น้ำหนัก (Kg) กำกับด้วย — เดิมมีแค่จำนวนม้วน เช่น "รอโอน 79 ม้วน · 990.3 Kg"',
+    ],
+  },
   {
     version: '1.3.48', date: '2026-06-15',
     items: [

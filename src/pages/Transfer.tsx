@@ -378,13 +378,15 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   )).map(key => {
     const [mNo, lot, wo] = key.split('__')
     const jobRolls = rolls.filter(r => r.machine_no === mNo && r.lot_no === lot && (r.work_order ?? '') === wo)
-    const pending  = jobRolls.filter(r => !r.transferred).length
+    const pendingRolls = jobRolls.filter(r => !r.transferred)
+    const pending  = pendingRolls.length
+    const pendingKg = pendingRolls.reduce((s, r) => s + (r.weight ?? 0), 0)
     const sample   = jobRolls[0]
     const dates = jobRolls.map(r => r.created_at).filter(Boolean).sort()
     const size = sample?.width_cm && sample?.thick_mc ? `${sample.width_cm}${sample.width_unit ?? 'cm'}×${sample.thick_mc}mc` : ''
     return { machine_no: mNo, lot_no: lot, work_order: wo, so: sample?.sale_order ?? '', size,
              start: dates[0] ?? '', end: dates[dates.length-1] ?? '',
-             product: sample?.product_name, customer: sample?.customer, total: jobRolls.length, pending }
+             product: sample?.product_name, customer: sample?.customer, total: jobRolls.length, pending, pendingKg }
   }).filter(j => j.pending > 0)  // ← ซ่อน job ที่โอนครบแล้ว
     // คนโอนยึด ขนาด → ลูกค้า → เครื่อง เป็นหลัก
     .sort((a, b) =>
@@ -870,7 +872,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                         </div>
                         {(j as any).start && <p className="text-slate-600 text-[9px] mt-0.5">🕐 {new Date((j as any).start).toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit'})} {new Date((j as any).start).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})} → {new Date((j as any).end).toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit'})} {new Date((j as any).end).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})}</p>}
                         <div className="flex items-center justify-between mt-1">
-                          <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold">รอโอน {j.pending} {typeFilter==='scrap'?'ถุง':'ม้วน'}</span>
+                          <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold">รอโอน {j.pending} {typeFilter==='scrap'?'ถุง':'ม้วน'} · {fmt(j.pendingKg)} Kg</span>
                         </div>
                       </button>
                     )

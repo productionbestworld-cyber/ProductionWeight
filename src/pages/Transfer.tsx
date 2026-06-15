@@ -312,10 +312,13 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   // โหลดจำนวนม้วนคงค้างทุกประเภท
   // ⚠ ไม่นับม้วน review_status='pending_review' (รอ ผจก พิจารณา — ยังโอนไม่ได้)
   async function loadPendingCounts() {
-    let q = supabase.from('production_rolls').select('roll_type').eq('transferred', false)
-      .or('review_status.is.null,review_status.eq.approved_rework')
-    if (dept) q = q.or(`section.eq.${dept},section.is.null`)
-    const { data } = await q
+    // ⚠ ดึงทีละหน้าจนครบ — ม้วนรอโอนเกิน 1000 แถว (badge นับขาด)
+    const data = await fetchAll(() => {
+      let q = supabase.from('production_rolls').select('roll_type').eq('transferred', false)
+        .or('review_status.is.null,review_status.eq.approved_rework')
+      if (dept) q = q.or(`section.eq.${dept},section.is.null`)
+      return q
+    })
     const c = { good: 0, bad: 0, scrap: 0 }
     for (const r of data ?? []) {
       const t = r.roll_type

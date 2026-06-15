@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Wrench, Trash2, Plus, RefreshCw, Search, X, ArrowLeft } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase, fetchAll } from '../lib/supabase'
 import { fetchProducts, type Product } from './Products'
 import ExportButton from '../components/ExportButton'
 
@@ -134,8 +134,8 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
     if (!selectedType) return
     setLoading(true)
     // โหลดม้วน bad ทุกใบ (ไม่ต้องรอกดโอนเป็นทางการ — ม้วนกรอ = รอแก้ทันที)
-    const { data: allData } = await supabase.from('production_rolls').select('*')
-      .eq('roll_type', 'bad').order('created_at', { ascending: false })
+    const allData = await fetchAll(() => supabase.from('production_rolls').select('*')
+      .eq('roll_type', 'bad').order('created_at', { ascending: false }))
     const allRows = (allData ?? []).filter(r => !r.is_legacy)
 
     // queue เท่านั้น — ม้วนเสียที่รอตัดสินใจ (ยังไม่เริ่มกรอ)
@@ -166,10 +166,10 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
     internal:0, return_no_cn:0, return_with_cn:0, qc_reject:0, warehouse_damage:0,
   })
   useEffect(() => {
-    supabase.from('production_rolls')
+    fetchAll(() => supabase.from('production_rolls')
       .select('inbound_type, rework_status, transferred')
-      .eq('roll_type', 'bad')
-      .then(({ data }) => {
+      .eq('roll_type', 'bad'))
+      .then((data) => {
         const c: Record<InboundType, number> = { internal:0, return_no_cn:0, return_with_cn:0, qc_reject:0, warehouse_damage:0 }
         for (const r of data ?? []) {
           // ม้วนกรอทุกใบที่ยังไม่ปิดงาน (ไม่ต้องรอกดโอน)

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Plus, Trash2, RefreshCw, Search, X } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase, fetchAll } from '../lib/supabase'
 import { fetchProducts, backfillProductMatCore, type Product } from './Products'
 import ExportButton from '../components/ExportButton'
 import { fmtSize, type MachineProfile } from './MachineSettings'
@@ -131,8 +131,8 @@ export default function ReworkJobList({ onPickJob }: { onPickJob: (profile: Mach
   useEffect(() => {
     let alive = true
     async function count() {
-      const { data } = await supabase.from('production_rolls')
-        .select('rework_status, is_legacy').eq('roll_type', 'bad')
+      const data = await fetchAll(() => supabase.from('production_rolls')
+        .select('rework_status, is_legacy').eq('roll_type', 'bad'))
       if (!alive) return
       const n = (data ?? []).filter(r => !r.is_legacy && (!r.rework_status || r.rework_status === 'pending')).length
       setInboxCount(n)

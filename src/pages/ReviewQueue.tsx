@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Check, X, Search, RefreshCw } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase, fetchAll } from '../lib/supabase'
 import { fmtSize } from './MachineSettings'
 import ExportButton from '../components/ExportButton'
 
@@ -75,10 +75,10 @@ export default function ReviewQueue({ dept, mode = 'prod' }: { dept?: 'blow'|'pr
   async function load() {
     setLoading(true)
     // ดึงม้วนที่ผ่าน review (pending + decided ทั้งหมด เพื่อสลับ tab)
-    const { data } = await supabase.from('production_rolls')
+    const data = await fetchAll(() => supabase.from('production_rolls')
       .select('*')
       .in('review_status', ['pending_review','approved_rework','other'])
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: false }))
     setAllRolls((data ?? []) as Roll[])
     setLoading(false)
   }

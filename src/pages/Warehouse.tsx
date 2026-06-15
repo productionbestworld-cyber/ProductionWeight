@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, Fragment } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, fetchAll } from '../lib/supabase'
 import { Package, Plus, Truck, BarChart3, RefreshCw, Search, Printer, Download, X, CheckCircle2, ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 
@@ -233,19 +233,19 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
 
   async function loadAll() {
     setLoading(true)
-    const [r, { data: s }, { data: sc }, { data: nc }] = await Promise.all([
+    const [r, { data: s }, sc, nc] = await Promise.all([
       fetchAllTransferred(),
       supabase.from('sales_orders').select('*').order('created_at', { ascending: false }),
-      supabase.from('production_rolls').select('*')
+      // เศษ — ดึงทีละหน้าจนครบ (กันเกิน 1000 แถว)
+      fetchAll(() => supabase.from('production_rolls').select('*')
         .in('roll_type', ['scrap_clear','scrap_color','scrap_lump'])
-        .order('created_at', { ascending: false }),
+        .order('created_at', { ascending: false })),
       // ม้วนที่ถูกแจ้ง NC ออกจากคลัง และ "ยังรอ ผจก ตัดสิน" เท่านั้น
-      // (ถ้าตัดสินแล้ว เช่น ส่งกรอ/เศษ/คืน จะหายจากแถบเตือน ไม่ค้างถาวร)
-      supabase.from('production_rolls').select('*')
+      fetchAll(() => supabase.from('production_rolls').select('*')
         .eq('roll_type', 'bad')
         .eq('review_status', 'pending_review')
         .in('inbound_type', ['qc_reject','warehouse_damage'])
-        .order('created_at', { ascending: false }),
+        .order('created_at', { ascending: false })),
     ])
     setRolls((r ?? []) as Roll[])
     setSOs((s ?? []) as SO[])

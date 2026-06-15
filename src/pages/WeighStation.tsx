@@ -150,6 +150,7 @@ ${savedLayout.fields.map(renderLongField).join('\n')}
     mfg:       `MFG&nbsp;&nbsp;<b>${mfgDate}</b>${showExp ? `&nbsp;&nbsp;EXP&nbsp;<b>${expDate}</b>` : ''}`,
     rollno:    `${rollWord}&nbsp;<b>${rollNo === 0 ? '—' : rollNo}</b>`,
     prodname:  p.productName,
+    prodcode:  p.productCode || '—',
     itemcode:  p.itemCode || '—',
     size:      `${p.widthCm} ${p.widthUnit ?? 'cm'} × ${p.thickMc} mc`,
     lotno:     p.lotNo,

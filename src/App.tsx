@@ -388,7 +388,7 @@ export default function App() {
         {page === 'combined'  && (
           <div>
             <div className="flex justify-end px-4 pt-3">
-              <a href="/?combined=1" target="_blank" rel="noopener noreferrer"
+              <a href="/combined" target="_blank" rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg px-3 py-1.5">
                 🔗 เปิดแยกหน้าต่าง
               </a>

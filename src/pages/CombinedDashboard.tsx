@@ -33,7 +33,12 @@ export default function CombinedDashboard() {
   const [newRows, setNewRows] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<Tab>('dashboard')
-  const [cutoff, setCutoff] = useState(() => localStorage.getItem(CUTOFF_KEY) || '2026-06-10')
+  const [cutoff, setCutoff] = useState(() => localStorage.getItem(CUTOFF_KEY) || '2026-06-01')
+  // โหมดช่วงรอยต่อ:
+  //  'auto' = เครื่อง+วันไหนมีในระบบใหม่ ใช้ข้อมูลใหม่ · ที่เหลือใช้เก่า (ไม่ตก ไม่ซ้ำ) ★แนะนำ
+  //  'sum'  = บวกเก่า+ใหม่ทั้งหมด (วันทับกันรวมกัน)
+  //  'cut'  = ตัดตามจุดตัด (เก่าก่อนจุดตัด · ใหม่ตั้งแต่จุดตัด)
+  const [seamMode, setSeamMode] = useState<'auto' | 'sum' | 'cut'>('auto')
   const [filter, setFilter] = useState<FilterState>({ ...EMPTY })
 
   useEffect(() => {
@@ -83,13 +88,24 @@ export default function CombinedDashboard() {
   // รวม old(ก่อน cutoff) + new(ตั้งแต่ cutoff) + จับลูกค้าให้ตรงกัน
   const combinedAll = useMemo<ProductionRecord[]>(() => {
     const out: ProductionRecord[] = []
+    // (วัน|เครื่อง) ที่มีในระบบใหม่ — สำหรับโหมด auto กันนับซ้ำ
+    const newDayMc = new Set<string>()
+    if (seamMode === 'auto') for (const r of newAsRecords) newDayMc.add(`${r.production_date}|${(r.machine ?? '').trim()}`)
+    // ข้อมูลเก่า
     for (const r of oldRows) {
-      const d = (r.production_date ?? '').slice(0, 10); if (!d || d >= cutoff) continue
+      const d = (r.production_date ?? '').slice(0, 10); if (!d) continue
+      if (seamMode === 'cut' && d >= cutoff) continue
+      if (seamMode === 'auto' && newDayMc.has(`${d}|${(r.machine ?? '').trim()}`)) continue  // วัน+เครื่องนี้มีในใหม่แล้ว → ข้าม
       out.push({ ...r, customer: custKey(r.customer) })
     }
-    for (const r of newAsRecords) { if ((r.production_date ?? '') >= cutoff) out.push(r) }
+    // ข้อมูลใหม่
+    for (const r of newAsRecords) {
+      const d = (r.production_date ?? ''); if (!d) continue
+      if (seamMode === 'cut' && d < cutoff) continue
+      out.push(r)
+    }
     return out
-  }, [oldRows, newAsRecords, cutoff])
+  }, [oldRows, newAsRecords, cutoff, seamMode])
 
   const filtered = useMemo(() => applyFilter(combinedAll, filter), [combinedAll, filter])
   const kpi = useMemo(() => kpiCalc(filtered), [filtered])
@@ -114,11 +130,21 @@ export default function CombinedDashboard() {
       <div className="bg-white border-b border-gray-100 sticky top-0 z-30 shadow-sm px-5 py-3 flex items-center justify-between flex-wrap gap-3">
         <div>
           <p className="font-bold text-gray-800 text-lg leading-tight">📊 รวมเทียบทั้งปี (เก่า + ใหม่)</p>
-          <p className="text-xs text-gray-400">เก่า {oldRows.length.toLocaleString()} + ใหม่ {newRows.length.toLocaleString()} ม้วน · รวม {combinedAll.length.toLocaleString()} รายการ</p>
+          <p className="text-xs text-gray-400">เก่า {oldRows.length.toLocaleString()} + ใหม่ {newRows.length.toLocaleString()} ม้วน · รวม {combinedAll.length.toLocaleString()} รายการ · {seamMode==='auto'?'โหมดอัตโนมัติ: เครื่อง+วันไหนมีในระบบใหม่ใช้ใหม่ ที่เหลือใช้เก่า (ไม่ตก ไม่ซ้ำ)':seamMode==='sum'?'โหมดรวมทั้งคู่: บวกเก่า+ใหม่ทั้งหมด':'โหมดตัดตามวันที่'}</p>
         </div>
-        <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 bg-amber-50">
-          <span className="text-xs text-gray-500">จุดตัด เก่า→ใหม่:</span>
-          <input type="date" value={cutoff} onChange={e => setCutoff(e.target.value)} className="bg-white border border-gray-200 rounded px-2 py-1 text-sm text-gray-700 outline-none"/>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex bg-gray-100 border border-gray-200 rounded-lg p-0.5">
+            {([['auto','อัตโนมัติ'],['sum','รวมทั้งคู่'],['cut','ตัดตามวันที่']] as const).map(([k,label]) => (
+              <button key={k} onClick={() => setSeamMode(k as any)}
+                className={`text-xs font-bold px-2.5 py-1 rounded ${seamMode===k ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-200'}`}>{label}</button>
+            ))}
+          </div>
+          {seamMode === 'cut' && (
+            <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-1.5 bg-amber-50">
+              <span className="text-xs text-gray-500">จุดตัด:</span>
+              <input type="date" value={cutoff} onChange={e => setCutoff(e.target.value)} className="bg-white border border-gray-200 rounded px-2 py-1 text-sm text-gray-700 outline-none"/>
+            </div>
+          )}
         </div>
       </div>
 

@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.3.53'
-export const APP_BUILD_DATE = '2026-06-11'
+export const APP_VERSION = '1.3.54'
+export const APP_BUILD_DATE = '2026-06-15'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.3.54', date: '2026-06-15',
+    items: [
+      'รวมเทียบทั้งปี: นับวันที่ม้วนใหม่ตามเวลาไทย (Asia/Bangkok) ให้ตรงกับแดชบอดรายวัน — กันม้วนใกล้เที่ยงคืนถูกนับคนละวัน ทำให้ยอดรายวันตรงกัน',
+    ],
+  },
   {
     version: '1.3.53', date: '2026-06-15',
     items: [

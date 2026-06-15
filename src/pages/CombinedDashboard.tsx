@@ -16,6 +16,12 @@ const CUTOFF_KEY = 'bwp_combined_cutoff'
 type Tab = 'dashboard' | 'daily' | 'problems' | 'compare' | 'table'
 const EMPTY: FilterState = { from:'', to:'', machine:'', customer:'', size:'', shift:'', search:'' }
 
+// วันที่ตามเวลาไทย (กันม้วนใกล้เที่ยงคืนถูกนับคนละวันกับแดชบอดใหม่)
+function thaiDate(iso?: string) {
+  if (!iso) return ''
+  try { return new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }) } catch { return (iso ?? '').slice(0, 10) }
+}
+
 // จับชื่อ/รหัสลูกค้าให้ตรงกันระหว่างเก่า(โค้ด) กับใหม่(ชื่อเต็ม)
 function custKey(s?: string) {
   const t = (s ?? '').trim()
@@ -67,7 +73,7 @@ export default function CombinedDashboard() {
   const newAsRecords = useMemo<ProductionRecord[]>(() => {
     const m = new Map<string, ProductionRecord>()
     for (const r of newRows) {
-      const date = (r.created_at ?? '').slice(0, 10); if (!date) continue
+      const date = thaiDate(r.created_at); if (!date) continue
       const mc = (r.machine_no ?? '').trim()
       const cust = custKey(r.customer)
       const size = r.width_cm && r.thick_mc ? `${r.width_cm}${r.width_unit ?? 'cm'}×${r.thick_mc}mc` : ''

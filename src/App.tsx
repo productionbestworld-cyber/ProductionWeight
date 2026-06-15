@@ -56,6 +56,29 @@ export default function App() {
     }
   }
 
+  // ── ลิงก์แยก: รวมเทียบทั้งปี (เก่า+ใหม่) — ...?combined=1 หรือ /combined ──
+  {
+    const sp = new URLSearchParams(window.location.search)
+    const path = window.location.pathname.replace(/\/+$/, '').toLowerCase()
+    const isCombined = sp.get('combined') !== null
+      || window.location.hash.replace('#', '').toLowerCase() === 'combined'
+      || path === '/combined'
+    if (isCombined) {
+      return (
+        <div className="min-h-screen bg-[#0a0f1e]">
+          <div className="bg-slate-900 border-b border-slate-800 px-5 py-2.5 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <img src="/logo.png" alt="BWP" className="w-8 h-8 rounded-full object-cover"/>
+              <span className="text-white font-bold text-sm">รวมเทียบทั้งปี (เก่า + ใหม่)</span>
+            </div>
+            <a href="/" className="text-xs text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 rounded-lg px-3 py-1.5">← กลับหน้าหลัก</a>
+          </div>
+          <CombinedDashboard />
+        </div>
+      )
+    }
+  }
+
   // dept persist ใน localStorage
   const [dept, setDept] = useState<Dept>(() =>
     (localStorage.getItem(DEPT_KEY) as Dept) ?? 'blow'
@@ -362,7 +385,17 @@ export default function App() {
             <Dashboard dept={dept} />
           </div>
         )}
-        {page === 'combined'  && <CombinedDashboard />}
+        {page === 'combined'  && (
+          <div>
+            <div className="flex justify-end px-4 pt-3">
+              <a href="/?combined=1" target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg px-3 py-1.5">
+                🔗 เปิดแยกหน้าต่าง
+              </a>
+            </div>
+            <CombinedDashboard />
+          </div>
+        )}
         {page === 'planning'  && <Planning dept={dept} />}
         {page === 'history'   && <HistoryPage dept={dept} />}
         {page === 'products'  && <ProductsPage />}

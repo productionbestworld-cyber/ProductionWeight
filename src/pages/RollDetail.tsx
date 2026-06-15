@@ -70,8 +70,10 @@ export default function RollDetail() {
   const dateStr    = createdAt.toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit', year:'numeric' })
   const timeStr    = createdAt.toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit' })
   const currentUrl = window.location.href
-  // ลูกค้าหาดทิพย์ — เช็กจากรหัส 08 หรือชื่อ (ม้วนเก่าไม่ได้เก็บ cust_code)
-  const isHadthip  = (roll.cust_code ?? '').trim() === '08' || (roll.customer ?? '').includes('หาดทิพย์')
+  // ลูกค้าหาดทิพย์ (รหัส 08) — รหัสลูกค้าฝังใน Lot 4 หลักก่อนเดือน เช่น 69BL06"0008"06
+  // (ม้วนไม่ได้เก็บ cust_code → ถอดจาก Lot เป็นหลัก + เผื่อชื่อ/รหัส)
+  const custFromLot = (() => { const m = (roll.lot_no ?? '').match(/(\d{4})\d{2}$/); return m ? parseInt(m[1], 10) : null })()
+  const isHadthip  = custFromLot === 8 || (roll.cust_code ?? '').trim() === '08' || (roll.customer ?? '').includes('หาดทิพย์')
   // วันหมดอายุ = วันผลิต + 6 เดือน
   const expStr     = (() => { const d = new Date(roll.created_at); d.setMonth(d.getMonth() + 6); return d.toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit', year:'numeric' }) })()
 

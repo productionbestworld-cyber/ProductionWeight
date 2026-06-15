@@ -1,0 +1,161 @@
+// รวมข้อมูลเก่า (production_records) + ใหม่ (production_rolls แปลงเป็น ProductionRecord)
+// แล้วเรนเดอร์ด้วยแท็บแดชบอดเก่าทั้งชุด → รายละเอียดเหมือนแดชบอดเก่าทุกอย่าง
+import { useEffect, useMemo, useState } from 'react'
+import { RotateCcw } from 'lucide-react'
+import { supabase, fetchAll } from '../lib/supabase'
+import { supabase as legacySupabase } from '../legacy/lib/supabase'
+import DashboardTab from '../legacy/pages/DashboardTab'
+import DailyTab from '../legacy/pages/DailyTab'
+import ProblemsTab from '../legacy/pages/ProblemsTab'
+import CompareTab from '../legacy/pages/CompareTab'
+import TableTab from '../legacy/pages/TableTab'
+import { applyFilter, kpiCalc, uniq } from '../legacy/lib/utils'
+import type { ProductionRecord, FilterState } from '../legacy/lib/types'
+
+const CUTOFF_KEY = 'bwp_combined_cutoff'
+type Tab = 'dashboard' | 'daily' | 'problems' | 'compare' | 'table'
+const EMPTY: FilterState = { from:'', to:'', machine:'', customer:'', size:'', shift:'', search:'' }
+
+// จับชื่อ/รหัสลูกค้าให้ตรงกันระหว่างเก่า(โค้ด) กับใหม่(ชื่อเต็ม)
+function custKey(s?: string) {
+  const t = (s ?? '').trim()
+  if (/หาดทิพย์|HAD/i.test(t)) return 'หาดทิพย์'
+  if (/ไทยน้ำทิพย์|COK/i.test(t)) return 'ไทยน้ำทิพย์'
+  if (/กรีนสปอต|กรีนสวิลล์|GP/i.test(t)) return 'กรีนสปอต'
+  if (/เสริมสุข|SE/i.test(t)) return 'เสริมสุข'
+  if (/โอสถสภา/i.test(t)) return 'โอสถสภา'
+  if (/กระทิงแดง|TCF/i.test(t)) return 'กระทิงแดง'
+  return t || '(ไม่ระบุ)'
+}
+
+export default function CombinedDashboard() {
+  const [oldRows, setOldRows] = useState<ProductionRecord[]>([])
+  const [newRows, setNewRows] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState<Tab>('dashboard')
+  const [cutoff, setCutoff] = useState(() => localStorage.getItem(CUTOFF_KEY) || '2026-06-10')
+  const [filter, setFilter] = useState<FilterState>({ ...EMPTY })
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true)
+      const [oldData, newData] = await Promise.all([
+        (async () => {
+          const all: any[] = []
+          for (let f = 0; ; f += 1000) {
+            const { data, error } = await legacySupabase.from('production_records').select('*').order('production_date').range(f, f + 999)
+            if (error || !data) break; all.push(...data); if (data.length < 1000) break
+          }
+          return all
+        })(),
+        fetchAll(() => supabase.from('production_rolls')
+          .select('created_at, roll_type, weight, machine_no, customer, product_name, product_code, width_cm, width_unit, thick_mc, work_order, sale_order, remark')
+          .order('created_at', { ascending: true })),
+      ])
+      setOldRows(oldData); setNewRows(newData ?? [])
+      setLoading(false)
+    })()
+  }, [])
+  useEffect(() => { localStorage.setItem(CUTOFF_KEY, cutoff) }, [cutoff])
+
+  // แปลงม้วน(ใหม่) → ProductionRecord รวมต่อ วัน+เครื่อง+ลูกค้า+สินค้า
+  const newAsRecords = useMemo<ProductionRecord[]>(() => {
+    const m = new Map<string, ProductionRecord>()
+    for (const r of newRows) {
+      const date = (r.created_at ?? '').slice(0, 10); if (!date) continue
+      const mc = (r.machine_no ?? '').trim()
+      const cust = custKey(r.customer)
+      const size = r.width_cm && r.thick_mc ? `${r.width_cm}${r.width_unit ?? 'cm'}×${r.thick_mc}mc` : ''
+      const k = `${date}|${mc}|${cust}|${size}`
+      if (!m.has(k)) m.set(k, {
+        production_date: date, machine: mc, customer: cust, size,
+        product_code: r.product_code ?? '', order_no: r.work_order ?? '', sales_order: r.sale_order ?? '',
+        shift: 'unknown', fg_kg: 0, fg_rolls: 0, scrap_kg: 0, rework_kg: 0, rework_rolls: 0,
+      } as ProductionRecord)
+      const rec = m.get(k)!; const w = +(r.weight ?? 0)
+      if (r.roll_type === 'good') { rec.fg_kg = (rec.fg_kg ?? 0) + w; rec.fg_rolls = (rec.fg_rolls ?? 0) + 1 }
+      else if (r.roll_type === 'bad') { rec.rework_kg = (rec.rework_kg ?? 0) + w; rec.rework_rolls = (rec.rework_rolls ?? 0) + 1; if (r.remark && !rec.symptom) rec.symptom = String(r.remark) }
+      else if (String(r.roll_type).startsWith('scrap')) { rec.scrap_kg = (rec.scrap_kg ?? 0) + w; if (r.remark && !rec.symptom) rec.symptom = String(r.remark) }
+    }
+    return [...m.values()]
+  }, [newRows])
+
+  // รวม old(ก่อน cutoff) + new(ตั้งแต่ cutoff) + จับลูกค้าให้ตรงกัน
+  const combinedAll = useMemo<ProductionRecord[]>(() => {
+    const out: ProductionRecord[] = []
+    for (const r of oldRows) {
+      const d = (r.production_date ?? '').slice(0, 10); if (!d || d >= cutoff) continue
+      out.push({ ...r, customer: custKey(r.customer) })
+    }
+    for (const r of newAsRecords) { if ((r.production_date ?? '') >= cutoff) out.push(r) }
+    return out
+  }, [oldRows, newAsRecords, cutoff])
+
+  const filtered = useMemo(() => applyFilter(combinedAll, filter), [combinedAll, filter])
+  const kpi = useMemo(() => kpiCalc(filtered), [filtered])
+  const set = (k: keyof FilterState, v: string) => setFilter(f => ({ ...f, [k]: v }))
+  const machines  = useMemo(() => uniq(combinedAll, 'machine'),  [combinedAll])
+  const customers = useMemo(() => uniq(combinedAll, 'customer'), [combinedAll])
+  const sizes     = useMemo(() => uniq(combinedAll, 'size'),     [combinedAll])
+
+  const TABS: { key: Tab; label: string }[] = [
+    { key:'dashboard', label:'📊 ภาพรวม' }, { key:'daily', label:'📅 รายวัน' },
+    { key:'problems', label:'⚠️ ปัญหา & สาเหตุ' }, { key:'compare', label:'🔀 เปรียบเทียบ' }, { key:'table', label:'📋 ตาราง' },
+  ]
+
+  if (loading) return (
+    <div className="min-h-[60vh] flex items-center justify-center text-gray-400" style={{ fontFamily:'"Sarabun",sans-serif' }}>
+      <div className="text-center"><div className="w-9 h-9 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-3"/>กำลังรวมข้อมูลเก่า + ใหม่...</div>
+    </div>
+  )
+
+  return (
+    <div className="bg-gray-50 min-h-[calc(100vh-48px)]" style={{ fontFamily:'"Sarabun",sans-serif' }}>
+      <div className="bg-white border-b border-gray-100 sticky top-0 z-30 shadow-sm px-5 py-3 flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <p className="font-bold text-gray-800 text-lg leading-tight">📊 รวมเทียบทั้งปี (เก่า + ใหม่)</p>
+          <p className="text-xs text-gray-400">เก่า {oldRows.length.toLocaleString()} + ใหม่ {newRows.length.toLocaleString()} ม้วน · รวม {combinedAll.length.toLocaleString()} รายการ</p>
+        </div>
+        <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 bg-amber-50">
+          <span className="text-xs text-gray-500">จุดตัด เก่า→ใหม่:</span>
+          <input type="date" value={cutoff} onChange={e => setCutoff(e.target.value)} className="bg-white border border-gray-200 rounded px-2 py-1 text-sm text-gray-700 outline-none"/>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="bg-white border-b border-gray-100 px-5 flex gap-1">
+        {TABS.map(t => (
+          <button key={t.key} onClick={() => setTab(t.key)}
+            className={`px-4 py-2.5 text-sm font-medium border-b-[3px] transition-all ${tab===t.key ? 'border-blue-500 text-blue-600 font-semibold' : 'border-transparent text-gray-500 hover:text-blue-500'}`}>{t.label}</button>
+        ))}
+      </div>
+
+      <div className="px-5 py-4 max-w-screen-2xl mx-auto">
+        {/* Filters */}
+        <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-semibold text-gray-700">ตัวกรอง</p>
+            <button onClick={() => setFilter({ ...EMPTY })} className="flex items-center gap-1 text-red-500 text-xs font-medium hover:text-red-600"><RotateCcw size={11}/> ล้างค่า</button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div><p className="text-[10px] text-gray-400 mb-1">ตั้งแต่วันที่</p><input type="date" value={filter.from} onChange={e=>set('from',e.target.value)} className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-400"/></div>
+            <div><p className="text-[10px] text-gray-400 mb-1">ถึงวันที่</p><input type="date" value={filter.to} onChange={e=>set('to',e.target.value)} className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-400"/></div>
+            {[['เครื่องจักร','machine',machines],['ลูกค้า','customer',customers],['ขนาด','size',sizes]].map(([label,key,opts]) => (
+              <div key={key as string}><p className="text-[10px] text-gray-400 mb-1">{label as string}</p>
+                <select value={(filter as any)[key as string]} onChange={e=>set(key as keyof FilterState,e.target.value)} className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 outline-none focus:border-blue-400 bg-white">
+                  <option value="">ทั้งหมด</option>{(opts as string[]).map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {tab === 'dashboard' && <DashboardTab data={filtered} kpi={kpi} />}
+        {tab === 'daily'     && <DailyTab     data={filtered} />}
+        {tab === 'problems'  && <ProblemsTab  data={filtered} />}
+        {tab === 'compare'   && <CompareTab   allData={combinedAll} />}
+        {tab === 'table'     && <TableTab     data={filtered} />}
+      </div>
+    </div>
+  )
+}

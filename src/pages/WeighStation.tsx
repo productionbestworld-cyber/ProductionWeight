@@ -1916,6 +1916,7 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
   // กรอ: "รอบ" การกรอใน Lot+WO เดียวกัน — โชว์เลขม้วนเริ่ม 1 ใหม่ต่อรอบ (roll_no จริงยังต่อเนื่องกัน index ไม่ชน)
   const [reworkRound, setReworkRound]   = useState(1)
   const [reworkCause, setReworkCause]   = useState('')
+  const [reworkLen, setReworkLen]       = useState('')   // ความยาว(เมตร)งานกรอ — กรอกเองได้ (งานเก่าไม่ได้เก็บ length)
   const [reworkJobId, setReworkJobId]   = useState<string | null>(null)
   useEffect(() => {
     if (!isRework || !profile.lotNo) return
@@ -2410,13 +2411,13 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       // อ้างอิง WO/SO: ม้วนในระบบ → ตามต้นทาง · ม้วนนอกระบบ → ออกเป็น Lot/ออเดอร์ที่กำลังชั่ง
       const useWo = useSrc ? (useSrc.work_order ?? profile.woNo ?? '') : (profile.woNo ?? '')
       const useSo = useSrc ? (useSrc.sale_order ?? profile.soNo ?? '') : (profile.soNo ?? '')
-      // ความยาว/Pcs: งานปกติ → จาก profile · งานกรอ → ใช้ "เมตรจริง" ของม้วนต้นทางที่เลือก (ต่อม้วน)
-      // อ้างอิงม้วนต้นทางโดยตรง (ซึ่งผูกกับ WO/SO ของงานนั้น) — ไม่อ้างอิง lot ที่อาจถูกใช้ซ้ำข้ามสินค้า
-      const lengthVal = (isRework && isGood && useSrc)
-        ? (String(useSrc.length ?? '') || '')
+      // ความยาว/Pcs: งานปกติ → จาก profile · งานกรอ → ค่าที่กรอก (reworkLen) มาก่อน แล้ว fallback ม้วนต้นทาง
+      // อ้างอิงม้วนต้นทางโดยตรง (ผูกกับ WO/SO ของงาน) — ไม่อ้างอิง lot ที่อาจถูกใช้ซ้ำข้ามสินค้า
+      const lengthVal = (isRework && isGood)
+        ? (reworkLen.trim() || String(useSrc?.length ?? '') || '')
         : (profile.length || '')
-      const pcsVal = (isRework && isGood && useSrc)
-        ? (String(useSrc.pcs ?? '') || '')
+      const pcsVal = (isRework && isGood)
+        ? (String(useSrc?.pcs ?? '') || '')
         : (profile.pcs || '')
 
       const payload = {
@@ -2876,7 +2877,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                     <div key={s.id}
                       className={`rounded-lg px-2.5 py-1.5 border transition-colors ${full ? 'bg-slate-800/40 border-slate-700 opacity-60' : sel ? 'bg-blue-500/20 border-blue-500' : 'bg-slate-800 border-slate-700 hover:border-blue-500/50'}`}>
                       <div className="flex items-center justify-between gap-2">
-                        <button disabled={full} onClick={() => { const ns = sel ? null : s; setSelSrc(ns); if (ns) setReworkCause(ns.remark ?? '') }} className="flex-1 text-left disabled:cursor-not-allowed">
+                        <button disabled={full} onClick={() => { const ns = sel ? null : s; setSelSrc(ns); if (ns) { setReworkCause(ns.remark ?? ''); setReworkLen(String(ns.length ?? '')) } }} className="flex-1 text-left disabled:cursor-not-allowed">
                           <span className="text-xs font-bold text-white">
                             {full ? '✓ กรอครบ' : sel ? '☑' : '☐'} Lot {s.lot_no} #{s.roll_no}
                           </span>
@@ -2962,6 +2963,21 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                 placeholder="ติ๊กม้วนต้นทางด้านบน → สาเหตุจะเด้งมาเอง"
                 className="w-full bg-slate-800 border border-rose-500/40 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-rose-500 placeholder-slate-500" />
               <p className="text-[10px] text-rose-400/70 leading-tight">ดึงจากสาเหตุที่แผนกเป่าระบุตอนชั่งเป็นม้วนกรอ — แก้/เพิ่มได้ถ้าต่างจากเดิม</p>
+            </div>
+          )}
+
+          {isRework && isGood && (
+            <div className="space-y-1">
+              <p className="text-sky-300 text-xs font-bold">📏 ความยาว (เมตร) — กรอกเองได้</p>
+              <div className="flex items-center gap-2">
+                <input value={reworkLen} onChange={e => setReworkLen(e.target.value.replace(/[^\d.]/g, ''))}
+                  inputMode="decimal" placeholder="เมตร เช่น 1540"
+                  className="w-full bg-slate-800 border border-sky-500/40 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-sky-500 placeholder-slate-500" />
+                <span className="text-slate-400 text-sm shrink-0">M.</span>
+              </div>
+              <p className="text-[10px] text-sky-400/70 leading-tight">
+                ดึงจากม้วนต้นทางอัตโนมัติเมื่อติ๊กเลือก — ถ้าต้นทางไม่มีค่า (งานเก่า) กรอกเองได้ ค่านี้จะติดไปกับม้วนกรอ
+              </p>
             </div>
           )}
 

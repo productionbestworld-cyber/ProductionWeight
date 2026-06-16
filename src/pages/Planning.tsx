@@ -36,7 +36,7 @@ export default function Planning({ dept }: { dept?: string }) {
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
-  const [onlyActive, setOnlyActive] = useState(false)
+  const [statusFilter, setStatusFilter] = useState<'active' | 'done' | 'all'>('active')
   const [rollsByKey, setRollsByKey] = useState<Record<string, any[]>>({})
   const [detail, setDetail] = useState<Job | null>(null)
 
@@ -138,7 +138,8 @@ export default function Planning({ dept }: { dept?: string }) {
   useEffect(() => { load() }, [])
 
   const filtered = jobs.filter(j => {
-    if (onlyActive && !j.active) return false
+    if (statusFilter === 'active' && !j.active) return false
+    if (statusFilter === 'done' && j.active) return false
     if (!search.trim()) return true
     const s = search.toLowerCase()
     return [j.machine_no, j.lot_no, j.work_order, j.sale_order, j.product_name, j.customer]
@@ -146,6 +147,7 @@ export default function Planning({ dept }: { dept?: string }) {
   })
 
   const activeCount = jobs.filter(j => j.active).length
+  const doneCount = jobs.length - activeCount
   const totGood = filtered.reduce((s, j) => s + j.goodKg, 0)
   const totScrap = filtered.reduce((s, j) => s + j.scrapKg, 0)
   const totBad = filtered.reduce((s, j) => s + j.badKg, 0)
@@ -215,17 +217,25 @@ export default function Planning({ dept }: { dept?: string }) {
               placeholder="ค้นหา เครื่อง/WO/SO/Lot/สินค้า/ลูกค้า..."
               className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-sm text-white outline-none focus:border-brand-500"/>
           </div>
-          <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
-            <input type="checkbox" checked={onlyActive} onChange={e => setOnlyActive(e.target.checked)}/>
-            เฉพาะเครื่องที่กำลังเดิน
-          </label>
+          <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-1">
+            {([
+              { k: 'active', label: '🟢 กำลังเดิน', n: activeCount },
+              { k: 'done',   label: '✓ จบงาน',     n: doneCount },
+              { k: 'all',    label: 'ทั้งหมด',      n: jobs.length },
+            ] as const).map(t => (
+              <button key={t.k} onClick={() => setStatusFilter(t.k)}
+                className={`text-xs font-semibold px-3 py-1.5 rounded-md transition-colors ${statusFilter === t.k ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+                {t.label} <span className="opacity-70">({t.n})</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Table */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="overflow-auto max-h-[calc(100vh-310px)]">
             <table className="w-full text-sm">
-              <thead className="bg-slate-800/40 text-[10px] text-slate-500 uppercase tracking-wider">
+              <thead className="bg-slate-800 text-[10px] text-slate-400 uppercase tracking-wider sticky top-0 z-10 shadow-sm shadow-black/40">
                 <tr>
                   {['เครื่อง','สถานะ','สินค้า / WO / SO / Lot','เริ่มผลิต','จบงาน','เป้า','ผลิตได้','ดี+กรอ รวม','กรอ','เศษ','คงเหลือ ขาด (ไม่รวมกรอ)','%'].map(h => (
                     <th key={h} className="px-3 py-2 text-left font-semibold whitespace-nowrap">{h}</th>
@@ -271,7 +281,16 @@ export default function Planning({ dept }: { dept?: string }) {
                       <td className="px-3 py-2 text-right whitespace-nowrap">
                         {j.target ? <b className={remain > 0 ? 'text-orange-400' : 'text-green-400'}>{remain > 0 ? fmt(remain) : '✓ ครบ'}</b> : '—'}
                       </td>
-                      <td className="px-3 py-2 text-right text-slate-400 text-xs whitespace-nowrap">{j.target ? `${pct}%` : '—'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap min-w-[90px]">
+                        {j.target ? (
+                          <div className="flex items-center gap-1.5">
+                            <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden min-w-[40px]">
+                              <div className={`h-full rounded-full ${pct >= 100 ? 'bg-green-500' : pct >= 70 ? 'bg-brand-500' : pct >= 40 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${pct}%` }}/>
+                            </div>
+                            <span className="text-[11px] font-semibold text-slate-400 w-9 text-right">{pct}%</span>
+                          </div>
+                        ) : <span className="text-slate-600 text-xs">—</span>}
+                      </td>
                     </tr>
                   )
                 })}

@@ -1936,6 +1936,8 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
   const [srcRolls, setSrcRolls]   = useState<any[]>([])         // ม้วนเสียที่เบิกมา (reworking)
   const [selSrc, setSelSrc]       = useState<any | null>(null)  // ม้วนต้นทางที่กำลังกรอ
   const [srcProg, setSrcProg]     = useState<Record<string, number>>({})  // sourceId → กรอได้สะสม (kg)
+  // ความยาว/Pcs ต้นทาง (lot ต้นทาง → {length,pcs}) — งานกรอไม่มีค่าของตัวเอง ดึงจากต้นทาง
+  const [srcLenByLot, setSrcLenByLot] = useState<Record<string, { length: string; pcs: string }>>({})
   // ม้วนนอกระบบ (เอามาจากงานอื่น/ที่อื่น มาชั่งรวมในงานนี้)
   const [manualMode, setManualMode]       = useState(false)
   const [manualSrcText, setManualSrcText] = useState('')   // ที่มา (พิมพ์เอง)
@@ -1947,10 +1949,22 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
     if (!ic) return
     // ม้วนเสียที่เบิกมา = bad + reworking + สินค้าเดียวกัน
     const { data: src } = await supabase.from('production_rolls')
-      .select('id, lot_no, roll_no, weight, core_weight, work_order, sale_order, remark, inbound_type, product_name, customer, width_cm, width_unit, thick_mc, machine_no, review_action_reason, review_decision_by')
+      .select('id, lot_no, roll_no, weight, core_weight, length, pcs, work_order, sale_order, remark, inbound_type, product_name, customer, width_cm, width_unit, thick_mc, machine_no, review_action_reason, review_decision_by')
       .eq('roll_type', 'bad').eq('item_code', ic).eq('rework_status', 'reworking')
       .order('created_at', { ascending: true })
     setSrcRolls(src ?? [])
+    // ความยาว/Pcs ของ lot ต้นทาง — ดึงจาก machine_profiles (งานกรอเองไม่มีค่าความยาว)
+    // เติมให้ profile งานกรอ (ถ้ายังว่าง) เพื่อให้โชว์บนฉลาก/ป๊อปอัป และบันทึกลงทุกม้วน
+    const srcLots = Array.from(new Set((src ?? []).map((r: any) => r.lot_no).filter(Boolean)))
+    if (srcLots.length) {
+      const { data: mp } = await supabase.from('machine_profiles')
+        .select('lot_no, length, pcs').in('lot_no', srcLots as string[])
+      const map: Record<string, { length: string; pcs: string }> = {}
+      for (const p of mp ?? []) if (p.lot_no) map[p.lot_no] = { length: String(p.length ?? ''), pcs: String(p.pcs ?? '') }
+      setSrcLenByLot(map)
+      const first = (srcLots as string[]).map(l => map[l]).find(v => v && v.length)
+      if (first) setProfile(p => (p.length ? p : { ...p, length: first.length, pcs: p.pcs || first.pcs }))
+    }
     // กรอได้สะสมต่อม้วนต้นทาง = ม้วนดีของ lot นี้ที่อ้างอิง source roll
     const { data: good } = await supabase.from('production_rolls')
       .select('rework_source_roll_id, weight')
@@ -2410,6 +2424,13 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       // อ้างอิง WO/SO: ม้วนในระบบ → ตามต้นทาง · ม้วนนอกระบบ → ออกเป็น Lot/ออเดอร์ที่กำลังชั่ง
       const useWo = useSrc ? (useSrc.work_order ?? profile.woNo ?? '') : (profile.woNo ?? '')
       const useSo = useSrc ? (useSrc.sale_order ?? profile.soNo ?? '') : (profile.soNo ?? '')
+      // ความยาว/Pcs: งานปกติ → จาก profile · งานกรอ → ดึงจากม้วนต้นทาง (ม้วน → lot ต้นทาง → profile)
+      const lengthVal = (isRework && isGood && useSrc)
+        ? (String(useSrc.length ?? '') || srcLenByLot[useSrc.lot_no]?.length || profile.length || '')
+        : (profile.length || '')
+      const pcsVal = (isRework && isGood && useSrc)
+        ? (String(useSrc.pcs ?? '') || srcLenByLot[useSrc.lot_no]?.pcs || profile.pcs || '')
+        : (profile.pcs || '')
 
       const payload = {
         job_id:       null,
@@ -2418,6 +2439,8 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         weight:       parseFloat(saveWeight.toFixed(dec)),
         gross_weight: gross,
         core_weight:  isScrap ? 0 : core,
+        length:       lengthVal || null,
+        pcs:          pcsVal || null,
         remark:       rollRemark,
         inspector:    inspector || null,
         machine_no:   profile.machine_no,
@@ -3588,7 +3611,9 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                   { k:'Mat Code',    v: profile.matCode,    mono:true },
                   { k:'Lot No',      v: profile.lotNo,      mono:true },
                   { k:'ขนาด',        v: fmtSize(profile.widthCm, profile.thickMc, profile.widthUnit) || '—' },
-                  { k:'ความยาว',     v: profile.length ? `${profile.length} M.` : '—' },
+                  { k:'ความยาว',     v: ((selectedRoll.length || profile.length)
+                      ? `${selectedRoll.length || profile.length} M.${(selectedRoll.pcs || profile.pcs) ? ` · ${selectedRoll.pcs || profile.pcs} Pcs.` : ''}`
+                      : '—') },
                   { k:'เครื่อง',     v: profile.machine_no },
                   { k:'ผู้ตรวจสอบ', v: selectedRoll.inspector || profile.inspector || '—' },
                   { k:'วันที่ชั่ง',  v: `${new Date(selectedRoll.created_at).toLocaleDateString('th-TH')} ${new Date(selectedRoll.created_at).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})}` },
@@ -3603,11 +3628,11 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
 
             {/* Reprint */}
             <div className="flex gap-2 px-5 pt-4 border-t border-slate-800">
-              <button onClick={() => printLabel({...profile, inspector: selectedRoll.inspector || profile.inspector}, selectedRoll.roll_no, selectedRoll.gross_weight??0, selectedRoll.weight??0, 'short', selectedRoll.roll_type, selectedRoll.remark??'', selectedRoll.id)}
+              <button onClick={() => printLabel({...profile, length: selectedRoll.length || profile.length, pcs: selectedRoll.pcs || profile.pcs, inspector: selectedRoll.inspector || profile.inspector}, selectedRoll.roll_no, selectedRoll.gross_weight??0, selectedRoll.weight??0, 'short', selectedRoll.roll_type, selectedRoll.remark??'', selectedRoll.id)}
                 className="flex-1 flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white text-sm py-2.5 rounded-xl transition-colors">
                 <Printer size={14}/> ใบสั้น
               </button>
-              <button onClick={() => printLabel({...profile, inspector: selectedRoll.inspector || profile.inspector}, selectedRoll.roll_no, selectedRoll.gross_weight??0, selectedRoll.weight??0, 'long', selectedRoll.roll_type, selectedRoll.remark??'', selectedRoll.id)}
+              <button onClick={() => printLabel({...profile, length: selectedRoll.length || profile.length, pcs: selectedRoll.pcs || profile.pcs, inspector: selectedRoll.inspector || profile.inspector}, selectedRoll.roll_no, selectedRoll.gross_weight??0, selectedRoll.weight??0, 'long', selectedRoll.roll_type, selectedRoll.remark??'', selectedRoll.id)}
                 className="flex-1 flex items-center justify-center gap-1.5 bg-brand-600 hover:bg-brand-700 text-white text-sm py-2.5 rounded-xl transition-colors font-semibold">
                 <Printer size={14}/> ใบยาว
               </button>

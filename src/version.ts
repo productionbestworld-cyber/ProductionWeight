@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.3.61'
+export const APP_VERSION = '1.3.62'
 export const APP_BUILD_DATE = '2026-06-15'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.3.62', date: '2026-06-16',
+    items: [
+      'งานกรอ: โชว์ขนาด (size) ตัวใหญ่บนแถบหัวการ์ด ข้าง "จากผลิต" — มองหาขนาดง่ายขึ้น (ย้ายจาก badge เล็กในเนื้อการ์ด)',
+    ],
+  },
   {
     version: '1.3.61', date: '2026-06-16',
     items: [

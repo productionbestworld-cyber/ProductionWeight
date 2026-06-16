@@ -362,9 +362,16 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
                 {jobStatus === 'active' && <button onClick={() => setPickFor(j)} className="absolute inset-0 z-0"/>}
                 {/* top */}
                 <div className={`flex items-center justify-between px-3 py-2 border-b relative z-0 pointer-events-none ${jobStatus==='closed' ? 'bg-slate-800/40 border-slate-700' : 'bg-brand-600/15 border-brand-500/20'}`}>
-                  <span className={`font-bold text-xs ${jobStatus==='closed' ? 'text-slate-400' : 'text-brand-300'}`}>
-                    {jobStatus==='closed' ? '🏁 ปิดงานแล้ว' : isFromProduction ? '🏭 จากผลิต' : '⚙ สร้างเอง'}
-                  </span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`font-bold text-xs shrink-0 ${jobStatus==='closed' ? 'text-slate-400' : 'text-brand-300'}`}>
+                      {jobStatus==='closed' ? '🏁 ปิดงานแล้ว' : isFromProduction ? '🏭 จากผลิต' : '⚙ สร้างเอง'}
+                    </span>
+                    {j.width_cm && (
+                      <span className="text-sm font-black bg-brand-500/25 text-brand-100 border border-brand-400/40 px-2.5 py-0.5 rounded-lg whitespace-nowrap leading-none">
+                        {fmtSize(j.width_cm, j.thick_mc, j.width_unit)}
+                      </span>
+                    )}
+                  </div>
                   <div className="flex gap-1 pointer-events-auto z-10">
                     {jobStatus === 'closed' ? (
                       <button onClick={e => { e.stopPropagation(); reopenJob(j) }} disabled={reopening===j.id}
@@ -390,7 +397,6 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
                     <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded font-mono border border-slate-700">
                       {j.lot_no?.trim() ? `Lot ${j.lot_no.slice(-8)}` : '🆕 รอเลือกเครื่อง'}
                     </span>
-                    {j.width_cm && <span className="text-[10px] bg-brand-500/15 text-brand-300 border border-brand-500/25 px-2 py-0.5 rounded font-bold">{fmtSize(j.width_cm, j.thick_mc, j.width_unit)}</span>}
                     {(j.source_roll_count ?? 1) > 1 && <span className="text-[10px] bg-rose-500/15 text-rose-300 border border-rose-500/25 px-2 py-0.5 rounded font-bold">รวม {j.source_roll_count} ม้วนเสีย</span>}
                   </div>
 

@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.3.59'
+export const APP_VERSION = '1.3.60'
 export const APP_BUILD_DATE = '2026-06-15'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.3.60', date: '2026-06-16',
+    items: [
+      'ประวัติการโอน: แสดงครบทุกใบ (เดิมจำกัด 50 ใบ ทำให้ประวัติเก่าหาย) — ดึงแบบแบ่งหน้า',
+    ],
+  },
   {
     version: '1.3.59', date: '2026-06-16',
     items: [

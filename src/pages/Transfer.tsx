@@ -348,8 +348,9 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
     setLoading(false)
   }
   async function loadDocs() {
-    const { data } = await supabase.from('transfer_documents')
-      .select('*').order('transferred_at',{ ascending: false }).limit(50)
+    // ดึงทุกใบแบบแบ่งหน้า (เดิม .limit(50) ทำให้ประวัติเก่าหาย เมื่อโอนเกิน 50 ใบ)
+    const data = await fetchAll(() => supabase.from('transfer_documents')
+      .select('*').order('transferred_at', { ascending: false }))
     setDocs(data ?? [])
   }
   useEffect(() => { loadRolls(); loadPendingCounts() }, [typeFilter])

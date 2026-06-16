@@ -2563,7 +2563,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         const newList = [...weighedRolls, data]
         setRollNo(nextRollNo(newList.filter((r:any) => r?.roll_type === 'good')))
         // print fire-and-forget (ไม่ await — ไม่บล็อก save flow)
-        printLabel({...profile, inspector}, rollNo, gross, saveWeight, profile.labelSize ?? 'long', 'good', '', data.id)
+        printLabel({...profile, length: lengthVal || profile.length, pcs: pcsVal || profile.pcs, inspector}, rollNo, gross, saveWeight, profile.labelSize ?? 'long', 'good', '', data.id)
         // แผนกกรอ: บันทึกสาเหตุที่ม้วนนี้เสีย/มาจากอะไร กลับเข้างานกรอ (ตาม Lot)
         if (isRework && reworkCause.trim()) {
           const upd = supabase.from('rework_jobs').update({ source_defect_reason: reworkCause.trim() })

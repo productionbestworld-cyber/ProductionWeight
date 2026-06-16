@@ -1936,8 +1936,6 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
   const [srcRolls, setSrcRolls]   = useState<any[]>([])         // ม้วนเสียที่เบิกมา (reworking)
   const [selSrc, setSelSrc]       = useState<any | null>(null)  // ม้วนต้นทางที่กำลังกรอ
   const [srcProg, setSrcProg]     = useState<Record<string, number>>({})  // sourceId → กรอได้สะสม (kg)
-  // ความยาว/Pcs ต้นทาง (lot ต้นทาง → {length,pcs}) — งานกรอไม่มีค่าของตัวเอง ดึงจากต้นทาง
-  const [srcLenByLot, setSrcLenByLot] = useState<Record<string, { length: string; pcs: string }>>({})
   // ม้วนนอกระบบ (เอามาจากงานอื่น/ที่อื่น มาชั่งรวมในงานนี้)
   const [manualMode, setManualMode]       = useState(false)
   const [manualSrcText, setManualSrcText] = useState('')   // ที่มา (พิมพ์เอง)
@@ -1953,18 +1951,6 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
       .eq('roll_type', 'bad').eq('item_code', ic).eq('rework_status', 'reworking')
       .order('created_at', { ascending: true })
     setSrcRolls(src ?? [])
-    // ความยาว/Pcs ของ lot ต้นทาง — ดึงจาก machine_profiles (งานกรอเองไม่มีค่าความยาว)
-    // เติมให้ profile งานกรอ (ถ้ายังว่าง) เพื่อให้โชว์บนฉลาก/ป๊อปอัป และบันทึกลงทุกม้วน
-    const srcLots = Array.from(new Set((src ?? []).map((r: any) => r.lot_no).filter(Boolean)))
-    if (srcLots.length) {
-      const { data: mp } = await supabase.from('machine_profiles')
-        .select('lot_no, length, pcs').in('lot_no', srcLots as string[])
-      const map: Record<string, { length: string; pcs: string }> = {}
-      for (const p of mp ?? []) if (p.lot_no) map[p.lot_no] = { length: String(p.length ?? ''), pcs: String(p.pcs ?? '') }
-      setSrcLenByLot(map)
-      const first = (srcLots as string[]).map(l => map[l]).find(v => v && v.length)
-      if (first) setProfile(p => (p.length ? p : { ...p, length: first.length, pcs: p.pcs || first.pcs }))
-    }
     // กรอได้สะสมต่อม้วนต้นทาง = ม้วนดีของ lot นี้ที่อ้างอิง source roll
     const { data: good } = await supabase.from('production_rolls')
       .select('rework_source_roll_id, weight')
@@ -2424,12 +2410,13 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       // อ้างอิง WO/SO: ม้วนในระบบ → ตามต้นทาง · ม้วนนอกระบบ → ออกเป็น Lot/ออเดอร์ที่กำลังชั่ง
       const useWo = useSrc ? (useSrc.work_order ?? profile.woNo ?? '') : (profile.woNo ?? '')
       const useSo = useSrc ? (useSrc.sale_order ?? profile.soNo ?? '') : (profile.soNo ?? '')
-      // ความยาว/Pcs: งานปกติ → จาก profile · งานกรอ → ดึงจากม้วนต้นทาง (ม้วน → lot ต้นทาง → profile)
+      // ความยาว/Pcs: งานปกติ → จาก profile · งานกรอ → ใช้ "เมตรจริง" ของม้วนต้นทางที่เลือก (ต่อม้วน)
+      // อ้างอิงม้วนต้นทางโดยตรง (ซึ่งผูกกับ WO/SO ของงานนั้น) — ไม่อ้างอิง lot ที่อาจถูกใช้ซ้ำข้ามสินค้า
       const lengthVal = (isRework && isGood && useSrc)
-        ? (String(useSrc.length ?? '') || srcLenByLot[useSrc.lot_no]?.length || profile.length || '')
+        ? (String(useSrc.length ?? '') || '')
         : (profile.length || '')
       const pcsVal = (isRework && isGood && useSrc)
-        ? (String(useSrc.pcs ?? '') || srcLenByLot[useSrc.lot_no]?.pcs || profile.pcs || '')
+        ? (String(useSrc.pcs ?? '') || '')
         : (profile.pcs || '')
 
       const payload = {

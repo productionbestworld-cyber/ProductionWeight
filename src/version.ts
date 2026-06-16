@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.3.57'
+export const APP_VERSION = '1.3.58'
 export const APP_BUILD_DATE = '2026-06-15'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.3.58', date: '2026-06-16',
+    items: [
+      'งานกรอ: อ้างอิงความยาวจากม้วนต้นทางโดยตรง (ผูก WO/SO ของงาน) ไม่อ้างอิง lot ที่อาจถูกใช้ซ้ำข้ามสินค้า · แก้ backfill ความยาวให้ match WO+SO ต่องาน (กันค่าปนข้ามสินค้าใน lot เดียวกัน)',
+    ],
+  },
   {
     version: '1.3.57', date: '2026-06-16',
     items: [

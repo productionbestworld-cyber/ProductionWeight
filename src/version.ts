@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.3.62'
+export const APP_VERSION = '1.3.63'
 export const APP_BUILD_DATE = '2026-06-15'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.3.63', date: '2026-06-16',
+    items: [
+      'หน้าโอน: การ์ดงานที่กรอมาจากนอกระบบ (กรอแทน — ไม่ผูกม้วนต้นทางในระบบ) มี badge "📤 กรอนอกระบบ" กำกับ',
+    ],
+  },
   {
     version: '1.3.62', date: '2026-06-16',
     items: [

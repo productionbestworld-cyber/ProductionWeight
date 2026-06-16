@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.3.60'
+export const APP_VERSION = '1.3.61'
 export const APP_BUILD_DATE = '2026-06-15'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.3.61', date: '2026-06-16',
+    items: [
+      'ใบปะหน้าเศษ (Waste Label): ตัดช่อง "รหัสการจัดการ" และ "ผู้รับดำเนินการ" ออก แล้วจัดเลย์เอาต์ใหม่ (เลื่อนส่วนล่างขึ้นปิดช่องว่าง) — แก้ทั้ง default และ layout จริงใน DB',
+    ],
+  },
   {
     version: '1.3.60', date: '2026-06-16',
     items: [

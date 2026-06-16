@@ -476,13 +476,9 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
     // ── ข้อมูลจากการชั่ง ──
     waste_name_lbl: 'ชื่อสิ่งปฏิกูล',
     wastename:      rollType === 'scrap_clear' ? 'เศษพลาสติก (ใส)' : rollType === 'scrap_color' ? 'เศษพลาสติก (สี)' : rollType === 'scrap_lump' ? 'เศษพลาสติก (ก้อน)' : 'เศษพลาสติก',
-    // ── 4 ค่าคงที่ (อ่านจาก layout → แก้ใน designer) ──
+    // ── ค่าคงที่ (อ่านจาก layout → แก้ใน designer) ──
     waste_code_lbl:     'รหัสสิ่งปฏิกูล',
     waste_code:         getWasteConst('waste_code'),
-    waste_mgmt_lbl:     'รหัสการจัดการ',
-    waste_mgmt:         getWasteConst('waste_mgmt'),
-    waste_operator_lbl: 'ผู้รับดำเนินการ',
-    waste_operator:     getWasteConst('waste_operator'),
     // ── ข้อมูลจากงาน ──
     date:     `วันที่จัดเก็บ:  ${wasteDate}`,
     reason:   `เหตุผล: ${reason || '—'}`,

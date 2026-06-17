@@ -136,6 +136,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   const [ctrlCloseJob,   setCtrlCloseJob]   = useState<any | null>(null)
   const [expandedJob,    setExpandedJob]    = useState<string | null>(null)
   const [showBadOther,   setShowBadOther]   = useState(false)
+  const [showTrace,      setShowTrace]      = useState(false)
   const [showImport,     setShowImport]     = useState(false)
 
   // filters
@@ -633,6 +634,20 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
           const reworkFgRolls = rolls.filter(r => r.roll_type === 'good' && reworkFgLots.has((r.lot_no || '').trim()))
           const reworkFgKg    = sumW(reworkFgRolls)
           const reworkLossKg  = Math.max(0, sumW(badDone) - reworkFgKg)
+          // ── ตามรอย: ม้วนกรอที่ชั่งออกมา (FG จากกรอ) → WO + ม้วนต้นทาง ──
+          const srcById = new Map<string, any>()
+          for (const s of [...reworkRolls, ...rolls]) if (s?.id) srcById.set(s.id, s)
+          const reworkTrace = reworkFgRolls.map((r:any) => {
+            const src = r.rework_source_roll_id ? srcById.get(r.rework_source_roll_id) : null
+            return {
+              out: r,
+              srcWo: src?.work_order || (r.rework_source_lot ? `${r.rework_source_lot} (นอกระบบ)` : '—'),
+              srcRoll: src?.roll_no ?? null,
+              srcReason: src?.remark || r.remark || '',
+            }
+          }).sort((a:any,b:any) =>
+            String(a.out.lot_no||'').localeCompare(String(b.out.lot_no||'')) ||
+            ((a.out.roll_no??0)-(b.out.roll_no??0)))
           return (
           <div className="space-y-4">
             {/* ── หัวข้อ: หน้านี้ = สิ่งที่ต้องลงมือทำ (ไม่ซ้ำกับภาพรวม) ── */}
@@ -715,6 +730,44 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                 </div>
               </div>
             )}
+
+            {/* ── 🔗 ตามรอยม้วนกรอ → WO + ม้วนต้นทาง ── */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <button onClick={()=>setShowTrace(v=>!v)} className="w-full px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between text-left">
+                <p className="text-sm font-bold text-gray-700">🔗 ตามรอยม้วนกรอ — ม้วนกรอที่ชั่งออก มาจาก WO ไหน ม้วนที่เท่าไหร่ ({reworkTrace.length} ม้วน)</p>
+                <span className="text-gray-400 text-xs">{showTrace ? '▲ ซ่อน' : '▼ ดู'}</span>
+              </button>
+              {showTrace && (
+                <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 text-gray-500 sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2 text-left">ม้วนกรอ (Lot · ม้วนที่)</th>
+                        <th className="px-3 py-2 text-right">นน.สุทธิ</th>
+                        <th className="px-3 py-2 text-left">◀ มาจาก WO</th>
+                        <th className="px-3 py-2 text-left">ม้วนต้นทาง</th>
+                        <th className="px-3 py-2 text-left">เหตุที่เสีย</th>
+                        <th className="px-3 py-2 text-left">โอนคลัง</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reworkTrace.length === 0 ? (
+                        <tr><td colSpan={6} className="px-3 py-8 text-center text-gray-400">ยังไม่มีม้วนกรอที่ชั่งออกมาในช่วงนี้</td></tr>
+                      ) : reworkTrace.map((t:any) => (
+                        <tr key={t.out.id} className="border-t border-gray-100 text-gray-700">
+                          <td className="px-3 py-1.5 font-mono">{t.out.lot_no || '—'} · <b>#{t.out.roll_no ?? '—'}</b></td>
+                          <td className="px-3 py-1.5 text-right font-bold">{num(t.out.weight ?? 0,2)}</td>
+                          <td className="px-3 py-1.5"><span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">WO {t.srcWo}</span></td>
+                          <td className="px-3 py-1.5">{t.srcRoll != null ? `เสีย #${t.srcRoll}` : '—'}</td>
+                          <td className="px-3 py-1.5 text-rose-600">{t.srcReason || '—'}</td>
+                          <td className="px-3 py-1.5">{t.out.transferred ? '✅ โอนแล้ว' : '⏳ ยังไม่โอน'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
 
             {/* KPI ภาพรวมสั่งการ */}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">

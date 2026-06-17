@@ -2115,6 +2115,10 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
         if ((profile as any).freshStart && !isRework) {
           merged = merged.filter((r: any) => (r.work_order ?? '') === (profile.woNo ?? ''))
         }
+        // ชุดระบบใหม่ (กรอ): พอโอนแล้วม้วนหลุดจากจอชั่ง → เริ่มชุดใหม่ #1 สะอาด (ไม่โชว์ประวัติที่โอนไปแล้ว)
+        if (isRework && (profile as any).newSystem) {
+          merged = merged.filter((r: any) => !r.transferred)
+        }
         if (!merged.length) {
           setRollNo(1); setBadRollNo(1); setWeighedRolls([]); setWeighedKg(0); return
         }

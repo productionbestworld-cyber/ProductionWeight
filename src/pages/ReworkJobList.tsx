@@ -133,12 +133,13 @@ export async function ensureUniqueReworkLot(base: string, itemCode: string): Pro
     const cand = `${base}${suffix}`
     const { data } = await supabase.from('production_rolls')
       .select('item_code').eq('lot_no', cand).limit(100)
-    // ม้วนที่มีอยู่ใน Lot นี้ ถ้าเป็น "สินค้าอื่น" → ชน ต้องเลี่ยง
-    const clash = (data ?? []).some(r => {
-      const ri = (r.item_code ?? '').trim()
-      return ri && ic && ri !== ic
-    })
-    if (!clash) return cand   // ว่าง หรือ เป็นสินค้าเดียวกัน → ใช้ได้
+    const rolls = data ?? []
+    // ⚠ สินค้านี้มีม้วนชั่งอยู่ใน Lot นี้แล้ว → ห้ามย้าย (ไม่งั้นประวัติที่ชั่งไว้หาย) ใช้ Lot นี้เลย
+    const hasMine  = rolls.some(r => (r.item_code ?? '').trim() === ic && ic)
+    if (hasMine) return cand
+    // มีแต่ "สินค้าอื่น" และสินค้าเรายังไม่มีที่นี่ → ชน ลอง suffix ถัดไป
+    const hasOther = rolls.some(r => { const ri = (r.item_code ?? '').trim(); return ri && ic && ri !== ic })
+    if (!hasOther) return cand   // ว่าง → ใช้ได้
   }
   return `${base}-${Date.now().toString().slice(-3)}`  // fallback สุดทาง
 }

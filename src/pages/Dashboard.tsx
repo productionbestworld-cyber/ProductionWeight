@@ -653,7 +653,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
           const usedSrcIds = new Set(reworkFgRolls.map((r:any) => r.rework_source_roll_id).filter(Boolean))
           const woPendMap = new Map<string, { total:number; done:number; pending:number; kg:number }>()
           for (const b of rolls.filter(r => r.roll_type === 'bad')) {
-            const wo = (b.work_order ?? '').trim() || '(ไม่ระบุ WO)'
+            const wo = ((b as any).work_order ?? '').trim() || '(ไม่ระบุ WO)'
             const g = woPendMap.get(wo) ?? { total:0, done:0, pending:0, kg:0 }
             g.total++
             const done = usedSrcIds.has(b.id) || (b as any).rework_status === 'reworked'

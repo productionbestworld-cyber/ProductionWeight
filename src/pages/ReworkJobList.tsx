@@ -123,6 +123,26 @@ export async function nextReworkSeq(machine: string): Promise<number> {
   return max + 1
 }
 
+// กัน Lot กรอชนข้ามสินค้า: Lot กรอสร้างจาก Lot ผลิตต้นทาง ซึ่งถูกใช้ซ้ำหลายสินค้า
+// ทำให้คนละสินค้าได้ Lot กรอเดียวกัน → ม้วนปนกัน. ฟังก์ชันนี้คืน Lot ที่ "ว่าง" หรือ
+// "เป็นของสินค้าเดียวกัน" — ถ้าชนกับสินค้าอื่น เติมท้าย -A/-B/... ให้ไม่ชน
+export async function ensureUniqueReworkLot(base: string, itemCode: string): Promise<string> {
+  const ic = (itemCode ?? '').trim()
+  if (!base) return base
+  for (const suffix of ['', '-A', '-B', '-C', '-D', '-E', '-F', '-G', '-H']) {
+    const cand = `${base}${suffix}`
+    const { data } = await supabase.from('production_rolls')
+      .select('item_code').eq('lot_no', cand).limit(100)
+    // ม้วนที่มีอยู่ใน Lot นี้ ถ้าเป็น "สินค้าอื่น" → ชน ต้องเลี่ยง
+    const clash = (data ?? []).some(r => {
+      const ri = (r.item_code ?? '').trim()
+      return ri && ic && ri !== ic
+    })
+    if (!clash) return cand   // ว่าง หรือ เป็นสินค้าเดียวกัน → ใช้ได้
+  }
+  return `${base}-${Date.now().toString().slice(-3)}`  // fallback สุดทาง
+}
+
 export default function ReworkJobList({ onPickJob }: { onPickJob: (profile: MachineProfile, job: ReworkJob) => void }) {
   const [view, setView] = useState<'jobs' | 'inbox'>('jobs')
   const [inboxCount, setInboxCount] = useState(0)
@@ -495,6 +515,8 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
               gen = swapLotMachine(srcLot, sr?.machine_no ?? '', machine_no)
             }
             if (!gen && !lot) gen = genReworkLot(machine_no, job.cust_code ?? '')  // fallback ถ้าไม่มี Lot ต้นทาง
+            // กัน Lot ชนข้ามสินค้า: ถ้า Lot ที่ได้ถูกใช้โดยสินค้าอื่นแล้ว → เติมท้าย -A/-B
+            if (gen) gen = await ensureUniqueReworkLot(gen, job.item_code ?? '')
             if (gen && gen !== lot) {
               lot = gen
               await supabase.from('rework_jobs').update({ lot_no: gen }).eq('id', job.id)

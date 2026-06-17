@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.3.65'
+export const APP_VERSION = '1.3.66'
 export const APP_BUILD_DATE = '2026-06-15'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.3.66', date: '2026-06-17',
+    items: [
+      'ชั่งกรอ: โชว์ WO ตัวใหญ่เด่นบนหัวการ์ดม้วนต้นทาง (ยึด WO เป็นหลัก) มองเห็นง่ายตอนเลือกม้วนกรอ',
+    ],
+  },
   {
     version: '1.3.65', date: '2026-06-17',
     items: [

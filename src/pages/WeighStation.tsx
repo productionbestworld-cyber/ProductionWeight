@@ -2874,8 +2874,10 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                       className={`rounded-lg px-2.5 py-1.5 border transition-colors ${full ? 'bg-slate-800/40 border-slate-700 opacity-60' : sel ? 'bg-blue-500/20 border-blue-500' : 'bg-slate-800 border-slate-700 hover:border-blue-500/50'}`}>
                       <div className="flex items-center justify-between gap-2">
                         <button disabled={full} onClick={() => { const ns = sel ? null : s; setSelSrc(ns); if (ns) { setReworkCause(ns.remark ?? ''); setReworkLen(String(ns.length ?? '')) } }} className="flex-1 text-left disabled:cursor-not-allowed">
-                          <span className="text-xs font-bold text-white">
-                            {full ? '✓ กรอครบ' : sel ? '☑' : '☐'} Lot {s.lot_no} #{s.roll_no}
+                          <span className="text-xs font-bold text-white flex items-center gap-1.5 flex-wrap">
+                            <span className="shrink-0">{full ? '✓ กรอครบ' : sel ? '☑' : '☐'}</span>
+                            {s.work_order && <span className="text-sm font-black bg-amber-500/25 text-amber-100 border border-amber-400/40 px-2 py-0.5 rounded whitespace-nowrap">WO {s.work_order}</span>}
+                            <span className="text-slate-300 font-mono">Lot {s.lot_no} #{s.roll_no}</span>
                           </span>
                         </button>
                         <span className="text-[10px] text-slate-300 shrink-0">หยิบมา <b className="text-orange-300">{fmt(s.weight,dec)}</b></span>
@@ -2888,7 +2890,6 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                           const nc = ({ qc_reject:'🚫 NC ตรวจไม่ผ่าน', warehouse_damage:'📦 NC เสียจากคลัง' } as any)[s.inbound_type]
                           return nc ? <span className="bg-rose-500/20 text-rose-300 px-1.5 py-0.5 rounded font-bold">{nc}</span> : null
                         })()}
-                        {s.work_order && <span className="bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded font-bold">WO {s.work_order}</span>}
                         {s.sale_order && <span className="bg-blue-500/15 text-blue-300 px-1.5 py-0.5 rounded font-bold">SO {s.sale_order}</span>}
                         {s.width_cm && s.thick_mc && <span className="bg-brand-500/20 text-brand-200 px-1.5 py-0.5 rounded font-bold">{s.width_cm}{s.width_unit ?? 'cm'}×{s.thick_mc}mc</span>}
                         {s.machine_no && <span className="text-slate-500">เครื่อง {s.machine_no}</span>}

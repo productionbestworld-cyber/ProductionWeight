@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.3.73'
+export const APP_VERSION = '1.3.74'
 export const APP_BUILD_DATE = '2026-06-15'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.3.74', date: '2026-06-17',
+    items: [
+      'ถอดวิธีเติม -A ท้าย Lot ออก (ตามที่ต้องการ Lot ไม่มี -A) — ลบ -A ออกจากม้วน/งานที่มีแล้วด้วย · เรื่อง Lot ชนข้ามสินค้าจะแก้แนวอื่น (ยึด WO/SO)',
+    ],
+  },
   {
     version: '1.3.73', date: '2026-06-17',
     items: [

@@ -176,6 +176,7 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [jobStatus, setJobStatus] = useState<'active'|'closed'>('active')   // log งานกรอที่ปิดแล้ว
+  const [sysFilter, setSysFilter] = useState<'new'|'old'>('new')            // ✨ ชุดระบบใหม่ / งานเก่า
   const [reopening, setReopening] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [pickFor, setPickFor]       = useState<ReworkJob | null>(null)
@@ -251,6 +252,12 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
   }
 
   const filtered = jobs.filter(j => {
+    // แยกชุดระบบใหม่ / งานเก่า (เฉพาะแท็บกำลังทำ)
+    if (jobStatus === 'active') {
+      const isNew = !!(j as any).new_system
+      if (sysFilter === 'new' && !isNew) return false
+      if (sysFilter === 'old' &&  isNew) return false
+    }
     if (!search.trim()) return true
     const s = search.toLowerCase()
     return [j.lot_no, j.product_name, j.cust_name, j.item_code, j.sale_order]
@@ -345,6 +352,16 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
             placeholder="ค้นหา lot/สินค้า/ลูกค้า/SO..."
             className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-3 py-2 text-sm text-white outline-none focus:border-brand-500"/>
         </div>
+        {jobStatus === 'active' && (
+          <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-1">
+            {([['new','✨ ชุดระบบใหม่'],['old','งานเก่า']] as const).map(([k,label]) => (
+              <button key={k} onClick={()=>setSysFilter(k as any)}
+                className={`text-xs font-bold px-3 py-1.5 rounded transition-colors ${sysFilter===k ? (k==='new'?'bg-emerald-600 text-white':'bg-slate-600 text-white') : 'text-slate-400 hover:bg-slate-800'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-1">
           {([['active','🔁 กำลังทำ'],['closed','🏁 จบงานแล้ว (Log)']] as const).map(([k,label]) => (
             <button key={k} onClick={()=>setJobStatus(k as any)}

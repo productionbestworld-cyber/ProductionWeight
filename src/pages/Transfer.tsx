@@ -295,6 +295,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   const [machine,     setMachine]     = useState<string>('')
   const [lotNo,       setLotNo]       = useState<string>('')
   const [woFilter,    setWoFilter]    = useState<string>('')   // แยกงานตามใบสั่งผลิต (กัน 2 สินค้าปน Lot เดียว)
+  const NS_WO = '__NS__'   // ตัวระบุงานชุดระบบใหม่ (รวมทุก WO ใน Lot เดียว — เลขม้วนต่อเนื่อง)
   const [showDone,    setShowDone]    = useState(false)
   const [search,      setSearch]      = useState('')
   const [docSearch,   setDocSearch]   = useState('')   // ค้นหาในประวัติการโอน
@@ -374,22 +375,30 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
     .map(r => r.lot_no).filter(Boolean))).sort()
 
   // เฉพาะ job ที่ยังมีม้วนรอโอน (pending > 0) เท่านั้น
-  const jobs = Array.from(new Set(
-    rolls.map(r => `${r.machine_no}__${r.lot_no}__${r.work_order ?? ''}`).filter(j => !j.startsWith('null'))
-  )).map(key => {
-    const [mNo, lot, wo] = key.split('__')
-    const jobRolls = rolls.filter(r => r.machine_no === mNo && r.lot_no === lot && (r.work_order ?? '') === wo)
+  // ⚠ ชุดระบบใหม่ (new_system): เลขม้วนต่อเนื่องข้าม WO → รวมเป็นการ์ดเดียว (key=เครื่อง+Lot, ไม่แยก WO)
+  //    งานปกติ: แยกตาม WO เหมือนเดิม (กัน 2 สินค้าปน Lot เดียว)
+  const groupMap = new Map<string, any[]>()
+  for (const r of rolls) {
+    if (!r.machine_no) continue
+    const key = r.new_system
+      ? `${r.machine_no}__${r.lot_no}__${NS_WO}`
+      : `${r.machine_no}__${r.lot_no}__${r.work_order ?? ''}`
+    ;(groupMap.get(key) ?? groupMap.set(key, []).get(key))!.push(r)
+  }
+  const jobs = [...groupMap.values()].map(jobRolls => {
+    const sample   = jobRolls[0]
+    const mNo = sample.machine_no, lot = sample.lot_no
+    const isNS = !!sample.new_system
+    const woList = Array.from(new Set(jobRolls.map(r => r.work_order).filter(Boolean)))
+    const wo = isNS ? NS_WO : (sample.work_order ?? '')
     const pendingRolls = jobRolls.filter(r => !r.transferred)
     const pending  = pendingRolls.length
     const pendingKg = pendingRolls.reduce((s, r) => s + (r.weight ?? 0), 0)
-    const sample   = jobRolls[0]
     const dates = jobRolls.map(r => r.created_at).filter(Boolean).sort()
     const size = sample?.width_cm && sample?.thick_mc ? `${sample.width_cm}${sample.width_unit ?? 'cm'}×${sample.thick_mc}mc` : ''
-    // กรอนอกระบบ = ม้วนกรอที่เอามาจากที่อื่น (มีที่มา rework_source_lot แต่ไม่ผูกม้วนต้นทางในระบบ)
     const fromOutside = jobRolls.some(r => r.rework_source_lot && !r.rework_source_roll_id)
-    const newSystem = jobRolls.some(r => r.new_system)
-    return { machine_no: mNo, lot_no: lot, work_order: wo, so: sample?.sale_order ?? '', size,
-             start: dates[0] ?? '', end: dates[dates.length-1] ?? '', fromOutside, newSystem,
+    return { machine_no: mNo, lot_no: lot, work_order: wo, woList, so: sample?.sale_order ?? '', size,
+             start: dates[0] ?? '', end: dates[dates.length-1] ?? '', fromOutside, newSystem: isNS,
              product: sample?.product_name, customer: sample?.customer, total: jobRolls.length, pending, pendingKg }
   }).filter(j => j.pending > 0)  // ← ซ่อน job ที่โอนครบแล้ว
     // คนโอนยึด ขนาด → ลูกค้า → เครื่อง เป็นหลัก
@@ -402,7 +411,8 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
     if (!showDone && r.transferred) return false
     if (machine && machine !== '__ALL__' && r.machine_no !== machine) return false
     if (lotNo && r.lot_no !== lotNo) return false
-    if (woFilter && (r.work_order ?? '') !== woFilter) return false
+    if (woFilter === NS_WO) { if (!r.new_system) return false }
+    else if (woFilter && (r.work_order ?? '') !== woFilter) return false
     if (search) {
       const q = search.toLowerCase()
       const w = (r.width_cm ?? '').toString().trim(), t = (r.thick_mc ?? '').toString().trim()
@@ -876,7 +886,9 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                         <p className="text-white text-xs font-bold leading-tight truncate">👥 {j.customer || '—'}</p>
                         <p className="text-slate-400 text-[10px] mt-0.5 truncate">{j.product || '—'}</p>
                         <div className="flex items-center gap-1 flex-wrap text-[9px] mt-0.5">
-                          {j.work_order && <span className="bg-amber-500/15 text-amber-300 px-1 py-0.5 rounded font-bold">WO {j.work_order}</span>}
+                          {(j as any).newSystem
+                            ? ((j as any).woList ?? []).map((w:string) => <span key={w} className="bg-amber-500/15 text-amber-300 px-1 py-0.5 rounded font-bold">WO {w}</span>)
+                            : (j.work_order && <span className="bg-amber-500/15 text-amber-300 px-1 py-0.5 rounded font-bold">WO {j.work_order}</span>)}
                           {(j as any).so && <span className="bg-blue-500/15 text-blue-300 px-1 py-0.5 rounded font-bold">SO {(j as any).so}</span>}
                           <span className="text-slate-600 font-mono">Lot {String(j.lot_no).slice(-8)}</span>
                         </div>

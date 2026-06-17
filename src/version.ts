@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.3.72'
+export const APP_VERSION = '1.3.73'
 export const APP_BUILD_DATE = '2026-06-15'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.3.73', date: '2026-06-17',
+    items: [
+      'สแกน QR: เพิ่มแถว "รหัสสินค้า (Product Code)" ในหน้ารายละเอียดม้วน (เดิมโชว์แค่ Item Code/Mat Code)',
+    ],
+  },
   {
     version: '1.3.72', date: '2026-06-17',
     items: [

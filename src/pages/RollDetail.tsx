@@ -116,7 +116,8 @@ export default function RollDetail() {
         <div className="px-5 py-4 space-y-2.5 border-b border-slate-800">
           <Row label="ลูกค้า"      val={roll.customer     || '—'} />
           <Row label="สินค้า"      val={roll.product_name || '—'} />
-          {roll.item_code && <Row label="รหัสสินค้า" val={roll.item_code} mono />}
+          {roll.product_code && <Row label="รหัสสินค้า" val={roll.product_code} mono />}
+          {roll.item_code && <Row label="Item Code"  val={roll.item_code} mono />}
           {roll.mat_code  && <Row label="Mat Code"   val={roll.mat_code}  mono />}
           <Row label="Lot No"      val={roll.lot_no       || '—'} mono />
           <Row label="เครื่องจักร" val={roll.machine_no   || '—'} />

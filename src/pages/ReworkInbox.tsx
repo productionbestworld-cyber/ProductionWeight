@@ -48,7 +48,7 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
   const [showReceive, setShowReceive] = useState<any | null>(null)
   const [showReturn, setShowReturn] = useState<any | null>(null)  // ส่งคืนผลิต — ให้ ผจก พิจารณา
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
-  const [groupBy, setGroupBy] = useState<'item' | 'wo' | 'so'>('wo')   // จัดกลุ่มตาม (ค่าเริ่มต้น = WO กันรวมข้าม WO)
+  const [groupBy, setGroupBy] = useState<'item' | 'wo' | 'so'>('item')   // จัดกลุ่มตาม (ค่าเริ่มต้น = สินค้า/ไซส์ — รวมข้าม WO ให้เบิกกรอต่อเนื่อง)
   const [logRows, setLogRows] = useState<any[]>([])   // ประวัติการรับเข้ากรอ (รับไปแล้ว)
   const [showLog, setShowLog] = useState(true)
   // ── เบิกม้วน (multi-select) ──
@@ -63,26 +63,29 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
     setSelected(prev => { const n = new Set(prev); ids.forEach(id => on ? n.add(id) : n.delete(id)); return n })
   }
 
-  // เบิกม้วนที่เลือก → แยกงานกรอตาม "สินค้า + WO" (กันรวมข้าม WO เป็นงานเดียว)
+  // เบิกม้วนที่เลือก → รวมเป็นงานกรอเดียวตาม "สินค้า + ขนาด" (รวมข้าม WO · เลขม้วนเรียงต่อเนื่อง)
+  // แต่ละม้วนกรอยังเก็บ WO ต้นทางไว้ (ผูกจากม้วนต้นทาง) — traceability ไม่หาย
   async function withdrawSelected() {
     if (!withdrawBy.trim()) { alert('กรุณากรอกชื่อผู้เบิก'); return }
     const picked = rolls.filter(r => selected.has(r.id))
     if (picked.length === 0) { alert('กรุณาเลือกม้วนที่จะเบิกก่อน (ติ๊ก ☑)'); return }
     setWithdrawing(true)
     const now = new Date().toISOString()
-    const jobCache = new Map<string, any>()   // (item_code + WO) → job (กันสร้างซ้ำในรอบเดียว)
+    const jobCache = new Map<string, any>()   // (item_code + ขนาด) → job (กันสร้างซ้ำในรอบเดียว)
     let totalKg = 0
     try {
       for (const r of picked) {
         const ic = (r.item_code ?? '').trim() || '(ไม่ระบุ)'
         const wo = (r.work_order ?? '').trim()
-        const jobKey = `${ic}__${wo}`   // แยกงานตามสินค้า + WO
+        const sizeKey = `${(r.width_cm ?? '').toString().trim()}x${(r.thick_mc ?? '').toString().trim()}`
+        const jobKey = `${ic}__${sizeKey}`   // รวมงานตามสินค้า + ขนาด (ข้าม WO)
         const rollKg = parseFloat((r.weight ?? 0).toFixed(2))
-        // หา job ของสินค้า+WO นี้ (cache → DB)
+        // หา job ของสินค้า+ขนาดนี้ (cache → DB)
         let job = jobCache.get(jobKey)
         if (!job) {
           const { data: existing } = await supabase.from('rework_jobs').select('*')
-            .eq('status', 'active').eq('source', 'from_production').eq('item_code', ic).eq('work_order', wo).limit(1)
+            .eq('status', 'active').eq('source', 'from_production').eq('item_code', ic)
+            .eq('width_cm', r.width_cm ?? '').eq('thick_mc', r.thick_mc ?? '').limit(1)
           job = existing?.[0] ?? null
         }
         if (job) {

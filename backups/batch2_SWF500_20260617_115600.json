@@ -1,0 +1,34 @@
+﻿{
+    "created":  "20260617_115600",
+    "rolls":  {
+                  "value":  [
+                                {
+                                    "id":  "a93f49f8-dca5-40ad-ae07-f1aad997e27a",
+                                    "roll_no":  18,
+                                    "weight":  51.05
+                                },
+                                {
+                                    "id":  "3c00ddc4-c9b3-4634-8a87-f19e7d4170d0",
+                                    "roll_no":  19,
+                                    "weight":  47.9
+                                },
+                                {
+                                    "id":  "26086dd1-052a-4224-93dc-b2da99fc75e9",
+                                    "roll_no":  20,
+                                    "weight":  51.15
+                                },
+                                {
+                                    "id":  "5fc84e50-2043-4038-b0ff-b76f96118794",
+                                    "roll_no":  21,
+                                    "weight":  50.85
+                                },
+                                {
+                                    "id":  "5932a62a-086b-4e0b-8c3d-39eba10bc5c5",
+                                    "roll_no":  22,
+                                    "weight":  48.4
+                                }
+                            ],
+                  "Count":  5
+              },
+    "note":  "set SWF500 rework_batch=2 (round restart display 1-5)"
+}

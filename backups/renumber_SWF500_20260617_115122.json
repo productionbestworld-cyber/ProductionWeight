@@ -1,0 +1,40 @@
+﻿{
+    "created":  "20260617_115122",
+    "rolls":  {
+                  "value":  [
+                                {
+                                    "id":  "a93f49f8-dca5-40ad-ae07-f1aad997e27a",
+                                    "roll_no":  1,
+                                    "weight":  51.05,
+                                    "created_at":  "2026-06-17T04:25:45.54+00:00"
+                                },
+                                {
+                                    "id":  "3c00ddc4-c9b3-4634-8a87-f19e7d4170d0",
+                                    "roll_no":  2,
+                                    "weight":  47.9,
+                                    "created_at":  "2026-06-17T04:26:47.236+00:00"
+                                },
+                                {
+                                    "id":  "26086dd1-052a-4224-93dc-b2da99fc75e9",
+                                    "roll_no":  3,
+                                    "weight":  51.15,
+                                    "created_at":  "2026-06-17T04:31:19.877+00:00"
+                                },
+                                {
+                                    "id":  "5fc84e50-2043-4038-b0ff-b76f96118794",
+                                    "roll_no":  4,
+                                    "weight":  50.85,
+                                    "created_at":  "2026-06-17T04:32:14.267+00:00"
+                                },
+                                {
+                                    "id":  "5932a62a-086b-4e0b-8c3d-39eba10bc5c5",
+                                    "roll_no":  5,
+                                    "weight":  48.4,
+                                    "created_at":  "2026-06-17T04:35:12.827+00:00"
+                                }
+                            ],
+                  "Count":  5
+              },
+    "note":  "renumber SWF500 in 69S02000806 to continue",
+    "oldMax":  17
+}

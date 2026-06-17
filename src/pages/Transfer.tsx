@@ -387,8 +387,9 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
     const size = sample?.width_cm && sample?.thick_mc ? `${sample.width_cm}${sample.width_unit ?? 'cm'}×${sample.thick_mc}mc` : ''
     // กรอนอกระบบ = ม้วนกรอที่เอามาจากที่อื่น (มีที่มา rework_source_lot แต่ไม่ผูกม้วนต้นทางในระบบ)
     const fromOutside = jobRolls.some(r => r.rework_source_lot && !r.rework_source_roll_id)
+    const newSystem = jobRolls.some(r => r.new_system)
     return { machine_no: mNo, lot_no: lot, work_order: wo, so: sample?.sale_order ?? '', size,
-             start: dates[0] ?? '', end: dates[dates.length-1] ?? '', fromOutside,
+             start: dates[0] ?? '', end: dates[dates.length-1] ?? '', fromOutside, newSystem,
              product: sample?.product_name, customer: sample?.customer, total: jobRolls.length, pending, pendingKg }
   }).filter(j => j.pending > 0)  // ← ซ่อน job ที่โอนครบแล้ว
     // คนโอนยึด ขนาด → ลูกค้า → เครื่อง เป็นหลัก
@@ -865,6 +866,9 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                             {isRunning ? '● เดิน' : '■ จบ'}
                           </span>
                         </div>
+                        {(j as any).newSystem && (
+                          <span className="inline-block text-[10px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-400/50 px-1.5 py-0.5 rounded mb-1 mr-1">✨ ชุดระบบใหม่</span>
+                        )}
                         {(j as any).fromOutside && (
                           <span className="inline-block text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40 px-1.5 py-0.5 rounded mb-1">📤 กรอนอกระบบ</span>
                         )}

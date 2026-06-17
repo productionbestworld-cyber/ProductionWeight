@@ -754,8 +754,8 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                       {reworkTrace.length === 0 ? (
                         <tr><td colSpan={6} className="px-3 py-8 text-center text-gray-400">ยังไม่มีม้วนกรอที่ชั่งออกมาในช่วงนี้</td></tr>
                       ) : reworkTrace.map((t:any) => (
-                        <tr key={t.out.id} className="border-t border-gray-100 text-gray-700">
-                          <td className="px-3 py-1.5 font-mono">{t.out.lot_no || '—'} · <b>#{t.out.roll_no ?? '—'}</b></td>
+                        <tr key={t.out.id} className={`border-t border-gray-100 ${t.out.new_system ? 'bg-emerald-50 text-emerald-800 font-semibold' : 'text-gray-700'}`}>
+                          <td className="px-3 py-1.5 font-mono">{t.out.new_system && <span className="text-emerald-600 font-black">✨ </span>}{t.out.lot_no || '—'} · <b>#{t.out.roll_no ?? '—'}</b></td>
                           <td className="px-3 py-1.5 text-right font-bold">{num(t.out.weight ?? 0,2)}</td>
                           <td className="px-3 py-1.5"><span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">WO {t.srcWo}</span></td>
                           <td className="px-3 py-1.5">{t.srcRoll != null ? `เสีย #${t.srcRoll}` : '—'}</td>

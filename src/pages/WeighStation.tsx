@@ -1944,7 +1944,7 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
     if (!ic) return
     // ม้วนเสียที่เบิกมา = bad + reworking + สินค้าเดียวกัน
     const { data: src } = await supabase.from('production_rolls')
-      .select('id, lot_no, roll_no, weight, core_weight, length, pcs, work_order, sale_order, remark, inbound_type, product_name, customer, width_cm, width_unit, thick_mc, machine_no, review_action_reason, review_decision_by')
+      .select('id, lot_no, roll_no, weight, core_weight, length, pcs, work_order, sale_order, remark, inbound_type, product_name, customer, width_cm, width_unit, thick_mc, machine_no, review_action_reason, review_decision_by, new_system')
       .eq('roll_type', 'bad').eq('item_code', ic).eq('rework_status', 'reworking')
       .order('created_at', { ascending: true })
     setSrcRolls(src ?? [])
@@ -2388,7 +2388,19 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
     setSaving(true)
     try {
       const actualType = isScrap ? scrapSub : weighType
-      const useRollNo  = isBad ? badRollNo : isGood ? rollNo : 0
+      // ── ชุดระบบใหม่ (กรอ): เลขม้วนนับต่อ "สินค้า (item_code)" รีเซ็ตตามการโอน ──
+      //   เลข = max(เลขม้วนของสินค้านี้ ที่เป็นชุดใหม่ + ยังไม่โอน) + 1
+      //   พอโอนหมด → max=0 → เริ่ม #1 ใหม่อัตโนมัติ
+      const isNewSysRoll = isRework && isGood && ((selSrc as any)?.new_system || (profile as any).newSystem)
+      let nsRollNo = 0
+      if (isNewSysRoll) {
+        const ic = (profile.itemCode ?? '').trim()
+        const { data: nsRows } = await supabase.from('production_rolls')
+          .select('roll_no').eq('item_code', ic).eq('roll_type', 'good')
+          .eq('new_system', true).eq('transferred', false)
+        nsRollNo = Math.max(0, ...((nsRows ?? []).map((x:any) => x.roll_no ?? 0))) + 1
+      }
+      const useRollNo  = isNewSysRoll ? nsRollNo : (isBad ? badRollNo : isGood ? rollNo : 0)
       // หมายเหตุม้วนกรอ: หยิบม้วนต้นทางมากี่โล ชั่งได้กี่โล เศษกี่โล
       const useSrc = (isRework && isGood && selSrc) ? selSrc : null
       const useManual = (isRework && isGood && manualMode && manualSrcText.trim())
@@ -2427,6 +2439,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         core_weight:  isScrap ? 0 : core,
         length:       lengthVal || null,
         pcs:          pcsVal || null,
+        new_system:   isNewSysRoll || false,
         remark:       rollRemark,
         inspector:    inspector || null,
         machine_no:   profile.machine_no,
@@ -3267,7 +3280,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                   return (
                     <div key={r.id} onClick={()=>setSelectedRoll(r)}
                       className={`hover:bg-slate-800/40 cursor-pointer transition-colors ${
-                        isRep ? 'bg-amber-500/10 border-l-4 border-amber-500' : isNew ? 'bg-green-500/5' : ''
+                        (r as any).new_system ? 'bg-emerald-500/10 border-l-4 border-emerald-400' : isRep ? 'bg-amber-500/10 border-l-4 border-amber-500' : isNew ? 'bg-green-500/5' : ''
                       } ${isDone?'opacity-60':''}`}>
                       <div className="grid grid-cols-4">
                         <div className={`px-3 py-2.5 text-xs leading-tight ${isDone?'text-slate-600 line-through':'text-slate-500'}`}>
@@ -3275,9 +3288,10 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                           <div>{time}</div>
                         </div>
                         <div className="px-3 py-2.5">
-                          <span className={`font-bold font-mono ${isRep ? 'text-amber-300' : isDone?'text-slate-500 line-through':'text-white'}`}>{isRework ? (dispNoMap.get(r.id) ?? r.roll_no) : r.roll_no}</span>
-                          {hasRounds && <span className="ml-1 text-[9px] text-amber-400 font-bold">(รอบ {r.rework_batch ?? 1})</span>}
-                          {isRep && <span className="ml-1 text-[9px] text-amber-400 font-bold">🔁 ทดแทน</span>}
+                          <span className={`font-bold font-mono ${(r as any).new_system ? 'text-emerald-300' : isRep ? 'text-amber-300' : isDone?'text-slate-500 line-through':'text-white'}`}>{(r as any).new_system ? r.roll_no : (isRework ? (dispNoMap.get(r.id) ?? r.roll_no) : r.roll_no)}</span>
+                          {(r as any).new_system && <span className="ml-1 text-[9px] text-emerald-400 font-black">✨ ใหม่</span>}
+                          {hasRounds && !(r as any).new_system && <span className="ml-1 text-[9px] text-amber-400 font-bold">(รอบ {r.rework_batch ?? 1})</span>}
+                          {isRep && !(r as any).new_system && <span className="ml-1 text-[9px] text-amber-400 font-bold">🔁 ทดแทน</span>}
                           {!isRep && isNew && <span className="ml-1 text-[9px] text-green-400">NEW</span>}
                           {isDone && <span className="ml-1 text-[9px] text-green-400">📦</span>}
                         </div>

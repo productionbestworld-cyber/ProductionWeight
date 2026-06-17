@@ -1,0 +1,713 @@
+﻿{
+    "created":  "20260617_134327",
+    "rolls":  [
+                  {
+                      "id":  "c4df8029-35fa-42b8-a236-0aedecd9df02",
+                      "roll_no":  1,
+                      "work_order":  "69/06/105",
+                      "product_name":  "SWF PET1.5L 75MIC 570MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "ebf1a4d4-4829-4abd-b0c2-a89576c65400",
+                      "roll_no":  19,
+                      "work_order":  "69/06/084",
+                      "product_name":  "SWF 500MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "70ae4057-3703-4429-83d3-a89e0775ad80",
+                      "roll_no":  4,
+                      "work_order":  "69/06/043",
+                      "product_name":  "SWF NT 550CC 55MIC 840MM",
+                      "lot_no":  "69BL09000106"
+                  },
+                  {
+                      "id":  "bd5d0f8c-3297-429f-8697-b316184823d3",
+                      "roll_no":  3,
+                      "work_order":  "69/06/043",
+                      "product_name":  "SWF NT 550CC 55MIC 840MM",
+                      "lot_no":  "69BL09000106"
+                  },
+                  {
+                      "id":  "9aa46030-a24c-4077-809f-f0bd31b1cd64",
+                      "roll_no":  1,
+                      "work_order":  "69/06/084",
+                      "product_name":  "SWF 500MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "8bcd4090-2da2-4acf-983b-9865cfdbd23b",
+                      "roll_no":  8,
+                      "work_order":  "69/06/084",
+                      "product_name":  "SWF 500MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "d1e0be99-24b1-4cd4-8851-67ba3930344e",
+                      "roll_no":  9,
+                      "work_order":  "69/06/084",
+                      "product_name":  "SWF 500MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "cd926b4d-bc89-47fa-bbe2-dacd63c75074",
+                      "roll_no":  16,
+                      "work_order":  "69/06/105",
+                      "product_name":  "SWF PET1.5L 75MIC 570MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "79e301a5-20f7-42d9-9419-f9de3333742d",
+                      "roll_no":  14,
+                      "work_order":  "69/06/105",
+                      "product_name":  "SWF PET1.5L 75MIC 570MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "eaa9df78-fb39-405a-b0de-97a7d62e2a9e",
+                      "roll_no":  15,
+                      "work_order":  "69/06/105",
+                      "product_name":  "SWF PET1.5L 75MIC 570MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "01bc30c6-46ab-4029-a71d-f1026d6245f1",
+                      "roll_no":  17,
+                      "work_order":  "69/06/105",
+                      "product_name":  "SWF PET1.5L 75MIC 570MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "b862ddc2-c50d-48fd-a7da-659e2fa2b9c6",
+                      "roll_no":  6,
+                      "work_order":  "69/06/043",
+                      "product_name":  "SWF NT 550CC 55MIC 840MM",
+                      "lot_no":  "69BL09000106"
+                  },
+                  {
+                      "id":  "bef867f4-2078-43d3-9c7e-b6c4d75a9c6c",
+                      "roll_no":  12,
+                      "work_order":  "69/06/062",
+                      "product_name":  "SWF PET 1 L x12 75MC 500MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "baf3ab91-cbeb-459d-addc-b64d14c34ab9",
+                      "roll_no":  16,
+                      "work_order":  "69/06/062",
+                      "product_name":  "SWF PET 1 L x12 75MC 500MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "1ff8031f-3512-45ce-9e31-141d2061b140",
+                      "roll_no":  23,
+                      "work_order":  "69/06/056",
+                      "product_name":  "SWF PET 1.95L 80MC 500MM (RED SHRINK)",
+                      "lot_no":  "69BL03000106"
+                  },
+                  {
+                      "id":  "7fd39c27-8535-48e5-8fa7-e2cce1b4e1d9",
+                      "roll_no":  24,
+                      "work_order":  "69/06/056",
+                      "product_name":  "SWF PET 1.95L 80MC 500MM (RED SHRINK)",
+                      "lot_no":  "69BL03000106"
+                  },
+                  {
+                      "id":  "602502ed-e848-445d-8fba-62e0e645914f",
+                      "roll_no":  1,
+                      "work_order":  "69/06/056",
+                      "product_name":  "Shrink Film 50 cm x 80 mc. RED",
+                      "lot_no":  "69BL03000106"
+                  },
+                  {
+                      "id":  "6fbd30c8-29ac-411e-81a0-c8c73f6fd38c",
+                      "roll_no":  20,
+                      "work_order":  "69/06/065",
+                      "product_name":  "SWF 540MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "eeebaa58-01bd-456c-a9fd-3e4b1040039f",
+                      "roll_no":  15,
+                      "work_order":  "69/06/062",
+                      "product_name":  "SWF PET 1 L x12 75MC 500MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "dbc000f7-541d-415b-afd6-8e13d3fb45f0",
+                      "roll_no":  14,
+                      "work_order":  "69/06/062",
+                      "product_name":  "SWF PET 1 L x12 75MC 500MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "c1852c9b-6d92-41e3-88cb-56e1fb7fe3f9",
+                      "roll_no":  19,
+                      "work_order":  "69/06/065",
+                      "product_name":  "SWF 540MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "cb278c02-0c0f-453a-8450-4079b7bd9246",
+                      "roll_no":  16,
+                      "work_order":  "69/06/052",
+                      "product_name":  "SWF 560MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "b8ac8e5a-f4ce-4962-a330-e00c83f79d9d",
+                      "roll_no":  8,
+                      "work_order":  "69/06/065",
+                      "product_name":  "SWF 540MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "5caae2fc-385d-4550-9470-b6410f132828",
+                      "roll_no":  13,
+                      "work_order":  "69/06/062",
+                      "product_name":  "SWF PET 1 L x12 75MC 500MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "05f89803-62db-4319-8dc8-d19bac0cd665",
+                      "roll_no":  17,
+                      "work_order":  "69/06/062",
+                      "product_name":  "SWF PET 1 L x12 75MC 500MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "f14af3ae-ac43-4774-816a-4fcd8128db01",
+                      "roll_no":  17,
+                      "work_order":  "69/06/065",
+                      "product_name":  "SWF 540MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "75edb80b-02f0-48a6-aa7a-4289959ea8ad",
+                      "roll_no":  22,
+                      "work_order":  "69/06/062",
+                      "product_name":  "SWF PET 1 L x12 75MC 500MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "de5f5d97-08cc-4cc1-8bfa-d191569d5dbe",
+                      "roll_no":  8,
+                      "work_order":  "69/06/062",
+                      "product_name":  "SWF PET 1 L x12 75MC 500MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "7516d9f0-d7b7-4feb-a916-01bee325a62b",
+                      "roll_no":  11,
+                      "work_order":  "69/06/062",
+                      "product_name":  "SWF PET 1 L x12 75MC 500MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "4a74ed00-102a-4e02-b8a9-a8553325b72a",
+                      "roll_no":  7,
+                      "work_order":  "69/06/065",
+                      "product_name":  "SWF 540MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "786c93d5-68f4-4701-abb6-04cf499ccb58",
+                      "roll_no":  12,
+                      "work_order":  "69/06/100",
+                      "product_name":  "SWF 540MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "afbf4383-4a3c-47b8-b8ab-6490f4e4ab66",
+                      "roll_no":  18,
+                      "work_order":  "69/06/065",
+                      "product_name":  "SWF 540MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "0a08c5f8-ccc1-4859-a1cd-97a12a5661c0",
+                      "roll_no":  22,
+                      "work_order":  "69/06/056",
+                      "product_name":  "SWF PET 1.95L 80MC 500MM (RED SHRINK)",
+                      "lot_no":  "69BL03000106"
+                  },
+                  {
+                      "id":  "38b6aa01-6a5d-4e7f-a80b-6352ade8e6fb",
+                      "roll_no":  1,
+                      "work_order":  "69/06/100",
+                      "product_name":  "SWF 540MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "cff88570-bc91-45b5-893c-278829469a7a",
+                      "roll_no":  11,
+                      "work_order":  "69/06/084",
+                      "product_name":  "SWF 500MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "098f19ee-d8c8-40b4-8495-0e2c97544e89",
+                      "roll_no":  15,
+                      "work_order":  "69/06/052",
+                      "product_name":  "SWF 560MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "299d0e26-e4b9-48b7-807b-1d2d49b8f955",
+                      "roll_no":  12,
+                      "work_order":  "69/06/084",
+                      "product_name":  "SWF 500MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "f0b7a47b-f44f-41ae-89eb-9c2279b5876c",
+                      "roll_no":  1,
+                      "work_order":  "69/06/092",
+                      "product_name":  "SWF PET2.5L 80MIC 520MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "74bca94c-6c51-4898-88b4-95cbeece6726",
+                      "roll_no":  13,
+                      "work_order":  "69/06/052",
+                      "product_name":  "SWF 560MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "91daa077-9589-4db3-9a32-251e0c81a86d",
+                      "roll_no":  18,
+                      "work_order":  "69/06/084",
+                      "product_name":  "SWF 500MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "24807749-483f-408e-b56e-fde97fde3de6",
+                      "roll_no":  13,
+                      "work_order":  "69/06/084",
+                      "product_name":  "SWF 500MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "0ac3802b-95e8-429d-b9c2-70661d3c3c13",
+                      "roll_no":  7,
+                      "work_order":  "69/06/084",
+                      "product_name":  "SWF 500MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "7566001f-1284-438c-a5c0-bd4d2c71527b",
+                      "roll_no":  6,
+                      "work_order":  "69/06/084",
+                      "product_name":  "SWF 500MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "ba61540b-57d6-43e2-9dd1-26c7bf9d2663",
+                      "roll_no":  14,
+                      "work_order":  "69/06/076",
+                      "product_name":  "SWF 380MM 55MIC สูตร1",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "062d8a77-519e-4c9c-8264-39cdacaeb095",
+                      "roll_no":  13,
+                      "work_order":  "69/06/076",
+                      "product_name":  "SWF 380MM 55MIC สูตร1",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "0b13c76c-b36a-4be2-9524-dbb453c2d2b0",
+                      "roll_no":  17,
+                      "work_order":  "69/06/076",
+                      "product_name":  "SWF 380MM 55MIC สูตร1",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "2d102234-5413-46e8-8e82-32304a7c4659",
+                      "roll_no":  2,
+                      "work_order":  "69/06/085",
+                      "product_name":  "ม้วนพิมพ์ 84.5cm. x 40mc.",
+                      "lot_no":  "69BL11000306"
+                  },
+                  {
+                      "id":  "6f9e8b73-fa9c-40fc-a81c-8ffa1f69f609",
+                      "roll_no":  1,
+                      "work_order":  "69/06/085",
+                      "product_name":  "ม้วนพิมพ์ 84.5cm. x 40mc.",
+                      "lot_no":  "69BL11000306"
+                  },
+                  {
+                      "id":  "97d163f7-069f-4055-9119-b44c3fb0d4ba",
+                      "roll_no":  18,
+                      "work_order":  "69/06/058",
+                      "product_name":  "SWF 540MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "845d0a3c-75ff-43b1-8a95-bc21892738cb",
+                      "roll_no":  18,
+                      "work_order":  "69/06/105",
+                      "product_name":  "SWF PET1.5L 75MIC 570MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "dc8a7a15-cfc3-450e-a418-92f447f0934b",
+                      "roll_no":  21,
+                      "work_order":  "69/06/105",
+                      "product_name":  "SWF PET1.5L 75MIC 570MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "a78632be-5235-427c-be3f-226a86144dcd",
+                      "roll_no":  10,
+                      "work_order":  "69/06/084",
+                      "product_name":  "SWF 500MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "b3f1c15a-034a-4a3c-874b-a8615771fd19",
+                      "roll_no":  12,
+                      "work_order":  "69/06/052",
+                      "product_name":  "SWF 560MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "6d1040e3-7d7c-41d1-8ed7-04d7e14cb9b8",
+                      "roll_no":  1,
+                      "work_order":  "69/06/108",
+                      "product_name":  "SWF PET 2 L 80MIC  500MM",
+                      "lot_no":  "69BL03000106"
+                  },
+                  {
+                      "id":  "d4dfcf42-d0f8-42aa-b574-17824f6dd8c2",
+                      "roll_no":  22,
+                      "work_order":  "69/06/076",
+                      "product_name":  "SWF 380MM 55MIC สูตร1",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "131af067-eee1-49d7-bbaf-c443371269ae",
+                      "roll_no":  3,
+                      "work_order":  "69/06/108",
+                      "product_name":  "SWF PET 2 L 80MIC  500MM",
+                      "lot_no":  "69BL03000106"
+                  },
+                  {
+                      "id":  "d3dc65a3-b6bb-4173-ad11-80417da805aa",
+                      "roll_no":  25,
+                      "work_order":  "69/06/076",
+                      "product_name":  "SWF 380MM 55MIC สูตร1",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "f8054523-e4f3-46f1-9bc1-000781e8a020",
+                      "roll_no":  4,
+                      "work_order":  "69/06/085",
+                      "product_name":  "ม้วนพิมพ์ 84.5cm. x 40mc.",
+                      "lot_no":  "69BL11000306"
+                  },
+                  {
+                      "id":  "b0525fbd-f578-4075-ac31-00c48c458109",
+                      "roll_no":  20,
+                      "work_order":  "69/06/076",
+                      "product_name":  "SWF 380MM 55MIC สูตร1",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "afca26a3-98eb-494a-bbd6-62530e3bdc4b",
+                      "roll_no":  5,
+                      "work_order":  "69/06/108",
+                      "product_name":  "SWF PET 2 L 80MIC  500MM",
+                      "lot_no":  "69BL03000106"
+                  },
+                  {
+                      "id":  "e6d64b2a-c5d2-45fc-8773-c5a863e53a52",
+                      "roll_no":  4,
+                      "work_order":  "69/06/108",
+                      "product_name":  "SWF PET 2 L 80MIC  500MM",
+                      "lot_no":  "69BL03000106"
+                  },
+                  {
+                      "id":  "f0cd8c8a-25d2-49ee-8056-25ee8b9b38cc",
+                      "roll_no":  8,
+                      "work_order":  "69/06/097",
+                      "product_name":  "PET 295 ML-24P (RED SHRINK)",
+                      "lot_no":  "69BL09000106"
+                  },
+                  {
+                      "id":  "595c557b-074d-406b-8812-8ac5a1821bf0",
+                      "roll_no":  10,
+                      "work_order":  "69/06/097",
+                      "product_name":  "PET 295 ML-24P (RED SHRINK)",
+                      "lot_no":  "69BL09000106"
+                  },
+                  {
+                      "id":  "a7918365-cdde-4109-a1bf-e47b31b76a67",
+                      "roll_no":  24,
+                      "work_order":  "69/06/084",
+                      "product_name":  "SWF 500MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "92d68c26-5b14-4b63-ad91-92748c6edd9b",
+                      "roll_no":  22,
+                      "work_order":  "69/06/084",
+                      "product_name":  "SWF 500MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "d6b802e3-a288-46b9-833a-a03b3f24764d",
+                      "roll_no":  23,
+                      "work_order":  "69/06/084",
+                      "product_name":  "SWF 500MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "6e1f71ed-febc-4316-a311-fcd9fa1c210c",
+                      "roll_no":  18,
+                      "work_order":  "69/06/076",
+                      "product_name":  "SWF 380MM 55MIC สูตร1",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "f1a18ac1-fa5d-430b-b92a-65e18b416aad",
+                      "roll_no":  4,
+                      "work_order":  "69/06/097",
+                      "product_name":  "PET 295 ML-24P (RED SHRINK)",
+                      "lot_no":  "69BL09000106"
+                  },
+                  {
+                      "id":  "613e694f-e557-4356-9a64-03fbdbfe9cd8",
+                      "roll_no":  7,
+                      "work_order":  "69/06/092",
+                      "product_name":  "SWF PET2.5L 80MIC 520MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "d0272da9-3ec8-4e34-abf0-76381ed697bf",
+                      "roll_no":  2,
+                      "work_order":  "69/06/092",
+                      "product_name":  "SWF PET2.5L 80MIC 520MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "ac04ed23-fb49-42dd-a195-9a7c0f240b53",
+                      "roll_no":  20,
+                      "work_order":  "69/06/105",
+                      "product_name":  "SWF PET1.5L 75MIC 570MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "00ed3d6b-a480-4f96-a485-987dca3a4b33",
+                      "roll_no":  19,
+                      "work_order":  "69/06/105",
+                      "product_name":  "SWF PET1.5L 75MIC 570MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "f7d6d347-eacb-4a04-b964-5ef835e3d452",
+                      "roll_no":  4,
+                      "work_order":  "69/06/105",
+                      "product_name":  "SWF PET1.5L 75MIC 570MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "4f98e030-ddaf-41a3-8ff9-d8ddf849a5f6",
+                      "roll_no":  5,
+                      "work_order":  "69/06/105",
+                      "product_name":  "SWF PET1.5L 75MIC 570MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "4c244829-088d-487a-8a0f-a5bbdf40836a",
+                      "roll_no":  3,
+                      "work_order":  "69/06/105",
+                      "product_name":  "SWF PET1.5L 75MIC 570MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "b50791c9-3005-440d-a08a-a3ac53238c2a",
+                      "roll_no":  2,
+                      "work_order":  "69/06/105",
+                      "product_name":  "SWF PET1.5L 75MIC 570MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "bd9b2a47-175a-473a-889e-e38c5a0ce826",
+                      "roll_no":  3,
+                      "work_order":  "69/06/092",
+                      "product_name":  "SWF PET2.5L 80MIC 520MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "aafb546b-fdb4-4992-a810-fadbb977148a",
+                      "roll_no":  9,
+                      "work_order":  "69/06/100",
+                      "product_name":  "SWF 540MM 65MIC",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "fff79c20-1b36-4315-a303-815e22f9d157",
+                      "roll_no":  5,
+                      "work_order":  "69/06/092",
+                      "product_name":  "SWF PET2.5L 80MIC 520MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "77459786-6ef7-4fbc-8fe3-02b900787756",
+                      "roll_no":  4,
+                      "work_order":  "69/06/092",
+                      "product_name":  "SWF PET2.5L 80MIC 520MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "4efcf06c-0c2c-43f5-acde-2ee5cb82c961",
+                      "roll_no":  8,
+                      "work_order":  "69/06/092",
+                      "product_name":  "SWF PET2.5L 80MIC 520MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "5a9b934b-a431-4aea-b7b6-856d8df6cea6",
+                      "roll_no":  6,
+                      "work_order":  "69/06/092",
+                      "product_name":  "SWF PET2.5L 80MIC 520MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "507d1bd0-b68e-43ba-aa48-c21c15b94d6b",
+                      "roll_no":  2,
+                      "work_order":  "69/06/108",
+                      "product_name":  "SWF PET 2 L 80MIC  500MM",
+                      "lot_no":  "69BL03000106"
+                  },
+                  {
+                      "id":  "7a4f8ed3-b837-4677-9ea7-9d92b2617f26",
+                      "roll_no":  26,
+                      "work_order":  "69/06/056",
+                      "product_name":  "SWF PET 1.95L 80MC 500MM (RED SHRINK)",
+                      "lot_no":  "69BL03000106"
+                  },
+                  {
+                      "id":  "356fce12-1738-4706-a6d9-3f780f1d8bc4",
+                      "roll_no":  25,
+                      "work_order":  "69/06/056",
+                      "product_name":  "SWF PET 1.95L 80MC 500MM (RED SHRINK)",
+                      "lot_no":  "69BL03000106"
+                  },
+                  {
+                      "id":  "e70b731e-f45c-4d44-93b6-b91cf6746381",
+                      "roll_no":  4,
+                      "work_order":  "69/06/083",
+                      "product_name":  "PE SHRINK 460 MM  60-70MC",
+                      "lot_no":  "69BL03009306"
+                  },
+                  {
+                      "id":  "4cc2dcd2-06cf-4a02-b8d1-42ec4b63b3ba",
+                      "roll_no":  10,
+                      "work_order":  "69/06/080",
+                      "product_name":  "PE SHRINK 460 MM  60-70MC",
+                      "lot_no":  "69BL07009306"
+                  },
+                  {
+                      "id":  "435b2c7d-3403-46f3-858b-84ceb7dabd75",
+                      "roll_no":  24,
+                      "work_order":  "69/06/076",
+                      "product_name":  "SWF 380MM 55MIC สูตร1",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "32b41f2c-7b5e-4cab-a04d-5dfd002c8368",
+                      "roll_no":  23,
+                      "work_order":  "69/06/076",
+                      "product_name":  "SWF 380MM 55MIC สูตร1",
+                      "lot_no":  "69BL06000806"
+                  },
+                  {
+                      "id":  "73ecc05d-9a56-48b3-9643-3dadccc0569a",
+                      "roll_no":  3,
+                      "work_order":  "69/06/083",
+                      "product_name":  "PE SHRINK 460 MM  60-70MC",
+                      "lot_no":  "69BL03009306"
+                  },
+                  {
+                      "id":  "55dc882a-09ae-42af-b1d7-fb81942b4f1c",
+                      "roll_no":  12,
+                      "work_order":  "69/06/105",
+                      "product_name":  "SWF PET1.5L 75MIC 570MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "06585d0d-6a17-4857-bdee-cc4ff2884ee7",
+                      "roll_no":  10,
+                      "work_order":  "69/06/105",
+                      "product_name":  "SWF PET1.5L 75MIC 570MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "77de1d29-a895-499e-8db3-6913be36dd65",
+                      "roll_no":  10,
+                      "work_order":  "69/06/062",
+                      "product_name":  "SWF PET 1 L x12 75MC 500MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "b825e29d-3c80-458e-bae3-fd04aca162c8",
+                      "roll_no":  9,
+                      "work_order":  "69/06/092",
+                      "product_name":  "SWF PET2.5L 80MIC 520MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "32de869d-b31b-4a7a-897f-5ef5d9abf0d3",
+                      "roll_no":  13,
+                      "work_order":  "69/06/105",
+                      "product_name":  "SWF PET1.5L 75MIC 570MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "cd5b956e-6fa7-4f52-b666-524264aabc77",
+                      "roll_no":  11,
+                      "work_order":  "69/06/105",
+                      "product_name":  "SWF PET1.5L 75MIC 570MM",
+                      "lot_no":  "69BL07000106"
+                  },
+                  {
+                      "id":  "76a1f492-e6ae-4cc8-9a06-8a516f2a2aad",
+                      "roll_no":  5,
+                      "work_order":  "69/06/043",
+                      "product_name":  "SWF NT 550CC 55MIC 840MM",
+                      "lot_no":  "69BL09000106"
+                  },
+                  {
+                      "id":  "18417ebc-076b-4c58-a1e6-af22dc54f892",
+                      "roll_no":  3,
+                      "work_order":  "69/06/025",
+                      "product_name":  "Plastic Shrink Film 84 cm x 55 mc",
+                      "lot_no":  "69BL09000106"
+                  },
+                  {
+                      "id":  "5b31a9e2-888c-4704-8ffb-f34f97991eb6",
+                      "roll_no":  2,
+                      "work_order":  "69/06/025",
+                      "product_name":  "Plastic Shrink Film 84 cm x 55 mc",
+                      "lot_no":  "69BL09000106"
+                  },
+                  {
+                      "id":  "c7e6aa0d-36ca-4110-bf14-0299de11a16f",
+                      "roll_no":  1,
+                      "work_order":  "69/06/025",
+                      "product_name":  "Plastic Shrink Film 84 cm x 55 mc",
+                      "lot_no":  "69BL09000106"
+                  },
+                  {
+                      "id":  "78c62487-a272-4d74-9083-26e5214e6b51",
+                      "roll_no":  7,
+                      "work_order":  "69/06/043",
+                      "product_name":  "SWF NT 550CC 55MIC 840MM",
+                      "lot_no":  "69BL09000106"
+                  }
+              ],
+    "note":  "reset reworking-no-output back to queue (new system reset)"
+}

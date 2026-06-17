@@ -54,6 +54,7 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
   // ── เบิกม้วน (multi-select) ──
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [withdrawBy, setWithdrawBy] = useState('')
+  const [newSystem, setNewSystem]   = useState(true)   // ชุดระบบใหม่ (เลขม้วนนับต่อสินค้า รีเซ็ตตามโอน + ลงสี)
   const [withdrawing, setWithdrawing] = useState(false)
 
   function toggleSel(id: string) {
@@ -106,6 +107,7 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
             source: 'from_production', source_roll_id: r.id, source_lot_no: (r.lot_no ?? '').trim(),
             source_roll_count: 1, source_defect_reason: r.remark ?? '',
             status: 'active', created_by: withdrawBy.trim(), created_at: now,
+            new_system: newSystem,
           }).select().single()
           if (cErr) throw cErr
           job = created
@@ -116,6 +118,7 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
         await supabase.from('production_rolls').update({
           rework_status: 'reworking', rework_received_by: withdrawBy.trim(), rework_received_at: now,
           rework_remark: `เบิกเข้างานกรอ (สินค้า ${ic}${wo ? ` · WO ${wo}` : ''})`,
+          new_system: newSystem,
         }).eq('id', r.id)
         // บันทึกประวัติเบิก
         await supabase.from('rework_withdrawals').insert({
@@ -527,6 +530,10 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
               </div>
             </div>
             <button onClick={() => setSelected(new Set())} className="text-xs text-slate-400 hover:text-white underline">ล้าง</button>
+            <label className={`flex items-center gap-1.5 text-xs font-bold cursor-pointer px-2.5 py-1.5 rounded-lg border ${newSystem ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
+              <input type="checkbox" checked={newSystem} onChange={e => setNewSystem(e.target.checked)} />
+              ✨ ชุดระบบใหม่
+            </label>
             <div className="flex-1 min-w-[180px]">
               <input value={withdrawBy} onChange={e => setWithdrawBy(e.target.value)}
                 placeholder="ชื่อผู้เบิก *"

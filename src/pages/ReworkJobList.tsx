@@ -73,6 +73,7 @@ export function jobToProfile(job: ReworkJob, machine_no: string): MachineProfile
     deliveryDate: job.delivery_date ?? '',
     sourceLotNo:  job.source_lot_no ?? '',   // Lot ต้นทาง (สำหรับหมายเหตุ "กรอจาก")
     reworkJobId:  job.id,                     // ใช้โหลดม้วนที่เบิกมา (rework_withdrawals)
+    newSystem:   (job as any).new_system ?? false,   // ชุดระบบใหม่ — เลขม้วนนับต่อสินค้า + ลงสี
   }
   return prof as MachineProfile
 }

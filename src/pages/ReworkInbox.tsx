@@ -79,20 +79,23 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
         const ic = (r.item_code ?? '').trim() || '(ไม่ระบุ)'
         const wo = (r.work_order ?? '').trim()
         const sizeKey = `${(r.width_cm ?? '').toString().trim()}x${(r.thick_mc ?? '').toString().trim()}`
-        const jobKey = `${ic}__${sizeKey}`   // รวมงานตามสินค้า + ขนาด (ข้าม WO)
+        // แยกงานตาม new_system ด้วย — ชุดใหม่/เก่าไม่ปนงานกัน
+        const jobKey = `${ic}__${sizeKey}__${newSystem ? 'NS' : 'OLD'}`
         const rollKg = parseFloat((r.weight ?? 0).toFixed(2))
-        // หา job ของสินค้า+ขนาดนี้ (cache → DB)
+        // หา job ของสินค้า+ขนาด+(ชุดใหม่/เก่า) นี้ (cache → DB)
         let job = jobCache.get(jobKey)
         if (!job) {
           const { data: existing } = await supabase.from('rework_jobs').select('*')
             .eq('status', 'active').eq('source', 'from_production').eq('item_code', ic)
-            .eq('width_cm', r.width_cm ?? '').eq('thick_mc', r.thick_mc ?? '').limit(1)
+            .eq('width_cm', r.width_cm ?? '').eq('thick_mc', r.thick_mc ?? '')
+            .eq('new_system', newSystem).limit(1)
           job = existing?.[0] ?? null
         }
         if (job) {
           await supabase.from('rework_jobs').update({
             planned_qty:       ((parseFloat(job.planned_qty ?? '0') || 0) + rollKg).toFixed(2),
             source_roll_count: (job.source_roll_count ?? 0) + 1,
+            new_system:        newSystem,
           }).eq('id', job.id)
           job.planned_qty = ((parseFloat(job.planned_qty ?? '0') || 0) + rollKg).toFixed(2)
           job.source_roll_count = (job.source_roll_count ?? 0) + 1

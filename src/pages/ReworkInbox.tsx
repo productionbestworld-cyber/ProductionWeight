@@ -48,7 +48,7 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
   const [showReceive, setShowReceive] = useState<any | null>(null)
   const [showReturn, setShowReturn] = useState<any | null>(null)  // ส่งคืนผลิต — ให้ ผจก พิจารณา
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
-  const [groupBy, setGroupBy] = useState<'item' | 'wo' | 'so'>('item')   // จัดกลุ่มตาม
+  const [groupBy, setGroupBy] = useState<'item' | 'wo' | 'so'>('wo')   // จัดกลุ่มตาม (ค่าเริ่มต้น = WO กันรวมข้าม WO)
   const [logRows, setLogRows] = useState<any[]>([])   // ประวัติการรับเข้ากรอ (รับไปแล้ว)
   const [showLog, setShowLog] = useState(true)
   // ── เบิกม้วน (multi-select) ──
@@ -63,24 +63,26 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
     setSelected(prev => { const n = new Set(prev); ids.forEach(id => on ? n.add(id) : n.delete(id)); return n })
   }
 
-  // เบิกม้วนที่เลือก → รวมเป็นงานกรอตาม "สินค้า" (item_code) ข้าม WO/SO
+  // เบิกม้วนที่เลือก → แยกงานกรอตาม "สินค้า + WO" (กันรวมข้าม WO เป็นงานเดียว)
   async function withdrawSelected() {
     if (!withdrawBy.trim()) { alert('กรุณากรอกชื่อผู้เบิก'); return }
     const picked = rolls.filter(r => selected.has(r.id))
     if (picked.length === 0) { alert('กรุณาเลือกม้วนที่จะเบิกก่อน (ติ๊ก ☑)'); return }
     setWithdrawing(true)
     const now = new Date().toISOString()
-    const jobCache = new Map<string, any>()   // item_code → job (กันสร้างซ้ำในรอบเดียว)
+    const jobCache = new Map<string, any>()   // (item_code + WO) → job (กันสร้างซ้ำในรอบเดียว)
     let totalKg = 0
     try {
       for (const r of picked) {
         const ic = (r.item_code ?? '').trim() || '(ไม่ระบุ)'
+        const wo = (r.work_order ?? '').trim()
+        const jobKey = `${ic}__${wo}`   // แยกงานตามสินค้า + WO
         const rollKg = parseFloat((r.weight ?? 0).toFixed(2))
-        // หา job ของสินค้านี้ (cache → DB)
-        let job = jobCache.get(ic)
+        // หา job ของสินค้า+WO นี้ (cache → DB)
+        let job = jobCache.get(jobKey)
         if (!job) {
           const { data: existing } = await supabase.from('rework_jobs').select('*')
-            .eq('status', 'active').eq('source', 'from_production').eq('item_code', ic).limit(1)
+            .eq('status', 'active').eq('source', 'from_production').eq('item_code', ic).eq('work_order', wo).limit(1)
           job = existing?.[0] ?? null
         }
         if (job) {
@@ -104,13 +106,13 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
           }).select().single()
           if (cErr) throw cErr
           job = created
-          jobCache.set(ic, job)
+          jobCache.set(jobKey, job)
         }
-        jobCache.set(ic, job)
+        jobCache.set(jobKey, job)
         // mark ม้วนต้นทาง = reworking
         await supabase.from('production_rolls').update({
           rework_status: 'reworking', rework_received_by: withdrawBy.trim(), rework_received_at: now,
-          rework_remark: `เบิกเข้างานกรอ (สินค้า ${ic})`,
+          rework_remark: `เบิกเข้างานกรอ (สินค้า ${ic}${wo ? ` · WO ${wo}` : ''})`,
         }).eq('id', r.id)
         // บันทึกประวัติเบิก
         await supabase.from('rework_withdrawals').insert({

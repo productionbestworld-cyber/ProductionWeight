@@ -210,16 +210,18 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
       }
       setJobOrders(ord)
     } else setJobOrders({})
-    // ดึง progress (ม้วน good ของแต่ละ lot) — แยกตาม Lot + WO กัน 2 งานปน Lot เดียว
+    // ดึง progress (ม้วน good ของแต่ละ lot)
+    // งานปกติ: แยกตาม Lot + WO (กัน 2 งานปน Lot เดียว)
+    // ชุดระบบใหม่: นับรวมทั้ง Lot (เลขม้วนต่อเนื่องข้าม WO — ไม่งั้นนับไม่ครบ)
     const lots = list.map(j => j.lot_no).filter(Boolean)
     if (lots.length) {
       const { data: rolls } = await supabase.from('production_rolls')
-        .select('lot_no, work_order, weight, roll_type')
+        .select('lot_no, work_order, weight, roll_type, new_system')
         .in('lot_no', lots)
         .eq('roll_type', 'good')
       const p: Record<string,{rolls:number,kg:number}> = {}
       for (const r of rolls ?? []) {
-        const k = `${r.lot_no}__${r.work_order ?? ''}`
+        const k = r.new_system ? `NS__${r.lot_no}` : `${r.lot_no}__${r.work_order ?? ''}`
         if (!p[k]) p[k] = { rolls: 0, kg: 0 }
         p[k].rolls += 1
         p[k].kg    += r.weight ?? 0
@@ -229,7 +231,8 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
     setLoading(false)
   }
   // คีย์ progress = Lot + WO (กันงานคนละ WO แต่ Lot เดียวกันยอดปน)
-  const progKey = (j: { lot_no?: string; work_order?: string }) => `${j.lot_no ?? ''}__${j.work_order ?? ''}`
+  const progKey = (j: { lot_no?: string; work_order?: string; new_system?: boolean }) =>
+    (j as any).new_system ? `NS__${j.lot_no ?? ''}` : `${j.lot_no ?? ''}__${j.work_order ?? ''}`
   async function loadMachines() {
     const { data } = await supabase.from('machine_profiles').select('machine_no').eq('section','rewind').order('machine_no')
     setMachines((data ?? []) as any)

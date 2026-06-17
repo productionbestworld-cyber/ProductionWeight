@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.3.79'
+export const APP_VERSION = '1.3.80'
 export const APP_BUILD_DATE = '2026-06-15'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.3.80', date: '2026-06-17',
+    items: [
+      'การ์ดงานกรอ: นับ "กรอได้" ของงานชุดระบบใหม่รวมทั้ง Lot (ข้าม WO) — เดิมนับแยก WO เลยโชว์ไม่ครบ (ชั่ง 5 โชว์ 3)',
+    ],
+  },
   {
     version: '1.3.79', date: '2026-06-17',
     items: [

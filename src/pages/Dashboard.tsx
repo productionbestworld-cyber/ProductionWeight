@@ -137,6 +137,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   const [expandedJob,    setExpandedJob]    = useState<string | null>(null)
   const [showBadOther,   setShowBadOther]   = useState(false)
   const [showTrace,      setShowTrace]      = useState(false)
+  const [showWoPend,     setShowWoPend]     = useState(true)
   const [showImport,     setShowImport]     = useState(false)
 
   // filters
@@ -648,6 +649,20 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
           }).sort((a:any,b:any) =>
             String(a.out.lot_no||'').localeCompare(String(b.out.lot_no||'')) ||
             ((a.out.roll_no??0)-(b.out.roll_no??0)))
+          // ── ติดตามแยก WO: ม้วนเสียแต่ละ WO กรอแล้ว/ยังไม่กรอ ──
+          const usedSrcIds = new Set(reworkFgRolls.map((r:any) => r.rework_source_roll_id).filter(Boolean))
+          const woPendMap = new Map<string, { total:number; done:number; pending:number; kg:number }>()
+          for (const b of rolls.filter(r => r.roll_type === 'bad')) {
+            const wo = (b.work_order ?? '').trim() || '(ไม่ระบุ WO)'
+            const g = woPendMap.get(wo) ?? { total:0, done:0, pending:0, kg:0 }
+            g.total++
+            const done = usedSrcIds.has(b.id) || (b as any).rework_status === 'reworked'
+            if (done) g.done++; else { g.pending++; g.kg += (b.weight ?? 0) }
+            woPendMap.set(wo, g)
+          }
+          const woPend = [...woPendMap.entries()].map(([wo,v]) => ({ wo, ...v }))
+            .sort((a,b) => b.pending - a.pending || a.wo.localeCompare(b.wo))
+          const totPending = woPend.reduce((s,x) => s + x.pending, 0)
           return (
           <div className="space-y-4">
             {/* ── หัวข้อ: หน้านี้ = สิ่งที่ต้องลงมือทำ (ไม่ซ้ำกับภาพรวม) ── */}
@@ -730,6 +745,42 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                 </div>
               </div>
             )}
+
+            {/* ── 📋 ติดตามม้วนเสียค้างกรอ — แยกตาม WO ── */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <button onClick={()=>setShowWoPend(v=>!v)} className="w-full px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between text-left">
+                <p className="text-sm font-bold text-gray-700">📋 ม้วนเสียค้างกรอ — แยกตาม WO (ติดตามจากผลิต) · ค้างรวม <span className="text-red-600">{totPending}</span> ม้วน</p>
+                <span className="text-gray-400 text-xs">{showWoPend ? '▲ ซ่อน' : '▼ ดู'}</span>
+              </button>
+              {showWoPend && (
+                <div className="overflow-x-auto max-h-[360px] overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 text-gray-500 sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2 text-left">WO</th>
+                        <th className="px-3 py-2 text-right">ม้วนเสียทั้งหมด</th>
+                        <th className="px-3 py-2 text-right">กรอแล้ว</th>
+                        <th className="px-3 py-2 text-right">ค้างกรอ</th>
+                        <th className="px-3 py-2 text-right">นน.ค้าง (kg)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {woPend.length === 0 ? (
+                        <tr><td colSpan={5} className="px-3 py-8 text-center text-gray-400">ไม่มีม้วนเสียในช่วงนี้</td></tr>
+                      ) : woPend.map(w => (
+                        <tr key={w.wo} className={`border-t border-gray-100 ${w.pending>0 ? 'bg-red-50' : 'text-gray-500'}`}>
+                          <td className="px-3 py-1.5 font-bold text-gray-700">WO {w.wo}</td>
+                          <td className="px-3 py-1.5 text-right">{w.total}</td>
+                          <td className="px-3 py-1.5 text-right text-green-600">{w.done}</td>
+                          <td className={`px-3 py-1.5 text-right font-black ${w.pending>0 ? 'text-red-600' : 'text-gray-400'}`}>{w.pending || '—'}</td>
+                          <td className="px-3 py-1.5 text-right">{w.kg>0 ? num(w.kg,1) : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
 
             {/* ── 🔗 ตามรอยม้วนกรอ → WO + ม้วนต้นทาง ── */}
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">

@@ -352,16 +352,20 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
             placeholder="ค้นหา lot/สินค้า/ลูกค้า/SO..."
             className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-3 py-2 text-sm text-white outline-none focus:border-brand-500"/>
         </div>
-        {jobStatus === 'active' && (
+        {jobStatus === 'active' && (() => {
+          const newCount = jobs.filter(j => (j as any).new_system).length
+          const oldCount = jobs.length - newCount
+          return (
           <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-1">
-            {([['new','✨ ชุดระบบใหม่'],['old','งานเก่า']] as const).map(([k,label]) => (
+            {([['new','✨ ชุดระบบใหม่',newCount],['old','งานเก่า',oldCount]] as const).map(([k,label,cnt]) => (
               <button key={k} onClick={()=>setSysFilter(k as any)}
                 className={`text-xs font-bold px-3 py-1.5 rounded transition-colors ${sysFilter===k ? (k==='new'?'bg-emerald-600 text-white':'bg-slate-600 text-white') : 'text-slate-400 hover:bg-slate-800'}`}>
-                {label}
+                {label} <span className="opacity-70">({cnt})</span>
               </button>
             ))}
           </div>
-        )}
+          )
+        })()}
         <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-1">
           {([['active','🔁 กำลังทำ'],['closed','🏁 จบงานแล้ว (Log)']] as const).map(([k,label]) => (
             <button key={k} onClick={()=>setJobStatus(k as any)}
@@ -378,9 +382,13 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
       ) : filtered.length === 0 ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center text-slate-500">
-            <p className="text-4xl mb-2">📋</p>
-            <p>{jobStatus==='closed' ? 'ยังไม่มีงานกรอที่ปิดแล้ว' : 'ยังไม่มีงานกรอ active'}</p>
-            <p className="text-xs mt-1">{jobStatus==='closed' ? 'งานที่กดปิดแล้วจะมาอยู่ที่นี่ — ดึงกลับมาชั่งต่อได้' : 'กด "+ สร้างงานใหม่" หรือ "รับจากผลิต" ที่หน้า ReworkInbox'}</p>
+            <p className="text-4xl mb-2">{jobStatus==='active' && sysFilter==='new' ? '✨' : '📋'}</p>
+            <p>{jobStatus==='closed' ? 'ยังไม่มีงานกรอที่ปิดแล้ว'
+               : sysFilter==='new' ? 'ยังไม่มีงานชุดระบบใหม่'
+               : 'ยังไม่มีงานเก่า'}</p>
+            <p className="text-xs mt-1">{jobStatus==='closed' ? 'งานที่กดปิดแล้วจะมาอยู่ที่นี่ — ดึงกลับมาชั่งต่อได้'
+               : sysFilter==='new' ? 'ไปที่แท็บ "🏭 รับจากผลิต" → ติ๊กม้วน → ติ๊ก ✨ ชุดระบบใหม่ → กดเบิก · หรือกดดู "งานเก่า" ด้านบน'
+               : 'กด "+ สร้างงานใหม่" หรือ "รับจากผลิต"'}</p>
           </div>
         </div>
       ) : (

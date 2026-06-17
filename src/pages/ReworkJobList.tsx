@@ -180,6 +180,7 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
   const [pickFor, setPickFor]       = useState<ReworkJob | null>(null)
   const [machines, setMachines]     = useState<{machine_no:string}[]>([])
   const [progress, setProgress]     = useState<Record<string,{rolls:number,kg:number}>>({})
+  const [jobOrders, setJobOrders]   = useState<Record<string,{wos:string[],sos:string[]}>>({})   // job.id → WO/SO ทั้งหมดที่เบิกเข้างานนี้
   const [closeFor, setCloseFor]     = useState<ReworkJob | null>(null)
   const [closeBy, setCloseBy]       = useState('')
   const [closing, setClosing]       = useState(false)
@@ -192,6 +193,21 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
       .order(jobStatus === 'closed' ? 'closed_at' : 'created_at', { ascending: false })
     const list = (data ?? []) as ReworkJob[]
     setJobs(list)
+    // รวบ WO/SO ทั้งหมดที่เบิกเข้าแต่ละงาน (งานรวมข้ามไซส์/WO → หลาย WO·SO ต่องาน)
+    const jobIds = list.map(j => j.id).filter(Boolean)
+    if (jobIds.length) {
+      const { data: wds } = await supabase.from('rework_withdrawals')
+        .select('job_id, work_order, sale_order').in('job_id', jobIds as string[])
+      const ord: Record<string,{wos:string[],sos:string[]}> = {}
+      for (const w of wds ?? []) {
+        const k = w.job_id; if (!k) continue
+        if (!ord[k]) ord[k] = { wos: [], sos: [] }
+        const wo = (w.work_order ?? '').trim(); const so = (w.sale_order ?? '').trim()
+        if (wo && !ord[k].wos.includes(wo)) ord[k].wos.push(wo)
+        if (so && !ord[k].sos.includes(so)) ord[k].sos.push(so)
+      }
+      setJobOrders(ord)
+    } else setJobOrders({})
     // ดึง progress (ม้วน good ของแต่ละ lot) — แยกตาม Lot + WO กัน 2 งานปน Lot เดียว
     const lots = list.map(j => j.lot_no).filter(Boolean)
     if (lots.length) {
@@ -393,8 +409,14 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
                   <p className="text-slate-400 text-xs truncate">{j.cust_name || '—'}{j.cust_branch ? ` · ${j.cust_branch}` : ''}</p>
 
                   <div className="flex gap-1.5 flex-wrap">
-                    {j.work_order && <span className="text-[10px] bg-orange-500/15 text-orange-300 border border-orange-500/25 px-2 py-0.5 rounded font-bold">WO {j.work_order}</span>}
-                    {j.sale_order && <span className="text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/25 px-2 py-0.5 rounded font-bold">SO {j.sale_order}</span>}
+                    {(() => {
+                      const wos = jobOrders[j.id]?.wos?.length ? jobOrders[j.id].wos : (j.work_order ? [j.work_order] : [])
+                      const sos = jobOrders[j.id]?.sos?.length ? jobOrders[j.id].sos : (j.sale_order ? [j.sale_order] : [])
+                      return <>
+                        {wos.map(wo => <span key={'w'+wo} className="text-[10px] bg-orange-500/15 text-orange-300 border border-orange-500/25 px-2 py-0.5 rounded font-bold">WO {wo}</span>)}
+                        {sos.map(so => <span key={'s'+so} className="text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/25 px-2 py-0.5 rounded font-bold">SO {so}</span>)}
+                      </>
+                    })()}
                     <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded font-mono border border-slate-700">
                       {j.lot_no?.trim() ? `Lot ${j.lot_no.slice(-8)}` : '🆕 รอเลือกเครื่อง'}
                     </span>

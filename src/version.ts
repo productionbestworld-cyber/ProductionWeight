@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.3.68'
+export const APP_VERSION = '1.3.69'
 export const APP_BUILD_DATE = '2026-06-15'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.3.69', date: '2026-06-17',
+    items: [
+      'งานกรอ: การ์ดโชว์ WO/SO ทั้งหมดที่เบิกเข้างานนั้น (งานรวมข้ามไซส์/WO จะมีหลาย WO·SO) ดึงจากประวัติการเบิก',
+    ],
+  },
   {
     version: '1.3.68', date: '2026-06-17',
     items: [

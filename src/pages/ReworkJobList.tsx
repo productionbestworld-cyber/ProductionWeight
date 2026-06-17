@@ -216,12 +216,14 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
     const lots = list.map(j => j.lot_no).filter(Boolean)
     if (lots.length) {
       const { data: rolls } = await supabase.from('production_rolls')
-        .select('lot_no, work_order, weight, roll_type, new_system')
+        .select('lot_no, work_order, weight, roll_type, new_system, transferred')
         .in('lot_no', lots)
         .eq('roll_type', 'good')
       const p: Record<string,{rolls:number,kg:number}> = {}
       for (const r of rolls ?? []) {
-        const k = r.new_system ? `NS__${r.lot_no}` : `${r.lot_no}__${r.work_order ?? ''}`
+        // ชุดระบบใหม่: นับเฉพาะม้วนที่ "ยังไม่โอน" (โอนแล้ว = จบชุด ตัดเป็นชุดใหม่ — ไม่นับรวม)
+        if ((r as any).new_system && (r as any).transferred) continue
+        const k = (r as any).new_system ? `NS__${r.lot_no}` : `${r.lot_no}__${r.work_order ?? ''}`
         if (!p[k]) p[k] = { rolls: 0, kg: 0 }
         p[k].rolls += 1
         p[k].kg    += r.weight ?? 0

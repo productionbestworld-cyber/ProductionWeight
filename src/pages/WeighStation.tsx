@@ -2109,8 +2109,10 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
           .filter((q: any) => q.machine_no === profile.machine_no && q.lot_no === profile.lotNo)
           .map((q: any) => ({ ...q, id: `offline_${q.created_at}_${q.roll_no}`, _offline: true }))
         let merged = [...(data ?? []), ...offlineForThis]
-        // กรอ (หรือ freshStart): นับเฉพาะม้วนของ WO นี้ — Lot เดียวกันคนละ WO ไม่ปนกัน
-        if ((profile as any).freshStart || isRework) {
+        // freshStart (งานผลิตดึงกลับ): นับเฉพาะม้วนของ WO นี้
+        // ⚠ งานกรอ: ห้ามกรองตาม WO — เพราะงานรวมข้ามไซส์มีหลาย WO ใน Lot เดียว
+        //   เลขม้วนต้อง unique ทั้ง Lot ไม่งั้นแจกเลขซ้ำ (เช่น #12 ชนกัน)
+        if ((profile as any).freshStart && !isRework) {
           merged = merged.filter((r: any) => (r.work_order ?? '') === (profile.woNo ?? ''))
         }
         if (!merged.length) {

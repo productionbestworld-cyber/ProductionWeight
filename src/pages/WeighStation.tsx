@@ -3041,7 +3041,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
 
           {/* แผนกกรอ: เลือกม้วนต้นทางที่กำลังกรอ (ติ๊กก่อนชั่ง) */}
           {isRework && isGood && (
-            <div className="space-y-1.5 bg-slate-900 border border-blue-500/30 rounded-xl p-2.5">
+            <div className="space-y-1.5 bg-slate-900 border border-blue-500/30 rounded-xl p-2.5 order-last">
               <p className="text-blue-300 text-xs font-bold">📌 กำลังกรอจากม้วนต้นทางไหน? (ติ๊กก่อนชั่ง)</p>
               <div className="space-y-1 max-h-[55vh] overflow-y-auto">
                 {srcRolls.map(s => {
@@ -3150,7 +3150,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
 
           {/* แผนกกรอ: สาเหตุที่ม้วนนี้เสีย/มาจากอะไร (กรอกตอนชั่งออก = กรอสำเร็จ) */}
           {isRework && isGood && (
-            <div className="space-y-1">
+            <div className="space-y-1 order-last">
               <p className="text-rose-300 text-xs font-bold">⚠ สาเหตุที่ม้วนเสีย (มาจากแผนกเป่า — แก้ไขได้)</p>
               <input value={reworkCause} onChange={e => setReworkCause(e.target.value)}
                 placeholder="ติ๊กม้วนต้นทางด้านบน → สาเหตุจะเด้งมาเอง"
@@ -3160,7 +3160,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
           )}
 
           {isRework && isGood && (
-            <div className="space-y-1">
+            <div className="space-y-1 order-last">
               <p className="text-sky-300 text-xs font-bold">📏 ความยาว (เมตร) — ดึงจากต้นทางอัตโนมัติ</p>
               <div className="flex items-center gap-2">
                 <input value={reworkLen} onChange={e => setReworkLen(e.target.value.replace(/[^\d.]/g, ''))}

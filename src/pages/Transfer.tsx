@@ -1109,8 +1109,11 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
 
                         {/* Roll info */}
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-baseline gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className={`font-mono font-black text-base ${isDone ? 'text-slate-500' : 'text-white'}`}>{String(r.roll_type).startsWith('scrap') ? 'ถุงเศษ' : `ม้วน #${r.roll_no}`}</span>
+                            {r.work_order && <span className="text-[10px] bg-amber-500/15 text-amber-300 px-2 py-0.5 rounded font-bold">WO {r.work_order}</span>}
+                            {r.sale_order && <span className="text-[10px] bg-blue-500/15 text-blue-300 px-2 py-0.5 rounded font-bold">SO {r.sale_order}</span>}
+                            {r.rework_source_lot && <span className="text-[10px] text-slate-500 font-mono">จาก {r.rework_source_lot}</span>}
                             {isDone && <span className="text-[10px] text-green-400">✓ โอนแล้ว {r.transferred_by && `· ${r.transferred_by}`}</span>}
                           </div>
                         </div>

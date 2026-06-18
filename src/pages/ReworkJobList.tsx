@@ -5,6 +5,7 @@ import { fetchProducts, backfillProductMatCore, type Product } from './Products'
 import ExportButton from '../components/ExportButton'
 import { fmtSize, type MachineProfile } from './MachineSettings'
 import ReworkInbox from './ReworkInbox'
+import { reprintRollLabel } from './WeighStation'
 
 export type ReworkJob = {
   id: string
@@ -189,6 +190,7 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
   const [closeFor, setCloseFor]     = useState<ReworkJob | null>(null)
   const [closeBy, setCloseBy]       = useState('')
   const [closing, setClosing]       = useState(false)
+  const [histItem, setHistItem]     = useState<{ code: string; name: string } | null>(null)   // แถบขวา: ม้วนกรอที่ชั่งแล้วของ item นี้
 
   async function load() {
     setLoading(true)
@@ -545,6 +547,8 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
                     )}
                   </div>
                   <div className="flex gap-1 pointer-events-auto z-10">
+                    <button onClick={e => { e.stopPropagation(); setHistItem({ code: (j.item_code ?? '').trim(), name: j.product_name ?? '' }) }}
+                      title="ดูม้วนที่ชั่งกรอไปแล้ว (รีปริ้นได้)" className="text-[10px] bg-slate-700/60 hover:bg-brand-600 text-slate-300 hover:text-white px-1.5 py-0.5 rounded">📜</button>
                     {jobStatus === 'closed' ? (
                       <button onClick={e => { e.stopPropagation(); reopenJob(j) }} disabled={reopening===j.id}
                         title="ดึงกลับมาชั่งต่อ" className="text-[10px] bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white px-2 py-0.5 rounded font-bold">
@@ -650,6 +654,8 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
           })}
         </div>
       )}
+
+      {histItem && <ItemReworkPanel itemCode={histItem.code} itemName={histItem.name} onClose={() => setHistItem(null)} />}
 
       {showCreate && (
         <CreateJobModal onClose={() => setShowCreate(false)} onSaved={() => { setShowCreate(false); load() }} />
@@ -981,6 +987,85 @@ function CreateJobModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
             className="flex-[2] bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white py-2.5 rounded-xl font-bold">
             {saving ? 'กำลังสร้าง...' : '+ สร้างงาน'}
           </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── แถบขวา: ม้วนกรอที่ชั่งไปแล้วของ item นี้ + ปุ่มรีปริ้น (คล้ายฝั่งผลิต) ──────
+function ItemReworkPanel({ itemCode, itemName, onClose }: { itemCode: string; itemName: string; onClose: () => void }) {
+  const [rolls, setRolls] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [printing, setPrinting] = useState<string | null>(null)
+
+  async function load() {
+    setLoading(true)
+    const data = await fetchAll(() => supabase.from('production_rolls')
+      .select('id, roll_no, weight, gross_weight, core_weight, length, pcs, item_code, product_name, product_code, mat_code, customer, cust_code, lot_no, machine_no, work_order, sale_order, width_cm, width_unit, thick_mc, inspector, remark, roll_type, section, transferred, new_system, rework_source_lot, created_at')
+      .eq('roll_type', 'good').eq('item_code', itemCode).eq('new_system', true).not('rework_source_roll_id', 'is', null)
+      .order('roll_no', { ascending: true }))
+    setRolls(data ?? [])
+    setLoading(false)
+  }
+  useEffect(() => { load() }, [itemCode])
+
+  const totKg = rolls.reduce((s, r) => s + (r.weight ?? 0), 0)
+  const pending = rolls.filter(r => !r.transferred).length
+
+  async function doReprint(r: any, size: 'long' | 'short') {
+    setPrinting(r.id + size)
+    try { await reprintRollLabel(r, size) } catch (e: any) { alert('รีปริ้นไม่สำเร็จ: ' + (e?.message ?? e)) }
+    finally { setPrinting(null) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-40 flex justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/50" />
+      <div className="relative w-full max-w-md bg-slate-950 border-l border-slate-700 h-full flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between px-4 py-3 border-b border-slate-800 bg-slate-900">
+          <div className="min-w-0">
+            <p className="text-white font-bold truncate">📜 ม้วนกรอที่ชั่งแล้ว</p>
+            <p className="text-slate-400 text-xs truncate">{itemName || itemCode} · <span className="font-mono">{itemCode}</span></p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-white shrink-0"><X size={18}/></button>
+        </div>
+        <div className="grid grid-cols-3 gap-1.5 px-4 py-2.5 border-b border-slate-800 text-center">
+          <div><p className="text-[10px] text-slate-500">ม้วนกรอ</p><p className="text-lg font-black text-brand-300">{rolls.length}</p></div>
+          <div><p className="text-[10px] text-slate-500">รวม (Kg)</p><p className="text-lg font-black text-green-300">{fmt(totKg,1)}</p></div>
+          <div><p className="text-[10px] text-slate-500">ยังไม่โอน</p><p className="text-lg font-black text-amber-300">{pending}</p></div>
+        </div>
+        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+          {loading ? (
+            <p className="text-center py-10 text-slate-500">กำลังโหลด...</p>
+          ) : rolls.length === 0 ? (
+            <p className="text-center py-10 text-slate-500">ยังไม่มีม้วนกรอที่ชั่งของสินค้านี้</p>
+          ) : rolls.map(r => (
+            <div key={r.id} className={`border rounded-xl px-3 py-2 ${r.transferred ? 'bg-slate-900 border-slate-800' : 'bg-emerald-500/5 border-emerald-500/25'}`}>
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-white font-black text-base">ม้วนที่ #{r.roll_no} <span className="text-slate-400 font-normal text-sm">· {fmt(r.weight,2)} Kg</span></p>
+                  <p className="text-slate-500 text-[11px] truncate">
+                    Lot {r.lot_no} · เครื่อง {r.machine_no || '—'}{r.length ? ` · ${r.length} M.` : ''}
+                    {r.work_order ? ` · WO ${r.work_order}` : ''}
+                  </p>
+                  <p className="text-slate-600 text-[10px]">
+                    {r.rework_source_lot ? `กรอจาก ${r.rework_source_lot} · ` : ''}
+                    {r.created_at ? new Date(r.created_at).toLocaleString('th-TH', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : ''}
+                    {r.transferred ? ' · โอนแล้ว' : ''}
+                  </p>
+                </div>
+                <div className="flex flex-col gap-1 shrink-0">
+                  <button onClick={() => doReprint(r, 'long')} disabled={!!printing}
+                    className="text-[11px] bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white px-2 py-1 rounded font-bold whitespace-nowrap">
+                    {printing === r.id+'long' ? '...' : '🖨 ใบยาว'}</button>
+                  <button onClick={() => doReprint(r, 'short')} disabled={!!printing}
+                    className="text-[11px] bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white px-2 py-1 rounded font-bold whitespace-nowrap">
+                    {printing === r.id+'short' ? '...' : '🖨 ใบสั้น'}</button>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

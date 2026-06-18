@@ -24,6 +24,35 @@ function barcodeUrl(text: string, h = 10) {
 }
 
 // ── Print Label ───────────────────────────────────────────────────────────────
+// รีปริ้นใบปะหน้าจาก record ม้วนที่บันทึกไว้แล้ว (สร้าง profile จากข้อมูลม้วน) — ใช้จากหน้าอื่นได้
+export async function reprintRollLabel(roll: any, size: 'long' | 'short' = 'long') {
+  const p: any = {
+    machine_no:  roll.machine_no   ?? '',
+    custCode:    roll.cust_code    ?? '',
+    custName:    roll.customer     ?? roll.cust_name ?? '',
+    custBranch:  roll.cust_branch  ?? '',
+    custAddress: roll.cust_address ?? '',
+    decimal:     2,
+    itemCode:    roll.item_code    ?? '',
+    matCode:     roll.mat_code     ?? '',
+    productCode: roll.product_code ?? '',
+    productName: roll.product_name ?? '',
+    widthCm:     roll.width_cm     ?? '',
+    widthUnit:  (roll.width_unit   ?? 'cm'),
+    thickMc:     roll.thick_mc     ?? '',
+    lotNo:       roll.lot_no       ?? '',
+    length:      roll.length       ?? '',
+    pcs:         roll.pcs          ?? '',
+    coreWeight:  String(roll.core_weight ?? '1.25'),
+    inspector:   roll.inspector    ?? '',
+    labelSize:   size,
+    section:     roll.section      ?? 'rewind',
+    soNo:        roll.sale_order   ?? '',
+    woNo:        roll.work_order   ?? '',
+  }
+  await printLabel(p as MachineProfile, roll.roll_no ?? 0, roll.gross_weight ?? 0, roll.weight ?? 0, size, roll.roll_type ?? 'good', roll.remark ?? '', roll.id)
+}
+
 async function printLabel(p: MachineProfile, rollNo: number, gross: number, net: number, size: 'long'|'short' = 'long', rollType: string = 'good', reason = '', rollId?: string) {
   const dec     = p.decimal
   const mfgDate = thaiDate()

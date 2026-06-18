@@ -1017,18 +1017,22 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                   <p className="text-slate-600 text-xs mt-1">ไม่มี{typeFilter==='scrap'?'ถุงเศษ':'ม้วน'}รอโอนในงานนี้</p>
                 </div>
               ) : (() => {
-                // จัดกลุ่มม้วนตามงาน: เครื่อง + Lot + WO (กัน 2 งานปนกันในลิสต์เดียว)
+                // จัดกลุ่มม้วนตามงาน — ชุดระบบใหม่: รวมทุก WO ใน Lot เดียว (เลขม้วนต่อเนื่อง) · งานปกติ: แยกตาม WO
                 const gmap = new Map<string, any[]>()
                 for (const r of filtered) {
-                  const k = `${r.machine_no ?? '?'}__${r.lot_no ?? '?'}__${r.work_order ?? ''}`
+                  const k = r.new_system
+                    ? `${r.machine_no ?? '?'}__${r.lot_no ?? '?'}__${NS_WO}`
+                    : `${r.machine_no ?? '?'}__${r.lot_no ?? '?'}__${r.work_order ?? ''}`
                   if (!gmap.has(k)) gmap.set(k, [])
                   gmap.get(k)!.push(r)
                 }
                 const grps = [...gmap.entries()].map(([key, items]) => {
                   const s = items[0]
                   const dates = items.map(r => r.created_at).filter(Boolean).sort()
+                  const woAll = Array.from(new Set(items.map(r => r.work_order).filter(Boolean)))
+                  const soAll = Array.from(new Set(items.map(r => r.sale_order).filter(Boolean)))
                   return {
-                    key, items,
+                    key, items, isNS: !!s.new_system, woList: woAll, soList: soAll,
                     machine: s.machine_no, lot: s.lot_no, wo: s.work_order ?? '', so: s.sale_order ?? '',
                     product: items.find(x=>x.product_name)?.product_name ?? '—',
                     customer: items.find(x=>x.customer)?.customer ?? '',
@@ -1068,8 +1072,9 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                           </p>
                           <div className="flex items-center gap-1.5 flex-wrap text-[10px] mt-0.5 pl-4">
                             <span className="text-slate-400 truncate max-w-[180px]">{g.product}</span>
-                            {g.wo && <span className="bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded font-bold">WO {g.wo}</span>}
-                            {g.so && <span className="bg-blue-500/15 text-blue-300 px-1.5 py-0.5 rounded font-bold">SO {g.so}</span>}
+                            {g.isNS && <span className="bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-bold">✨ ชุดระบบใหม่</span>}
+                            {(g.isNS ? g.woList : (g.wo ? [g.wo] : [])).map((w:string) => <span key={'w'+w} className="bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded font-bold">WO {w}</span>)}
+                            {(g.isNS ? g.soList : (g.so ? [g.so] : [])).map((so:string) => <span key={'s'+so} className="bg-blue-500/15 text-blue-300 px-1.5 py-0.5 rounded font-bold">SO {so}</span>)}
                             <span className="font-mono text-slate-500">Lot {g.lot}</span>
                             {g.start && <span className="text-slate-600">· 🕐 {fmtTime(g.start)}{g.end && g.end!==g.start ? `–${fmtTime(g.end)}` : ''}</span>}
                           </div>

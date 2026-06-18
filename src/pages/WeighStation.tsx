@@ -1913,6 +1913,7 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
   const [reworkRound, setReworkRound]   = useState(1)
   const [reworkCause, setReworkCause]   = useState('')
   const [reworkLen, setReworkLen]       = useState('')   // ความยาว(เมตร)งานกรอ — กรอกเองได้ (งานเก่าไม่ได้เก็บ length)
+  const [masterLenState, setMasterLenState] = useState('') // ความยาวจาก master สินค้า (สำรองเมื่อต้นทางไม่มีค่า)
   const [reworkJobId, setReworkJobId]   = useState<string | null>(null)
   useEffect(() => {
     if (!isRework || !profile.lotNo) return
@@ -1963,11 +1964,24 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
   useEffect(() => { loadSrcRolls() }, [isRework, profile.itemCode, profile.lotNo])
   // ติ๊กม้วนต้นทางมาแล้วตอนเบิก → จอชั่งเลือก "ม้วนแรกที่ยังไม่ครบ" ให้อัตโนมัติ (ไม่ต้องติ๊กซ้ำ)
   //   ถ้าอยากเปลี่ยนเป็นม้วนอื่น ค่อยติ๊กเอง (override)
+  // โหลดความยาวจาก master สินค้า (สำรองเมื่อต้นทางไม่เก็บ length เช่นงานเก่า)
   useEffect(() => {
-    if (!isRework || manualMode || selSrc) return
-    const first = srcRolls.find((s: any) => ((s.weight ?? 0) - (srcProg[s.id] ?? 0)) > 0.001)
-    if (first) { setSelSrc(first); setReworkCause(first.remark ?? ''); setReworkLen(String(first.length ?? '')) }
-  }, [srcRolls, srcProg, manualMode])
+    if (!isRework || !profile.itemCode) { setMasterLenState(''); return }
+    ;(async () => {
+      try {
+        const { data } = await supabase.from('products').select('length').eq('item_code', profile.itemCode).maybeSingle()
+        setMasterLenState(String((data as any)?.length ?? ''))
+      } catch { /* view อาจไม่มีคอลัมน์ */ }
+    })()
+  }, [isRework, profile.itemCode])
+  useEffect(() => {
+    if (!isRework || manualMode) return
+    const cur = selSrc || srcRolls.find((s: any) => ((s.weight ?? 0) - (srcProg[s.id] ?? 0)) > 0.001)
+    if (!cur) return
+    if (!selSrc) { setSelSrc(cur); setReworkCause(cur.remark ?? '') }
+    // เมตรมาจากต้นทางอยู่แล้ว → เติมให้เห็นเลย (ถ้าต้นทางไม่มีค่าใช้ master) ไม่ต้องกรอกเอง
+    if (!reworkLen.trim()) setReworkLen(String(cur.length ?? '') || masterLenState)
+  }, [srcRolls, srcProg, manualMode, masterLenState])
 
   // กดเสร็จม้วนต้นทาง → ที่เหลือเป็นเศษ → ม้วนหายจากลิสต์ (กันชั่งซ้ำ)
   async function finishSource(s: any) {
@@ -2920,7 +2934,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                     <div key={s.id}
                       className={`rounded-lg px-2.5 py-1.5 border transition-colors ${full ? 'bg-slate-800/40 border-slate-700 opacity-60' : sel ? 'bg-blue-500/20 border-blue-500' : sel2 ? 'bg-emerald-500/20 border-emerald-500' : 'bg-slate-800 border-slate-700 hover:border-blue-500/50'}`}>
                       <div className="flex items-center justify-between gap-2">
-                        <button disabled={full} onClick={() => { const ns = sel ? null : s; setSelSrc(ns); if (ns) { setReworkCause(ns.remark ?? ''); setReworkLen(String(ns.length ?? '')) } else { setSelSrc2(null) } }} className="flex-1 text-left disabled:cursor-not-allowed">
+                        <button disabled={full} onClick={() => { const ns = sel ? null : s; setSelSrc(ns); if (ns) { setReworkCause(ns.remark ?? ''); setReworkLen(String(ns.length ?? '') || masterLenState) } else { setSelSrc2(null) } }} className="flex-1 text-left disabled:cursor-not-allowed">
                           <span className="text-xs font-bold text-white flex items-center gap-1.5 flex-wrap">
                             <span className="shrink-0">{full ? '✓ กรอครบ' : sel ? '☑' : sel2 ? '➕2' : '☐'}</span>
                             {sel2 && <span className="text-[9px] bg-emerald-500/30 text-emerald-200 px-1.5 py-0.5 rounded font-black">กรอต่อ ม้วนที่ 2</span>}
@@ -3027,7 +3041,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
 
           {isRework && isGood && (
             <div className="space-y-1">
-              <p className="text-sky-300 text-xs font-bold">📏 ความยาว (เมตร) — กรอกเองได้</p>
+              <p className="text-sky-300 text-xs font-bold">📏 ความยาว (เมตร) — ดึงจากต้นทางอัตโนมัติ</p>
               <div className="flex items-center gap-2">
                 <input value={reworkLen} onChange={e => setReworkLen(e.target.value.replace(/[^\d.]/g, ''))}
                   inputMode="decimal" placeholder="เมตร เช่น 1540"
@@ -3035,7 +3049,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                 <span className="text-slate-400 text-sm shrink-0">M.</span>
               </div>
               <p className="text-[10px] text-sky-400/70 leading-tight">
-                ดึงจากม้วนต้นทางอัตโนมัติเมื่อติ๊กเลือก — ถ้าต้นทางไม่มีค่า (งานเก่า) กรอกเองได้ ค่านี้จะติดไปกับม้วนกรอ
+                เมตรมาจากต้นทางอยู่แล้ว — เติมให้อัตโนมัติ ไม่ต้องกรอกเอง (ถ้าต้นทางไม่มีค่าใช้ความยาวจาก master สินค้า) · แก้ได้ถ้าต่างจากเดิม
               </p>
             </div>
           )}

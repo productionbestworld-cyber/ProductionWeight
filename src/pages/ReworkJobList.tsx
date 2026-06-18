@@ -128,8 +128,7 @@ export async function nextReworkSeq(machine: string): Promise<number> {
 export default function ReworkJobList({ onPickJob, jumpHistory }: { onPickJob: (profile: MachineProfile, job: ReworkJob) => void; jumpHistory?: number }) {
   const [view, setView] = useState<'jobs' | 'inbox' | 'history'>('jobs')
   const [inboxCount, setInboxCount] = useState(0)
-  // ชั่งเสร็จ → เด้งไปแท็บประวัติกรออัตโนมัติ
-  useEffect(() => { if (jumpHistory) setView('history') }, [jumpHistory])
+  void jumpHistory   // ชั่งเสร็จ: ข้อมูลเข้า "ประวัติกรอ" เอง — ไม่ต้องสลับหน้าให้ (อยู่หน้าเดิม)
 
   // นับม้วนรอกรอ (queue) — แสดง badge บนแท็บ + auto refresh
   useEffect(() => {
@@ -373,8 +372,8 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
         const ic = (closeFor.item_code ?? '').trim()
         const { data: outs } = await supabase.from('production_rolls')
           .select('rework_source_roll_id').eq('item_code', ic).eq('roll_type', 'good')
-          .eq('new_system', true).not('rework_source_roll_id', 'is', null)
-        const used = new Set((outs ?? []).map((o: any) => o.rework_source_roll_id))
+          .eq('new_system', true)
+        const used = new Set((outs ?? []).map((o: any) => o.rework_source_roll_id).filter(Boolean))
         const { data: srcs } = await supabase.from('production_rolls')
           .select('id').eq('item_code', ic).eq('roll_type', 'bad').eq('rework_status', 'reworking')
         for (const s of srcs ?? []) {
@@ -412,8 +411,8 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
         const ic = (job.item_code ?? '').trim()
         const { data: outs } = await supabase.from('production_rolls')
           .select('rework_source_roll_id').eq('item_code', ic).eq('roll_type', 'good')
-          .eq('new_system', true).not('rework_source_roll_id', 'is', null)
-        const used = new Set((outs ?? []).map((o: any) => o.rework_source_roll_id))
+          .eq('new_system', true)
+        const used = new Set((outs ?? []).map((o: any) => o.rework_source_roll_id).filter(Boolean))
         const { data: srcs } = await supabase.from('production_rolls')
           .select('id').eq('item_code', ic).eq('roll_type', 'bad').eq('rework_status', 'reworking')
         for (const s of srcs ?? []) {
@@ -1088,8 +1087,7 @@ function ReworkPendingPanel({ refreshKey }: { refreshKey: number }) {
     setLoading(true)
     const data = await fetchAll(() => supabase.from('production_rolls')
       .select('id, roll_no, weight, gross_weight, core_weight, length, pcs, item_code, product_name, product_code, mat_code, customer, cust_code, lot_no, machine_no, work_order, sale_order, width_cm, width_unit, thick_mc, inspector, remark, roll_type, section, transferred, new_system, rework_source_lot, created_at')
-      .eq('roll_type', 'good').eq('new_system', true).eq('transferred', false).not('rework_source_roll_id', 'is', null)
-      .order('roll_no', { ascending: true }))
+      .eq('roll_type', 'good').eq('new_system', true).eq('transferred', false)      .order('roll_no', { ascending: true }))
     setRolls(data ?? [])
     setLoading(false)
   }
@@ -1168,8 +1166,7 @@ function ItemReworkPanel({ itemCode, itemName, onClose }: { itemCode: string; it
     setLoading(true)
     const data = await fetchAll(() => supabase.from('production_rolls')
       .select('id, roll_no, weight, gross_weight, core_weight, length, pcs, item_code, product_name, product_code, mat_code, customer, cust_code, lot_no, machine_no, work_order, sale_order, width_cm, width_unit, thick_mc, inspector, remark, roll_type, section, transferred, new_system, rework_source_lot, created_at')
-      .eq('roll_type', 'good').eq('item_code', itemCode).eq('new_system', true).not('rework_source_roll_id', 'is', null)
-      .order('roll_no', { ascending: true }))
+      .eq('roll_type', 'good').eq('item_code', itemCode).eq('new_system', true)      .order('roll_no', { ascending: true }))
     setRolls(data ?? [])
     setLoading(false)
   }
@@ -1249,8 +1246,7 @@ function ReworkHistory() {
     // ม้วนดีที่กรอออกมา (ชุดระบบใหม่ + อ้างอิงม้วนต้นทาง)
     const data = await fetchAll(() => supabase.from('production_rolls')
       .select('id, roll_no, weight, length, item_code, product_name, customer, lot_no, machine_no, work_order, sale_order, transferred, new_system, rework_source_lot, rework_source_weight, created_at')
-      .eq('roll_type', 'good').eq('new_system', true).not('rework_source_roll_id', 'is', null)
-      .order('created_at', { ascending: false }))
+      .eq('roll_type', 'good').eq('new_system', true)      .order('created_at', { ascending: false }))
     setRows(data ?? [])
     setLoading(false)
   }

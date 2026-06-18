@@ -1944,11 +1944,22 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
     if (!isRework) return
     const ic = (profile.itemCode ?? '').trim()
     if (!ic) return
+    // ถ้าผูกกับงานกรอ → โหลดเฉพาะม้วนที่เบิกเข้างานนี้ (เบิกทีละม้วน = เห็นม้วนเดียว)
+    // ถ้างานไม่มีประวัติเบิก (งานเก่า/สร้างเอง) → fallback เป็นม้วนทั้งหมดของสินค้า
+    let scopeIds: string[] | null = null
+    const jobId = (profile as any).reworkJobId
+    if (jobId) {
+      const { data: wds } = await supabase.from('rework_withdrawals').select('source_roll_id').eq('job_id', jobId)
+      const ids = [...new Set((wds ?? []).map((w: any) => w.source_roll_id).filter(Boolean))]
+      if (ids.length) scopeIds = ids
+    }
     // ม้วนเสียที่เบิกมา = bad + reworking + สินค้าเดียวกัน
-    const { data: src } = await supabase.from('production_rolls')
+    let q = supabase.from('production_rolls')
       .select('id, lot_no, roll_no, weight, core_weight, length, pcs, work_order, sale_order, remark, inbound_type, product_name, customer, width_cm, width_unit, thick_mc, machine_no, review_action_reason, review_decision_by, new_system')
       .eq('roll_type', 'bad').eq('item_code', ic).eq('rework_status', 'reworking')
       .order('created_at', { ascending: true })
+    if (scopeIds) q = q.in('id', scopeIds)
+    const { data: src } = await q
     setSrcRolls(src ?? [])
     // กรอได้สะสมต่อม้วนต้นทาง = ม้วนดีของ lot นี้ที่อ้างอิง source roll
     const { data: good } = await supabase.from('production_rolls')
@@ -1961,7 +1972,7 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
     }
     setSrcProg(prog)
   }
-  useEffect(() => { loadSrcRolls() }, [isRework, profile.itemCode, profile.lotNo])
+  useEffect(() => { loadSrcRolls() }, [isRework, profile.itemCode, profile.lotNo, (profile as any).reworkJobId])
   // ติ๊กม้วนต้นทางมาแล้วตอนเบิก → จอชั่งเลือก "ม้วนแรกที่ยังไม่ครบ" ให้อัตโนมัติ (ไม่ต้องติ๊กซ้ำ)
   //   ถ้าอยากเปลี่ยนเป็นม้วนอื่น ค่อยติ๊กเอง (override)
   // โหลดความยาวจาก master สินค้า (สำรองเมื่อต้นทางไม่เก็บ length เช่นงานเก่า)

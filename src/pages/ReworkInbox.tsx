@@ -83,9 +83,10 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
         // แยกงานตาม new_system ด้วย — ชุดใหม่/เก่าไม่ปนงานกัน
         const jobKey = `${ic}__${sizeKey}__${newSystem ? 'NS' : 'OLD'}`
         const rollKg = parseFloat((r.weight ?? 0).toFixed(2))
-        // หา job ของสินค้า+ขนาด+(ชุดใหม่/เก่า) นี้ (cache → DB)
-        let job = jobCache.get(jobKey)
-        if (!job) {
+        // ชุดระบบใหม่: เบิกทีละม้วน = 1 งาน/ม้วน (ไม่รวบหลายม้วนเข้างานเดียว)
+        // ชุดเก่า: รวบตามสินค้า+ขนาด (cache → DB) เหมือนเดิม
+        let job = newSystem ? null : (jobCache.get(jobKey) ?? null)
+        if (!job && !newSystem) {
           const { data: existing } = await supabase.from('rework_jobs').select('*')
             .eq('status', 'active').eq('source', 'from_production').eq('item_code', ic)
             .eq('width_cm', r.width_cm ?? '').eq('thick_mc', r.thick_mc ?? '')
@@ -115,9 +116,8 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
           }).select().single()
           if (cErr) throw cErr
           job = created
-          jobCache.set(jobKey, job)
         }
-        jobCache.set(jobKey, job)
+        if (!newSystem) jobCache.set(jobKey, job)   // ชุดใหม่ไม่ cache → ม้วนถัดไปสร้างงานใหม่
         // mark ม้วนต้นทาง = reworking
         await supabase.from('production_rolls').update({
           rework_status: 'reworking', rework_received_by: withdrawBy.trim(), rework_received_at: now,

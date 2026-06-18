@@ -192,6 +192,7 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
   const [closing, setClosing]       = useState(false)
   const [histItem, setHistItem]     = useState<{ code: string; name: string } | null>(null)   // drawer: ม้วนกรอที่ชั่งแล้วของ item นี้
   const [panelKey, setPanelKey]     = useState(0)   // บั๊มพ์เพื่อรีเฟรชแถบขวา (ม้วนกรอรอโอน)
+  const [layout, setLayout]         = useState<'table'|'card'>('table')   // มุมมองรายการงาน
 
   async function load() {
     setLoading(true)
@@ -509,6 +510,14 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
             </button>
           ))}
         </div>
+        <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-1 ml-auto">
+          {([['table','☰ ตาราง'],['card','▦ การ์ด']] as const).map(([k,label]) => (
+            <button key={k} onClick={()=>setLayout(k as any)}
+              className={`text-xs font-bold px-3 py-1.5 rounded transition-colors ${layout===k ? 'bg-brand-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Job grid */}
@@ -525,6 +534,65 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
                : sysFilter==='new' ? 'ไปที่แท็บ "🏭 รับจากผลิต" → ติ๊กม้วน → ติ๊ก ✨ ชุดระบบใหม่ → กดเบิก · หรือกดดู "งานเก่า" ด้านบน'
                : 'กด "+ สร้างงานใหม่" หรือ "รับจากผลิต"'}</p>
           </div>
+        </div>
+      ) : layout === 'table' ? (
+        <div className="overflow-auto flex-1 min-h-0 border border-slate-800 rounded-xl">
+          <table className="w-full text-sm">
+            <thead className="text-[10px] text-slate-500 uppercase tracking-wider bg-slate-900 sticky top-0 z-10">
+              <tr>
+                {['สินค้า','ขนาด','WO','SO','👤 ผู้เบิก','ม้วนที่','เบิกมา','กรอได้','สถานะ',''].map((h,i) => (
+                  <th key={i} className="px-3 py-2 text-left font-semibold whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/40">
+              {filtered.map(j => {
+                const p = progress[progKey(j)] ?? { rolls: 0, kg: 0 }
+                const planned = parseFloat(j.planned_qty ?? '') || 0
+                const pct = planned > 0 ? Math.min(100, Math.round((p.kg / planned) * 100)) : 0
+                const o = jobOrders[j.id]
+                const bys = o?.bys?.length ? o.bys : (j.inspector ? [j.inspector] : [])
+                const wos = o?.wos?.length ? o.wos : (j.work_order ? [j.work_order] : [])
+                const sos = o?.sos?.length ? o.sos : (j.sale_order ? [j.sale_order] : [])
+                const rolls = o?.rolls ?? []
+                return (
+                  <tr key={j.id} className={`${jobStatus==='active' ? 'hover:bg-brand-600/10 cursor-pointer' : 'hover:bg-slate-800/30'}`}
+                    onClick={() => jobStatus==='active' && openJob(j)}>
+                    <td className="px-3 py-2 max-w-[200px]">
+                      <p className="text-white font-bold text-xs truncate">{j.product_name || '—'}</p>
+                      <p className="text-slate-500 text-[10px] truncate">{j.cust_name || ''}</p>
+                    </td>
+                    <td className="px-3 py-2 text-brand-200 text-xs whitespace-nowrap">{j.width_cm ? fmtSize(j.width_cm, j.thick_mc, j.width_unit) : '—'}</td>
+                    <td className="px-3 py-2 text-orange-300 text-xs whitespace-nowrap">{wos.join(', ') || '—'}</td>
+                    <td className="px-3 py-2 text-amber-300 text-xs whitespace-nowrap">{sos.join(', ') || '—'}</td>
+                    <td className="px-3 py-2 text-sky-200 text-xs whitespace-nowrap">{bys.join(', ') || '—'}</td>
+                    <td className="px-3 py-2 text-amber-200 font-mono text-xs whitespace-nowrap">{rolls.length ? '#'+rolls.join(', #') : (j.source_roll_count ? `${j.source_roll_count} ม้วน` : '—')}</td>
+                    <td className="px-3 py-2 text-slate-300 font-bold whitespace-nowrap">{fmt(planned,1)}</td>
+                    <td className="px-3 py-2 text-green-300 font-bold whitespace-nowrap">{fmt(p.kg,1)}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {jobStatus==='closed' ? <span className="text-[10px] text-slate-400">ปิดแล้ว</span>
+                        : j.lot_no?.trim()
+                          ? <span className={`text-[10px] font-bold ${pct>=100?'text-green-400':'text-amber-400'}`}>{pct>=100?'✓ ครบ':`${pct}%`}</span>
+                          : <span className="text-[10px] text-slate-500">🆕 รอเลือกเครื่อง</span>}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                      <div className="flex gap-1">
+                        <button onClick={() => setHistItem({ code: (j.item_code ?? '').trim(), name: j.product_name ?? '' })}
+                          title="ม้วนที่ชั่งกรอแล้ว (รีปริ้น)" className="text-[10px] bg-slate-700/60 hover:bg-brand-600 text-slate-300 hover:text-white px-1.5 py-0.5 rounded">📜</button>
+                        {jobStatus==='closed' ? (
+                          <button onClick={() => reopenJob(j)} disabled={reopening===j.id}
+                            className="text-[10px] bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white px-2 py-0.5 rounded font-bold">↩</button>
+                        ) : (<>
+                          <button onClick={() => closeJob(j)} title="ปิดงาน" className="text-[10px] bg-slate-700/60 hover:bg-green-600 text-slate-300 hover:text-white px-1.5 py-0.5 rounded">✓</button>
+                          <button onClick={() => deleteJob(j)} title="ลบงาน" className="text-[10px] bg-slate-700/60 hover:bg-red-600 text-slate-300 hover:text-white px-1.5 py-0.5 rounded"><Trash2 size={10}/></button>
+                        </>)}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
       ) : (
         <div className="grid grid-cols-3 2xl:grid-cols-4 gap-2 overflow-y-auto pb-3 flex-1 min-h-0 content-start">

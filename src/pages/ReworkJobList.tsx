@@ -617,6 +617,24 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
 function PickMachineModal({ job, machines, onClose, onPick }: {
   job: ReworkJob; machines: {machine_no:string}[]; onClose: () => void; onPick: (m: string) => void
 }) {
+  const isNew = !!(job as any).new_system
+  // ชุดระบบใหม่: เช็กม้วนที่ "ยังไม่โอน" ของสินค้านี้ → ล็อกเครื่อง + บอกเลขม้วนถัดไป
+  const [info, setInfo] = useState<{ lock?: string; next: number; pending: number } | null>(null)
+  useEffect(() => {
+    if (!isNew) { setInfo({ next: 1, pending: 0 }); return }
+    const ic = (job.item_code ?? '').trim()
+    supabase.from('production_rolls')
+      .select('roll_no, machine_no')
+      .eq('item_code', ic).eq('roll_type', 'good').eq('new_system', true).eq('transferred', false)
+      .then(({ data }) => {
+        const rows = data ?? []
+        const max = Math.max(0, ...rows.map((r: any) => r.roll_no ?? 0))
+        setInfo({ lock: rows[0]?.machine_no || undefined, next: max + 1, pending: rows.length })
+      })
+  }, [])
+  // ถ้ามีม้วนค้าง → บังคับเครื่องเดิม (ชั่งเครื่องเดียว)
+  const lock = info?.lock
+  const list = lock ? machines.filter(m => m.machine_no === lock) : machines
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -624,20 +642,37 @@ function PickMachineModal({ job, machines, onClose, onPick }: {
           <p className="text-white font-bold">🔁 เลือกเครื่องสำหรับ "{job.product_name}"</p>
           <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={18}/></button>
         </div>
-        <p className="text-slate-400 text-xs mb-3">Lot <span className="font-mono text-slate-200">{job.lot_no}</span> · ใบปะหน้าจะแสดงเครื่องที่เลือก</p>
+
+        {/* ── แจ้งเตือนเลขม้วนถัดไป (ชุดระบบใหม่) ── */}
+        {isNew && info && (
+          info.pending > 0 ? (
+            <div className="bg-amber-500/15 border border-amber-500/40 rounded-xl px-3 py-2.5 mb-3 text-sm">
+              <p className="text-amber-300 font-bold">⚠ งานนี้มีม้วนค้าง {info.pending} ม้วน (ยังไม่โอน)</p>
+              <p className="text-amber-200 text-xs mt-0.5">ม้วนถัดไปจะเป็น <b className="text-base">#{info.next}</b> — ชั่งต่อจากเดิม{lock ? ` · ล็อกเครื่อง ${lock}` : ''}</p>
+            </div>
+          ) : (
+            <div className="bg-emerald-500/15 border border-emerald-500/40 rounded-xl px-3 py-2.5 mb-3 text-sm">
+              <p className="text-emerald-300 font-bold">✅ รอบก่อนโอนหมดแล้ว</p>
+              <p className="text-emerald-200 text-xs mt-0.5">ม้วนถัดไป <b className="text-base">เริ่ม #1 ใหม่</b> — เลือกเครื่องไหนก็ได้</p>
+            </div>
+          )
+        )}
+
+        <p className="text-slate-400 text-xs mb-3">Lot <span className="font-mono text-slate-200">{job.lot_no || '—'}</span> · ใบปะหน้าจะแสดงเครื่องที่เลือก</p>
 
         {machines.length === 0 ? (
           <p className="text-red-400 text-sm text-center py-4">⚠ ยังไม่มีเครื่องกรอ — ไปตั้งค่าก่อน</p>
         ) : (
           <div className="grid grid-cols-3 gap-2">
-            {machines.map(m => (
+            {list.map(m => (
               <button key={m.machine_no} onClick={() => onPick(m.machine_no)}
-                className="bg-slate-800 hover:bg-brand-600 border-2 border-slate-700 hover:border-brand-500 text-white py-4 rounded-xl font-black text-lg transition-colors">
-                {m.machine_no}
+                className={`border-2 text-white py-4 rounded-xl font-black text-lg transition-colors ${lock ? 'bg-amber-600 border-amber-400' : 'bg-slate-800 hover:bg-brand-600 border-slate-700 hover:border-brand-500'}`}>
+                {m.machine_no}{lock && ' 🔒'}
               </button>
             ))}
           </div>
         )}
+        {lock && <p className="text-[11px] text-amber-400/80 text-center mt-2">🔒 งานนี้กรออยู่เครื่อง {lock} — ต้องชั่งต่อเครื่องเดิม</p>}
       </div>
     </div>
   )

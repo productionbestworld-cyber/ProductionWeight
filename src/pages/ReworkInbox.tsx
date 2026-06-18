@@ -49,6 +49,7 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
   const [showReturn, setShowReturn] = useState<any | null>(null)  // ส่งคืนผลิต — ให้ ผจก พิจารณา
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
   const [groupBy, setGroupBy] = useState<'item' | 'wo' | 'so'>('item')   // จัดกลุ่มตาม (ค่าเริ่มต้น = สินค้า/ไซส์ — รวมข้าม WO ให้เบิกกรอต่อเนื่อง)
+  const [defaultOpen, setDefaultOpen] = useState(false)   // ยุบกลุ่มเป็นค่าเริ่มต้น (ม้วนเยอะ ดูง่าย)
   const [logRows, setLogRows] = useState<any[]>([])   // ประวัติการรับเข้ากรอ (รับไปแล้ว)
   const [showLog, setShowLog] = useState(true)
   // ── เบิกม้วน (multi-select) ──
@@ -330,6 +331,10 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
               </button>
             ))}
           </div>
+          <button onClick={() => { setOpenGroups({}); setDefaultOpen(v => !v) }}
+            className="text-xs font-bold px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800 whitespace-nowrap">
+            {defaultOpen ? '▲ ยุบทั้งหมด' : '▼ ขยายทั้งหมด'}
+          </button>
         </div>
 
         {/* List */}
@@ -373,7 +378,7 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
               <div className="divide-y divide-slate-800/50">
                 {groups.map(g => {
                   const gKey = `prod:${g.key}`
-                  const open = openGroups[gKey] ?? true
+                  const open = openGroups[gKey] ?? defaultOpen
                   const allSel = g.items.length > 0 && g.items.every(x => selected.has(x.id))
                   const rows = [...g.items].sort((a, b) =>
                     (b.rework_received_at || b.created_at || '').localeCompare(a.rework_received_at || a.created_at || ''))

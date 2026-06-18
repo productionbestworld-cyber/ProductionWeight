@@ -52,6 +52,7 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
   const [defaultOpen, setDefaultOpen] = useState(false)   // ยุบกลุ่มเป็นค่าเริ่มต้น (ม้วนเยอะ ดูง่าย)
   const [logRows, setLogRows] = useState<any[]>([])   // ประวัติการรับเข้ากรอ (รับไปแล้ว)
   const [showLog, setShowLog] = useState(true)
+  const [logSearch, setLogSearch] = useState('')      // ค้นหาใน log
   // ── เบิกม้วน (multi-select) ──
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [withdrawBy, setWithdrawBy] = useState('')
@@ -250,6 +251,12 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
   }
 
   const cat = inboundInfo(selectedType)
+
+  // ค้นหาใน log (ผู้เบิก/ม้วน/WO/SO/สินค้า/เหตุ/เครื่อง)
+  const lq = logSearch.trim().toLowerCase()
+  const filteredLog = lq ? logRows.filter(r =>
+    [r.rework_received_by, r.transferred_by, r.roll_no, r.work_order, r.sale_order, r.product_name, r.remark, r.machine_no, r.customer]
+      .some(v => (v ?? '').toString().toLowerCase().includes(lq))) : logRows
 
   return (
     <div className="bg-[#0a0f1e] p-5">
@@ -467,10 +474,10 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
             </p>
             <span className="flex items-center gap-2">
               <span className="text-slate-500 text-xs">
-                {logRows.length} รายการ · รวม {fmt(logRows.reduce((s, r) => s + (r.weight ?? 0), 0))} Kg
+                {lq ? `${filteredLog.length}/${logRows.length}` : logRows.length} รายการ · รวม {fmt(filteredLog.reduce((s, r) => s + (r.weight ?? 0), 0))} Kg
               </span>
               <span onClick={e => e.stopPropagation()}>
-                <ExportButton rows={logRows}
+                <ExportButton rows={filteredLog}
                   cols={[
                     { header:'รับเมื่อ', value: r => fmtDateTime(r.rework_received_at || r.created_at), width:18 },
                     { header:'ผู้เบิก', value: r => r.rework_received_by || r.transferred_by || '' },
@@ -496,9 +503,22 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
             logRows.length === 0 ? (
               <div className="py-10 text-center text-slate-600 text-sm">ยังไม่มีประวัติการรับเข้ากรอ</div>
             ) : (
-              <div className="overflow-x-auto">
+              <div>
+                <div className="px-3 py-2 border-b border-slate-800 bg-slate-900/40">
+                  <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"/>
+                    <input value={logSearch} onChange={e => setLogSearch(e.target.value)}
+                      placeholder="ค้นหาใน log — ผู้เบิก / ม้วน / WO / SO / สินค้า / เหตุ / เครื่อง..."
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-8 py-2 text-sm text-white outline-none focus:border-emerald-500 placeholder-slate-500"/>
+                    {logSearch && <button onClick={() => setLogSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"><X size={14}/></button>}
+                  </div>
+                </div>
+                <div className="overflow-auto max-h-[60vh]">
+                {filteredLog.length === 0 ? (
+                  <div className="py-10 text-center text-slate-600 text-sm">ไม่พบรายการที่ค้นหา "{logSearch}"</div>
+                ) : (
                 <table className="w-full text-sm">
-                  <thead className="text-[10px] text-slate-500 uppercase tracking-wider border-b border-slate-800 bg-slate-900/60">
+                  <thead className="text-[10px] text-slate-500 uppercase tracking-wider border-b border-slate-800 bg-slate-900 sticky top-0 z-10">
                     <tr>
                       {['รับเมื่อ','👤 ผู้เบิก','ม้วนที่','WO','SO','สินค้า','ขนาด','นน. (Kg)','เหตุ','เครื่องเดิม','สถานะ'].map(h => (
                         <th key={h} className="px-3 py-2 text-left font-semibold whitespace-nowrap">{h}</th>
@@ -506,7 +526,7 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/40">
-                    {logRows.map(r => {
+                    {filteredLog.map(r => {
                       const st = reworkStatusLabel(r.rework_status)
                       const sz = r.width_cm && r.thick_mc ? `${r.width_cm}${r.width_unit ?? 'cm'}×${r.thick_mc}mc` : '—'
                       return (
@@ -527,6 +547,8 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
                     })}
                   </tbody>
                 </table>
+                )}
+                </div>
               </div>
             )
           )}

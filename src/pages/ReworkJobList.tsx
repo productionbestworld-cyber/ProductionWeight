@@ -998,6 +998,9 @@ function ReworkHistory() {
     ;(groups[k] ??= []).push(r)
   }
   const keys = Object.keys(groups).sort()
+  const totRolls = filtered.length
+  const totKg = filtered.reduce((s, r) => s + (r.weight ?? 0), 0)
+  const totPending = filtered.filter(r => !r.transferred).length
 
   return (
     <div className="min-h-[calc(100vh-48px)] bg-[#0a0f1e] p-3 flex flex-col">
@@ -1037,6 +1040,24 @@ function ReworkHistory() {
           className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-10 pr-3 py-2.5 text-sm text-white outline-none focus:border-brand-500 placeholder-slate-500"/>
       </div>
 
+      {/* สรุปรวมทั้งหมด */}
+      {!loading && totRolls > 0 && (
+        <div className="grid grid-cols-4 gap-2 mb-3">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-center">
+            <p className="text-[10px] text-slate-500">สินค้า (item)</p><p className="text-lg font-black text-white">{keys.length}</p>
+          </div>
+          <div className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-center">
+            <p className="text-[10px] text-slate-500">ม้วนกรอทั้งหมด</p><p className="text-lg font-black text-brand-300">{totRolls}</p>
+          </div>
+          <div className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-center">
+            <p className="text-[10px] text-slate-500">รวมน้ำหนัก (Kg)</p><p className="text-lg font-black text-green-300">{fmt(totKg,1)}</p>
+          </div>
+          <div className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-center">
+            <p className="text-[10px] text-slate-500">ยังไม่โอน</p><p className="text-lg font-black text-amber-300">{totPending}</p>
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <p className="text-center py-20 text-slate-500">กำลังโหลด...</p>
       ) : keys.length === 0 ? (
@@ -1049,7 +1070,7 @@ function ReworkHistory() {
             const list = groups[k]
             const totKg = list.reduce((s, r) => s + (r.weight ?? 0), 0)
             const notTransferred = list.filter(r => !r.transferred).length
-            const isOpen = open[k] ?? false
+            const isOpen = open[k] ?? true
             const head = list[0]
             return (
               <div key={k} className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden">

@@ -196,23 +196,42 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
       .select('*')
       .eq('status', jobStatus)
       .order(jobStatus === 'closed' ? 'closed_at' : 'created_at', { ascending: false })
-    const list = (data ?? []) as ReworkJob[]
-    setJobs(list)
+    let list = (data ?? []) as ReworkJob[]
     // รวบ WO/SO ทั้งหมดที่เบิกเข้าแต่ละงาน (งานรวมข้ามไซส์/WO → หลาย WO·SO ต่องาน)
     const jobIds = list.map(j => j.id).filter(Boolean)
     if (jobIds.length) {
       const { data: wds } = await supabase.from('rework_withdrawals')
         .select('job_id, work_order, sale_order, withdrawn_by, source_roll_id').in('job_id', jobIds as string[])
-      // ดึงสาเหตุของม้วนต้นทางแต่ละม้วน (remark = สาเหตุที่แผนกเป่าระบุ)
+      // ดึงสาเหตุ + สถานะของม้วนต้นทางแต่ละม้วน (remark = สาเหตุที่แผนกเป่าระบุ)
       const srcIds = [...new Set((wds ?? []).map((w: any) => w.source_roll_id).filter(Boolean))]
       const reasonById: Record<string,string> = {}
       const rollNoById: Record<string,string> = {}
+      const statusById: Record<string,string> = {}
       if (srcIds.length) {
         const { data: srcs } = await supabase.from('production_rolls')
-          .select('id, remark, rework_remark, roll_no').in('id', srcIds as string[])
+          .select('id, remark, rework_remark, roll_no, rework_status').in('id', srcIds as string[])
         for (const s of srcs ?? []) {
           reasonById[(s as any).id] = ((s as any).remark || (s as any).rework_remark || '').trim()
           rollNoById[(s as any).id] = (s as any).roll_no != null ? String((s as any).roll_no) : ''
+          statusById[(s as any).id] = (s as any).rework_status ?? ''
+        }
+      }
+      // งานที่ม้วนต้นทางกรอครบหมดแล้ว (ไม่มีม้วนไหนยัง reworking) → ปิด + ซ่อนจาก "กำลังทำ"
+      if (jobStatus === 'active') {
+        const srcByJob: Record<string, string[]> = {}
+        for (const w of wds ?? []) {
+          const k = (w as any).job_id, sid = (w as any).source_roll_id
+          if (k && sid) (srcByJob[k] ??= []).push(sid)
+        }
+        const doneJobIds = Object.entries(srcByJob)
+          .filter(([, ids]) => ids.length > 0 && ids.every(id => statusById[id] && statusById[id] !== 'reworking'))
+          .map(([jid]) => jid)
+        if (doneJobIds.length) {
+          await supabase.from('rework_jobs').update({
+            status: 'closed', closed_at: new Date().toISOString(), closed_by: 'auto',
+          }).in('id', doneJobIds)
+          const doneSet = new Set(doneJobIds)
+          list = list.filter(j => !doneSet.has(j.id!))
         }
       }
       const ord: Record<string,{wos:string[],sos:string[],bys:string[],reasons:string[],rolls:string[],count:number}> = {}
@@ -233,6 +252,7 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
       for (const k in ord) ord[k].rolls.sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0))
       setJobOrders(ord)
     } else setJobOrders({})
+    setJobs(list)
     // ดึง progress (ม้วน good ของแต่ละ lot)
     // งานปกติ: แยกตาม Lot + WO (กัน 2 งานปน Lot เดียว)
     // ชุดระบบใหม่: นับรวมทั้ง Lot (เลขม้วนต่อเนื่องข้าม WO — ไม่งั้นนับไม่ครบ)

@@ -1994,6 +1994,29 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
     if (!reworkLen.trim()) setReworkLen(String(cur.length ?? '') || masterLenState)
   }, [srcRolls, srcProg, manualMode, masterLenState])
 
+  // ── Popup "ม้วนที่จะชั่ง" — เด้งตอนเข้าจอกรอ บอกเลขม้วนถัดไป/เครื่อง/ต้นทาง แล้วกดชั่งเลย ──
+  const [reworkIntro, setReworkIntro] = useState<{ next: number; src: any } | null>(null)
+  const introShownRef = useRef(false)
+  useEffect(() => {
+    if (!isRework || manualMode || introShownRef.current) return
+    const first = selSrc || srcRolls.find((s: any) => ((s.weight ?? 0) - (srcProg[s.id] ?? 0)) > 0.001)
+    if (!first) return
+    introShownRef.current = true
+    ;(async () => {
+      let next = 1
+      const ic = (profile.itemCode ?? '').trim()
+      if ((profile as any).newSystem && ic) {
+        // ชุดระบบใหม่: เลขม้วนต่อเนื่องตาม item code (ม้วนดี + ยังไม่โอน)
+        const { data } = await supabase.from('production_rolls')
+          .select('roll_no').eq('item_code', ic).eq('roll_type', 'good').eq('new_system', true).eq('transferred', false)
+        next = Math.max(0, ...(data ?? []).map((r: any) => r.roll_no ?? 0)) + 1
+      } else {
+        next = rollNo
+      }
+      setReworkIntro({ next, src: first })
+    })()
+  }, [isRework, manualMode, srcRolls, srcProg, selSrc])
+
   // กดเสร็จม้วนต้นทาง → ที่เหลือเป็นเศษ → ม้วนหายจากลิสต์ (กันชั่งซ้ำ)
   async function finishSource(s: any) {
     if (!confirm(`ม้วนต้นทาง Lot ${s.lot_no} #${s.roll_no} (${fmt(s.weight,dec)} Kg) กรอไม่ได้ → เป็นเศษทั้งม้วน?\n\nม้วนนี้จะหายจากลิสต์`)) return
@@ -2761,6 +2784,35 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
 
   return (
     <div className="h-[calc(100vh-48px)] bg-[#0a0f1e] flex flex-col">
+
+      {/* ── Popup "ม้วนที่จะชั่ง" — เด้งตอนเข้าจอกรอ พร้อมรายละเอียด แล้วกดชั่งเลย ── */}
+      {reworkIntro && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setReworkIntro(null)}>
+          <div className="bg-slate-900 border border-brand-500/40 rounded-2xl w-full max-w-md p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <p className="text-brand-300 font-bold text-sm mb-1">🔁 พร้อมชั่งม้วนกรอ</p>
+            <p className="text-white font-black text-2xl mb-3">{profile.productName}</p>
+            <div className="bg-brand-600/15 border border-brand-500/30 rounded-xl px-4 py-3 mb-3 text-center">
+              <p className="text-[11px] text-slate-400">ม้วนนี้จะเป็นม้วนที่</p>
+              <p className="text-brand-200 font-black text-4xl leading-tight">#{reworkIntro.next}</p>
+              <p className="text-[11px] text-slate-400 mt-1">ชั่งที่เครื่อง <b className="text-white">{profile.machine_no}</b></p>
+            </div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm bg-slate-800/40 rounded-xl px-4 py-3 mb-4">
+              <span className="text-slate-500">กรอจากม้วน</span>
+              <span className="text-white text-right font-mono">Lot {reworkIntro.src.lot_no} #{reworkIntro.src.roll_no}</span>
+              <span className="text-slate-500">นน. ต้นทาง</span>
+              <span className="text-white text-right font-bold">{fmt(reworkIntro.src.weight, dec)} Kg</span>
+              {!!reworkIntro.src.work_order && <><span className="text-slate-500">WO</span><span className="text-orange-300 text-right">{reworkIntro.src.work_order}</span></>}
+              {!!reworkIntro.src.sale_order && <><span className="text-slate-500">SO</span><span className="text-amber-300 text-right">{reworkIntro.src.sale_order}</span></>}
+              {!!(reworkLen.trim()) && <><span className="text-slate-500">ความยาว</span><span className="text-sky-200 text-right">{reworkLen} M.</span></>}
+              {!!(reworkCause.trim()) && <><span className="text-slate-500">สาเหตุ</span><span className="text-rose-300 text-right text-xs">{reworkCause}</span></>}
+            </div>
+            <button onClick={() => setReworkIntro(null)}
+              className="w-full bg-brand-600 hover:bg-brand-500 text-white py-3.5 rounded-xl font-black text-lg">
+              ⚖️ ชั่งม้วนนี้เลย
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-2.5 bg-slate-900 border-b border-slate-800 shrink-0">

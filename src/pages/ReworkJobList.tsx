@@ -1082,6 +1082,7 @@ function ReworkPendingPanel({ refreshKey }: { refreshKey: number }) {
   const [rolls, setRolls] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [printing, setPrinting] = useState<string | null>(null)
+  const [detail, setDetail] = useState<any | null>(null)
 
   async function load() {
     setLoading(true)
@@ -1109,7 +1110,7 @@ function ReworkPendingPanel({ refreshKey }: { refreshKey: number }) {
     <aside className="hidden xl:flex w-[360px] shrink-0 bg-slate-950 border-l border-slate-800 flex-col h-full">
       <div className="px-4 py-3 border-b border-slate-800 bg-slate-900">
         <p className="text-white font-bold">📜 ม้วนกรอที่ชั่งแล้ว · รอโอน</p>
-        <p className="text-slate-400 text-xs mt-0.5">{rolls.length} ม้วน · {fmt(totKg,1)} Kg — หายเมื่อโอนงานออก · กดรีปริ้นได้</p>
+        <p className="text-slate-400 text-xs mt-0.5">{rolls.length} ม้วน · {fmt(totKg,1)} Kg — หายเมื่อโอนงานออก · แตะม้วนดูรายละเอียด/รีปริ้น</p>
       </div>
       <div className="flex-1 overflow-y-auto p-2.5 space-y-3">
         {loading ? (
@@ -1127,32 +1128,72 @@ function ReworkPendingPanel({ refreshKey }: { refreshKey: number }) {
               </div>
               <div className="space-y-1.5">
                 {list.map(r => (
-                  <div key={r.id} className="bg-emerald-500/5 border border-emerald-500/25 rounded-lg px-2.5 py-1.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-white font-black text-sm">#{r.roll_no} <span className="text-slate-400 font-normal">· {fmt(r.weight,2)} Kg</span></p>
-                        <p className="text-slate-500 text-[10px] truncate">
-                          {r.machine_no || '—'}{r.length ? ` · ${r.length} M.` : ''}{r.work_order ? ` · WO ${r.work_order}` : ''}
-                          {r.rework_source_lot ? ` · จาก ${r.rework_source_lot}` : ''}
-                        </p>
-                      </div>
-                      <div className="flex gap-1 shrink-0">
-                        <button onClick={() => doReprint(r, 'long')} disabled={!!printing}
-                          title="รีปริ้นใบยาว" className="text-[10px] bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white px-1.5 py-1 rounded font-bold">
-                          {printing === r.id+'long' ? '...' : '🖨ยาว'}</button>
-                        <button onClick={() => doReprint(r, 'short')} disabled={!!printing}
-                          title="รีปริ้นใบสั้น" className="text-[10px] bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white px-1.5 py-1 rounded font-bold">
-                          {printing === r.id+'short' ? '...' : '🖨สั้น'}</button>
-                      </div>
-                    </div>
-                  </div>
+                  <button key={r.id} onClick={() => setDetail(r)}
+                    className="w-full text-left bg-emerald-500/5 border border-emerald-500/25 hover:border-emerald-400 rounded-lg px-2.5 py-1.5 transition-colors">
+                    <p className="text-white font-black text-sm">#{r.roll_no} <span className="text-slate-400 font-normal">· {fmt(r.weight,2)} Kg</span> <span className="text-slate-600 text-[10px] font-normal">· แตะดูรายละเอียด</span></p>
+                    <p className="text-slate-500 text-[10px] truncate">
+                      {r.machine_no || '—'}{r.length ? ` · ${r.length} M.` : ''}{r.work_order ? ` · WO ${r.work_order}` : ''}
+                      {r.rework_source_lot ? ` · จาก ${r.rework_source_lot}` : ''}
+                    </p>
+                  </button>
                 ))}
               </div>
             </div>
           )
         })}
       </div>
+      {detail && <RollDetailModal roll={detail} onClose={() => setDetail(null)} doReprint={doReprint} printing={printing} />}
     </aside>
+  )
+}
+
+// ── popup รายละเอียดม้วนกรอ + รีปริ้น (คล้ายฝั่งผลิตกดที่ม้วน) ──────────────────
+function RollDetailModal({ roll: r, onClose, doReprint, printing }: { roll: any; onClose: () => void; doReprint: (r:any,s:'long'|'short')=>void; printing: string | null }) {
+  const rows: [string, any][] = [
+    ['ม้วนที่', `#${r.roll_no}`],
+    ['น้ำหนักสุทธิ', `${fmt(r.weight,2)} Kg`],
+    ['น้ำหนักเต็ม', `${fmt((r.weight ?? 0) + (r.core_weight ?? 0),2)} Kg`],
+    ['แกน', `${fmt(r.core_weight ?? 0,2)} Kg`],
+    ['ความยาว', r.length ? `${r.length} M.` : '—'],
+    ['Lot กรอ', r.lot_no || '—'],
+    ['เครื่อง', r.machine_no || '—'],
+    ['WO', r.work_order || '—'],
+    ['SO', r.sale_order || '—'],
+    ['กรอจาก Lot', r.rework_source_lot || '—'],
+    ['ลูกค้า', r.customer || '—'],
+    ['ผู้ตรวจ', r.inspector || '—'],
+    ['ชั่งเมื่อ', r.created_at ? new Date(r.created_at).toLocaleString('th-TH') : '—'],
+    ['สถานะ', r.transferred ? 'โอนแล้ว' : 'ยังไม่โอน'],
+  ]
+  return (
+    <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+          <p className="text-white font-bold">ม้วนที่ #{r.roll_no} · {fmt(r.weight,2)} Kg</p>
+          <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={18}/></button>
+        </div>
+        <div className="px-4 py-3 max-h-[55vh] overflow-y-auto">
+          <p className="text-white font-bold text-sm mb-2">{r.product_name || r.item_code}</p>
+          <div className="space-y-1 text-sm">
+            {rows.map(([k,v]) => (
+              <div key={k} className="flex justify-between gap-3 border-b border-slate-800/50 py-1">
+                <span className="text-slate-500 shrink-0">{k}</span>
+                <span className="text-slate-200 text-right">{v}</span>
+              </div>
+            ))}
+          </div>
+          {r.remark && <p className="text-rose-300/80 text-xs mt-2">⚠ {r.remark}</p>}
+        </div>
+        <div className="flex gap-2 px-4 py-3 border-t border-slate-800">
+          <button onClick={() => doReprint(r, 'long')} disabled={!!printing}
+            className="flex-1 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white py-2.5 rounded-xl font-bold text-sm">
+            {printing === r.id+'long' ? 'กำลังพิมพ์...' : '🖨 รีปริ้นใบยาว'}</button>
+          <button onClick={() => doReprint(r, 'short')} disabled={!!printing}
+            className="flex-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white py-2.5 rounded-xl font-bold text-sm">
+            {printing === r.id+'short' ? 'กำลังพิมพ์...' : '🖨 รีปริ้นใบสั้น'}</button>
+        </div>
+      </div>
+    </div>
   )
 }
 

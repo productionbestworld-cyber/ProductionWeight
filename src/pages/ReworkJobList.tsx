@@ -125,7 +125,7 @@ export async function nextReworkSeq(machine: string): Promise<number> {
 }
 
 export default function ReworkJobList({ onPickJob }: { onPickJob: (profile: MachineProfile, job: ReworkJob) => void }) {
-  const [view, setView] = useState<'jobs' | 'inbox'>('jobs')
+  const [view, setView] = useState<'jobs' | 'inbox' | 'history'>('jobs')
   const [inboxCount, setInboxCount] = useState(0)
 
   // นับม้วนรอกรอ (queue) — แสดง badge บนแท็บ + auto refresh
@@ -150,6 +150,7 @@ export default function ReworkJobList({ onPickJob }: { onPickJob: (profile: Mach
         {([
           { key: 'jobs',  label: '🔁 งานกรอ (ชั่งน้ำหนัก)' },
           { key: 'inbox', label: '🏭 รับจากผลิต' },
+          { key: 'history', label: '📜 ประวัติกรอ (ตาม item)' },
         ] as const).map(t => (
           <button key={t.key} onClick={() => setView(t.key)}
             className={`relative px-4 py-2 rounded-t-lg text-sm font-bold transition-colors ${
@@ -165,7 +166,9 @@ export default function ReworkJobList({ onPickJob }: { onPickJob: (profile: Mach
         ))}
       </div>
       <div className="flex-1 min-h-0">
-        {view === 'jobs' ? <JobListView onPickJob={onPickJob} /> : <ReworkInbox />}
+        {view === 'jobs' ? <JobListView onPickJob={onPickJob} />
+          : view === 'inbox' ? <ReworkInbox />
+          : <ReworkHistory />}
       </div>
     </div>
   )
@@ -960,6 +963,153 @@ function CreateJobModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── ประวัติการกรอ: ม้วนที่ชั่งกรอเสร็จแล้ว จัดกลุ่มตาม item code ──────────────
+function ReworkHistory() {
+  const [rows, setRows] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [open, setOpen] = useState<Record<string, boolean>>({})
+
+  async function load() {
+    setLoading(true)
+    // ม้วนดีที่กรอออกมา (ชุดระบบใหม่ + อ้างอิงม้วนต้นทาง)
+    const data = await fetchAll(() => supabase.from('production_rolls')
+      .select('id, roll_no, weight, length, item_code, product_name, customer, lot_no, machine_no, work_order, sale_order, transferred, new_system, rework_source_lot, rework_source_weight, created_at')
+      .eq('roll_type', 'good').eq('new_system', true).not('rework_source_roll_id', 'is', null)
+      .order('created_at', { ascending: false }))
+    setRows(data ?? [])
+    setLoading(false)
+  }
+  useEffect(() => { load() }, [])
+
+  const q = search.trim().toLowerCase()
+  const filtered = q ? rows.filter(r =>
+    [r.item_code, r.product_name, r.customer, r.lot_no, r.work_order, r.sale_order]
+      .some(v => (v ?? '').toString().toLowerCase().includes(q))) : rows
+
+  // จัดกลุ่มตาม item_code
+  const groups: Record<string, any[]> = {}
+  for (const r of filtered) {
+    const k = (r.item_code ?? '').trim() || '(ไม่ระบุ item)'
+    ;(groups[k] ??= []).push(r)
+  }
+  const keys = Object.keys(groups).sort()
+
+  return (
+    <div className="min-h-[calc(100vh-48px)] bg-[#0a0f1e] p-3 flex flex-col">
+      <div className="flex items-center justify-between mb-3 gap-2">
+        <div>
+          <h1 className="text-white font-bold text-xl">📜 ประวัติการกรอ (ตาม item)</h1>
+          <p className="text-slate-400 text-sm mt-0.5">ม้วนที่ชั่งกรอเสร็จแล้ว — รวมยอดต่อสินค้า · เลขม้วนต่อเนื่องตาม item code</p>
+        </div>
+        <div className="flex gap-2">
+          <ExportButton rows={filtered}
+            cols={[
+              { header:'Item Code', value: (r:any) => r.item_code ?? '' },
+              { header:'สินค้า', value:'product_name', width:30 },
+              { header:'ลูกค้า', value: (r:any) => r.customer ?? '', width:24 },
+              { header:'ม้วนที่', value: (r:any) => r.roll_no ?? '' },
+              { header:'นน. (Kg)', value: (r:any) => r.weight ?? '' },
+              { header:'ความยาว (M)', value: (r:any) => r.length ?? '' },
+              { header:'Lot กรอ', value:'lot_no', width:16 },
+              { header:'เครื่อง', value: (r:any) => r.machine_no ?? '' },
+              { header:'WO', value: (r:any) => r.work_order ?? '' },
+              { header:'SO', value: (r:any) => r.sale_order ?? '' },
+              { header:'มาจาก Lot', value: (r:any) => r.rework_source_lot ?? '' },
+              { header:'โอนแล้ว', value: (r:any) => r.transferred ? 'โอนแล้ว' : 'ยังไม่โอน' },
+              { header:'ชั่งเมื่อ', value: (r:any) => r.created_at ? new Date(r.created_at).toLocaleString('th-TH') : '', width:18 },
+            ]}
+            fileName="ประวัติกรอ" sheetName="ประวัติกรอ" />
+          <button onClick={load} className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 px-3 py-2 rounded-lg text-sm flex items-center gap-1.5">
+            <RefreshCw size={14}/>
+          </button>
+        </div>
+      </div>
+
+      <div className="relative mb-3">
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"/>
+        <input value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="ค้นหา item/สินค้า/ลูกค้า/Lot/WO/SO..."
+          className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-10 pr-3 py-2.5 text-sm text-white outline-none focus:border-brand-500 placeholder-slate-500"/>
+      </div>
+
+      {loading ? (
+        <p className="text-center py-20 text-slate-500">กำลังโหลด...</p>
+      ) : keys.length === 0 ? (
+        <div className="flex-1 flex items-center justify-center text-center text-slate-500">
+          <div><p className="text-4xl mb-2">📜</p><p>ยังไม่มีประวัติการกรอ</p></div>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto space-y-2 pb-3">
+          {keys.map(k => {
+            const list = groups[k]
+            const totKg = list.reduce((s, r) => s + (r.weight ?? 0), 0)
+            const notTransferred = list.filter(r => !r.transferred).length
+            const isOpen = open[k] ?? false
+            const head = list[0]
+            return (
+              <div key={k} className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden">
+                <button onClick={() => setOpen(o => ({ ...o, [k]: !isOpen }))}
+                  className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-slate-800/50 text-left">
+                  <div className="min-w-0">
+                    <p className="text-white font-bold text-sm truncate">
+                      <span className="text-slate-500">{isOpen ? '▾' : '▸'} </span>
+                      {head.product_name || k}
+                    </p>
+                    <p className="text-slate-400 text-xs font-mono">{k} · {head.customer || ''}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {notTransferred > 0 && <span className="text-[10px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 px-2 py-0.5 rounded font-bold">ค้าง {notTransferred}</span>}
+                    <span className="text-xs text-slate-300 font-bold">{list.length} ม้วน · {fmt(totKg,1)} Kg</span>
+                  </div>
+                </button>
+                {isOpen && (
+                  <div className="overflow-x-auto border-t border-slate-800">
+                    <table className="w-full text-xs">
+                      <thead><tr className="text-slate-500 bg-slate-800/40">
+                        <th className="px-2 py-1.5 text-left">ม้วนที่</th>
+                        <th className="px-2 py-1.5 text-right">นน.(Kg)</th>
+                        <th className="px-2 py-1.5 text-right">ยาว(M)</th>
+                        <th className="px-2 py-1.5 text-left">Lot กรอ</th>
+                        <th className="px-2 py-1.5 text-left">เครื่อง</th>
+                        <th className="px-2 py-1.5 text-left">WO</th>
+                        <th className="px-2 py-1.5 text-left">SO</th>
+                        <th className="px-2 py-1.5 text-left">มาจาก Lot</th>
+                        <th className="px-2 py-1.5 text-left">ชั่งเมื่อ</th>
+                        <th className="px-2 py-1.5 text-center">สถานะ</th>
+                      </tr></thead>
+                      <tbody>
+                        {list.map(r => (
+                          <tr key={r.id} className="border-t border-slate-800/60 text-slate-200">
+                            <td className="px-2 py-1.5 font-black text-amber-200">#{r.roll_no}</td>
+                            <td className="px-2 py-1.5 text-right font-mono">{fmt(r.weight,2)}</td>
+                            <td className="px-2 py-1.5 text-right font-mono text-sky-200">{r.length || '—'}</td>
+                            <td className="px-2 py-1.5 font-mono text-slate-400">{r.lot_no || '—'}</td>
+                            <td className="px-2 py-1.5">{r.machine_no || '—'}</td>
+                            <td className="px-2 py-1.5 text-orange-300">{r.work_order || '—'}</td>
+                            <td className="px-2 py-1.5 text-amber-300">{r.sale_order || '—'}</td>
+                            <td className="px-2 py-1.5 font-mono text-slate-400">{r.rework_source_lot || '—'}</td>
+                            <td className="px-2 py-1.5 text-slate-400 whitespace-nowrap">{r.created_at ? new Date(r.created_at).toLocaleString('th-TH', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—'}</td>
+                            <td className="px-2 py-1.5 text-center">
+                              {r.transferred
+                                ? <span className="text-[10px] text-slate-400">โอนแล้ว</span>
+                                : <span className="text-[10px] bg-emerald-500/15 text-emerald-300 px-1.5 py-0.5 rounded font-bold">ยังไม่โอน</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

@@ -2558,6 +2558,22 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         }).eq('id', useSrc.id)
         setSelSrc(null)
         setSrcRolls(prev => prev.filter(x => x.id !== useSrc.id))
+        // ม้วนต้นทางของงานนี้กรอครบหมดแล้ว → ปิดงานอัตโนมัติ (ออกจาก "กำลังทำ" → จบงานแล้ว)
+        if (reworkJobId) {
+          try {
+            const { data: wds } = await supabase.from('rework_withdrawals').select('source_roll_id').eq('job_id', reworkJobId)
+            const ids = [...new Set((wds ?? []).map((w: any) => w.source_roll_id).filter(Boolean))]
+            if (ids.length) {
+              const { data: remain } = await supabase.from('production_rolls')
+                .select('id').in('id', ids as string[]).eq('rework_status', 'reworking')
+              if (!remain || remain.length === 0) {
+                await supabase.from('rework_jobs').update({
+                  status: 'closed', closed_at: new Date().toISOString(), closed_by: inspector || 'auto',
+                }).eq('id', reworkJobId)
+              }
+            }
+          } catch (e: any) { console.warn('auto-close job err (non-fatal):', e?.message ?? e) }
+        }
       }
       // ม้วนนอกระบบ: บวกเบิกมาเข้าเป้างาน (ให้คิดเศษถูก) + เคลียร์ช่องสำหรับม้วนถัดไป
       if (useManual && reworkJobId && inserted) {

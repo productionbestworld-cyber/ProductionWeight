@@ -439,9 +439,8 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
   }
 
   return (
-    <div className="min-h-[calc(100vh-48px)] bg-[#0a0f1e] p-3 flex flex-col xl:pr-[372px]">
-      {/* แถบขวาถาวร: ม้วนกรอที่ชั่งแล้ว (รอโอน) — หายเมื่อโอนออก */}
-      <ReworkPendingPanel refreshKey={panelKey} />
+    <div className="h-[calc(100vh-48px)] bg-[#0a0f1e] flex overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 p-3">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div>
@@ -528,7 +527,7 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-3 2xl:grid-cols-4 gap-2 overflow-y-auto pb-3">
+        <div className="grid grid-cols-3 2xl:grid-cols-4 gap-2 overflow-y-auto pb-3 flex-1 min-h-0 content-start">
           {filtered.map(j => {
             const p = progress[progKey(j)] ?? { rolls: 0, kg: 0 }
             const planned = parseFloat(j.planned_qty ?? '') || 0
@@ -658,6 +657,9 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
           })}
         </div>
       )}
+      </div>
+      {/* แถบขวาถาวร: ม้วนกรอที่ชั่งแล้ว (รอโอน) — หายเมื่อโอนออก */}
+      <ReworkPendingPanel refreshKey={panelKey} />
 
       {histItem && <ItemReworkPanel itemCode={histItem.code} itemName={histItem.name} onClose={() => setHistItem(null)} />}
 
@@ -1027,7 +1029,7 @@ function ReworkPendingPanel({ refreshKey }: { refreshKey: number }) {
   const totKg = rolls.reduce((s, r) => s + (r.weight ?? 0), 0)
 
   return (
-    <aside className="hidden xl:flex fixed top-12 right-0 bottom-0 w-[360px] bg-slate-950 border-l border-slate-800 flex-col z-20">
+    <aside className="hidden xl:flex w-[360px] shrink-0 bg-slate-950 border-l border-slate-800 flex-col h-full">
       <div className="px-4 py-3 border-b border-slate-800 bg-slate-900">
         <p className="text-white font-bold">📜 ม้วนกรอที่ชั่งแล้ว · รอโอน</p>
         <p className="text-slate-400 text-xs mt-0.5">{rolls.length} ม้วน · {fmt(totKg,1)} Kg — หายเมื่อโอนงานออก · กดรีปริ้นได้</p>

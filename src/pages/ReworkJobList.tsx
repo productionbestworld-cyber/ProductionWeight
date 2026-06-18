@@ -182,7 +182,7 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
   const [pickFor, setPickFor]       = useState<ReworkJob | null>(null)
   const [machines, setMachines]     = useState<{machine_no:string}[]>([])
   const [progress, setProgress]     = useState<Record<string,{rolls:number,kg:number}>>({})
-  const [jobOrders, setJobOrders]   = useState<Record<string,{wos:string[],sos:string[],bys:string[],reasons:string[],count:number}>>({})   // job.id → WO/SO/ผู้เบิก/สาเหตุ ทั้งหมดที่เบิกเข้างานนี้
+  const [jobOrders, setJobOrders]   = useState<Record<string,{wos:string[],sos:string[],bys:string[],reasons:string[],rolls:string[],count:number}>>({})   // job.id → WO/SO/ผู้เบิก/สาเหตุ/เลขม้วน ทั้งหมดที่เบิกเข้างานนี้
   const [closeFor, setCloseFor]     = useState<ReworkJob | null>(null)
   const [closeBy, setCloseBy]       = useState('')
   const [closing, setClosing]       = useState(false)
@@ -203,23 +203,31 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
       // ดึงสาเหตุของม้วนต้นทางแต่ละม้วน (remark = สาเหตุที่แผนกเป่าระบุ)
       const srcIds = [...new Set((wds ?? []).map((w: any) => w.source_roll_id).filter(Boolean))]
       const reasonById: Record<string,string> = {}
+      const rollNoById: Record<string,string> = {}
       if (srcIds.length) {
         const { data: srcs } = await supabase.from('production_rolls')
-          .select('id, remark, rework_remark').in('id', srcIds as string[])
-        for (const s of srcs ?? []) reasonById[(s as any).id] = ((s as any).remark || (s as any).rework_remark || '').trim()
+          .select('id, remark, rework_remark, roll_no').in('id', srcIds as string[])
+        for (const s of srcs ?? []) {
+          reasonById[(s as any).id] = ((s as any).remark || (s as any).rework_remark || '').trim()
+          rollNoById[(s as any).id] = (s as any).roll_no != null ? String((s as any).roll_no) : ''
+        }
       }
-      const ord: Record<string,{wos:string[],sos:string[],bys:string[],reasons:string[],count:number}> = {}
+      const ord: Record<string,{wos:string[],sos:string[],bys:string[],reasons:string[],rolls:string[],count:number}> = {}
       for (const w of wds ?? []) {
         const k = w.job_id; if (!k) continue
-        if (!ord[k]) ord[k] = { wos: [], sos: [], bys: [], reasons: [], count: 0 }
+        if (!ord[k]) ord[k] = { wos: [], sos: [], bys: [], reasons: [], rolls: [], count: 0 }
         ord[k].count++
         const wo = (w.work_order ?? '').trim(); const so = (w.sale_order ?? '').trim()
         const by = ((w as any).withdrawn_by ?? '').trim(); const rs = reasonById[(w as any).source_roll_id] ?? ''
+        const rn = rollNoById[(w as any).source_roll_id] ?? ''
         if (wo && !ord[k].wos.includes(wo)) ord[k].wos.push(wo)
         if (so && !ord[k].sos.includes(so)) ord[k].sos.push(so)
         if (by && !ord[k].bys.includes(by)) ord[k].bys.push(by)
         if (rs && !ord[k].reasons.includes(rs)) ord[k].reasons.push(rs)
+        if (rn && !ord[k].rolls.includes(rn)) ord[k].rolls.push(rn)
       }
+      // เรียงเลขม้วนจากน้อยไปมาก
+      for (const k in ord) ord[k].rolls.sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0))
       setJobOrders(ord)
     } else setJobOrders({})
     // ดึง progress (ม้วน good ของแต่ละ lot)
@@ -557,6 +565,10 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
                         <span className="text-slate-500">Mat</span><span className="text-slate-200 font-mono text-right truncate">{j.mat_code || '—'}</span>
                         <span className="text-slate-500">👤 ผู้เบิก</span><span className="text-sky-200 text-right truncate font-bold">{bys.length ? bys.join(', ') : '—'}</span>
                         <span className="text-slate-500">ม้วนเบิกมา</span><span className="text-slate-200 text-right truncate">{cnt ? `${cnt} ม้วน` : '—'}</span>
+                        {!!o?.rolls?.length && <>
+                          <span className="text-slate-500">ม้วนที่</span>
+                          <span className="text-amber-200 text-right font-mono line-clamp-2">#{o.rolls.join(', #')}</span>
+                        </>}
                       </div>
                     )
                   })()}

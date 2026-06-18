@@ -546,7 +546,13 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/40">
-              {filtered.map(j => {
+              {(() => {
+                // จัดกลุ่มตาม item — เมื่อมีหลายสินค้าจะมีหัวกลุ่มคั่นให้ดูง่าย
+                const grp: Record<string, ReworkJob[]> = {}
+                for (const j of filtered) { const k = (j.item_code ?? '').trim() || '(ไม่ระบุ)'; (grp[k] ??= []).push(j) }
+                const gkeys = Object.keys(grp).sort()
+                const multi = gkeys.length > 1
+                const renderRow = (j: ReworkJob) => {
                 const p = progress[progKey(j)] ?? { rolls: 0, kg: 0 }
                 const planned = parseFloat(j.planned_qty ?? '') || 0
                 const pct = planned > 0 ? Math.min(100, Math.round((p.kg / planned) * 100)) : 0
@@ -589,7 +595,23 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
                     </td>
                   </tr>
                 )
-              })}
+                }
+                if (!multi) return filtered.map(renderRow)
+                return gkeys.flatMap(k => {
+                  const gj = grp[k]
+                  const gPlanned = gj.reduce((s, j) => s + (parseFloat(j.planned_qty ?? '') || 0), 0)
+                  const gKg = gj.reduce((s, j) => s + (progress[progKey(j)]?.kg ?? 0), 0)
+                  return [
+                    <tr key={'h'+k} className="bg-slate-800/70 sticky">
+                      <td colSpan={10} className="px-3 py-1.5 text-xs font-bold text-brand-200">
+                        📦 {gj[0].product_name || k} <span className="text-slate-500 font-mono font-normal">· {k}</span>
+                        <span className="text-slate-400 font-normal"> — {gj.length} งาน · เบิกรวม {fmt(gPlanned,1)} · กรอได้ {fmt(gKg,1)} kg</span>
+                      </td>
+                    </tr>,
+                    ...gj.map(renderRow),
+                  ]
+                })
+              })()}
             </tbody>
           </table>
         </div>

@@ -2617,23 +2617,28 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         }).eq('id', useSrc.id)
         setSelSrc(null)
         setSrcRolls(prev => prev.filter(x => x.id !== useSrc.id))
-        // ม้วนต้นทางของงานนี้กรอครบหมดแล้ว → ปิดงานอัตโนมัติ (ออกจาก "กำลังทำ" → จบงานแล้ว)
-        if (reworkJobId) {
-          try {
-            const { data: wds } = await supabase.from('rework_withdrawals').select('source_roll_id').eq('job_id', reworkJobId)
-            const ids = [...new Set((wds ?? []).map((w: any) => w.source_roll_id).filter(Boolean))]
-            if (ids.length) {
-              const { data: remain } = await supabase.from('production_rolls')
-                .select('id').in('id', ids as string[]).eq('rework_status', 'reworking')
-              if (!remain || remain.length === 0) {
-                await supabase.from('rework_jobs').update({
-                  status: 'closed', closed_at: new Date().toISOString(), closed_by: inspector || 'auto',
-                }).eq('id', reworkJobId)
-                jobDoneAutoExit = true   // งานนี้กรอครบ → เด้งกลับรายการงานหลังปริ้นเสร็จ
-              }
-            }
-          } catch (e: any) { console.warn('auto-close job err (non-fatal):', e?.message ?? e) }
-        }
+      }
+      // ปิดงาน + เด้งออกอัตโนมัติ — ทำทุกครั้งที่ชั่งม้วนกรอสำเร็จ (แม้ไม่ได้ติ๊กม้วนต้นทาง)
+      //   เงื่อนไข: งานนี้ไม่มีม้วนต้นทางที่ยัง "reworking" เหลือ → ถือว่าจบ
+      if (isRework && isGood && inserted && reworkJobId) {
+        try {
+          const { data: wds } = await supabase.from('rework_withdrawals').select('source_roll_id').eq('job_id', reworkJobId)
+          const ids = [...new Set((wds ?? []).map((w: any) => w.source_roll_id).filter(Boolean))]
+          let remainCount = 1
+          if (ids.length) {
+            const { data: remain } = await supabase.from('production_rolls')
+              .select('id').in('id', ids as string[]).eq('rework_status', 'reworking')
+            remainCount = remain?.length ?? 0
+          } else {
+            remainCount = 0   // งานไม่มีม้วนต้นทางผูกไว้ (เช่นชั่งนอกระบบ) → ชั่งเสร็จถือว่าจบ
+          }
+          if (remainCount === 0) {
+            await supabase.from('rework_jobs').update({
+              status: 'closed', closed_at: new Date().toISOString(), closed_by: inspector || 'auto',
+            }).eq('id', reworkJobId)
+            jobDoneAutoExit = true   // เด้งกลับรายการงานหลังปริ้นเสร็จ
+          }
+        } catch (e: any) { console.warn('auto-close job err (non-fatal):', e?.message ?? e) }
       }
       // ม้วนนอกระบบ: บวกเบิกมาเข้าเป้างาน (ให้คิดเศษถูก) + เคลียร์ช่องสำหรับม้วนถัดไป
       if (useManual && reworkJobId && inserted) {

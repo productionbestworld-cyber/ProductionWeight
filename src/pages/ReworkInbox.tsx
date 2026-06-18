@@ -468,13 +468,17 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
                 <ExportButton rows={logRows}
                   cols={[
                     { header:'รับเมื่อ', value: r => fmtDateTime(r.rework_received_at || r.created_at), width:18 },
-                    { header:'เครื่องเดิม', value:'machine_no' },
-                    { header:'Lot', value:'lot_no', width:16 },
+                    { header:'ผู้เบิก', value: r => r.rework_received_by || r.transferred_by || '' },
+                    { header:'ม้วนที่', value:'roll_no' },
+                    { header:'WO', value:'work_order' },
+                    { header:'SO', value:'sale_order' },
                     { header:'สินค้า', value:'product_name', width:30 },
+                    { header:'ขนาด', value: r => r.width_cm && r.thick_mc ? `${r.width_cm}${r.width_unit ?? 'cm'}×${r.thick_mc}mc` : '', width:14 },
                     { header:'ลูกค้า', value:'customer', width:24 },
                     { header:'น้ำหนัก (kg)', value:'weight' },
+                    { header:'เหตุ', value:'remark', width:24 },
+                    { header:'เครื่องเดิม', value:'machine_no' },
                     { header:'สถานะ', value: r => reworkStatusLabel(r.rework_status).txt.replace(/[^฀-๿a-zA-Z ]/g,'').trim() },
-                    { header:'ผู้รับ', value: r => r.rework_received_by || r.transferred_by || '' },
                   ]}
                   fileName="ประวัติรับเข้ากรอ" sheetName="Log รับกรอ"
                   label="📥 Export Log"
@@ -491,7 +495,7 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
                 <table className="w-full text-sm">
                   <thead className="text-[10px] text-slate-500 uppercase tracking-wider border-b border-slate-800 bg-slate-900/60">
                     <tr>
-                      {['รับเมื่อ','เครื่องเดิม','Lot','สินค้า','ลูกค้า','นน. (Kg)','สถานะ','ผู้รับ'].map(h => (
+                      {['รับเมื่อ','👤 ผู้เบิก','ม้วนที่','WO','SO','สินค้า','ขนาด','นน. (Kg)','เหตุ','เครื่องเดิม','สถานะ'].map(h => (
                         <th key={h} className="px-3 py-2 text-left font-semibold whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -499,16 +503,20 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
                   <tbody className="divide-y divide-slate-800/40">
                     {logRows.map(r => {
                       const st = reworkStatusLabel(r.rework_status)
+                      const sz = r.width_cm && r.thick_mc ? `${r.width_cm}${r.width_unit ?? 'cm'}×${r.thick_mc}mc` : '—'
                       return (
                         <tr key={r.id} className="hover:bg-slate-800/30">
                           <td className="px-3 py-1.5 text-slate-400 whitespace-nowrap text-xs">{fmtDateTime(r.rework_received_at || r.created_at)}</td>
-                          <td className="px-3 py-1.5 text-white font-bold whitespace-nowrap">{r.machine_no || '—'}</td>
-                          <td className="px-3 py-1.5 text-slate-300 font-mono text-xs whitespace-nowrap">{r.lot_no || '—'}</td>
-                          <td className="px-3 py-1.5 text-slate-300 text-xs max-w-[200px] truncate" title={r.product_name}>{r.product_name || '—'}</td>
-                          <td className="px-3 py-1.5 text-slate-400 text-xs max-w-[140px] truncate" title={r.customer}>{r.customer || '—'}</td>
+                          <td className="px-3 py-1.5 whitespace-nowrap"><span className="text-emerald-300 font-bold text-xs bg-emerald-500/10 px-2 py-0.5 rounded">{r.rework_received_by || r.transferred_by || '—'}</span></td>
+                          <td className="px-3 py-1.5 text-white font-bold whitespace-nowrap">#{r.roll_no ?? '—'}</td>
+                          <td className="px-3 py-1.5 text-amber-300 text-xs whitespace-nowrap">{r.work_order || '—'}</td>
+                          <td className="px-3 py-1.5 text-blue-300 text-xs whitespace-nowrap">{r.sale_order || '—'}</td>
+                          <td className="px-3 py-1.5 text-slate-300 text-xs max-w-[180px] truncate" title={r.product_name}>{r.product_name || '—'}</td>
+                          <td className="px-3 py-1.5 text-brand-300 text-xs whitespace-nowrap">{sz}</td>
                           <td className="px-3 py-1.5 text-orange-300 font-bold whitespace-nowrap">{fmt(r.weight)}</td>
+                          <td className="px-3 py-1.5 text-rose-300/80 text-xs max-w-[160px] truncate" title={r.remark}>{r.remark || '—'}</td>
+                          <td className="px-3 py-1.5 text-slate-400 font-bold whitespace-nowrap">{r.machine_no || '—'}</td>
                           <td className="px-3 py-1.5"><span className={`text-[10px] font-bold px-2 py-0.5 rounded whitespace-nowrap ${st.cls}`}>{st.txt}</span></td>
-                          <td className="px-3 py-1.5 text-slate-300 text-xs whitespace-nowrap">{r.rework_received_by || r.transferred_by || '—'}</td>
                         </tr>
                       )
                     })}

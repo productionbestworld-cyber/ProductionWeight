@@ -243,6 +243,39 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
   useEffect(() => { loadMachines() }, [])
   useEffect(() => { load() }, [jobStatus]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // เลือกเครื่องแล้ว → สร้าง Lot + เปิดจอชั่งของเครื่องนั้น (ใช้ทั้งจากปุ่มเลือกเครื่อง และกดม้วน "ชั่งเลย")
+  async function pickMachine(job: ReworkJob, machine_no: string) {
+    let lot = job.lot_no?.trim() ?? ''
+    const srcLot = ((job as any).source_lot_no ?? '').trim()
+    let gen = ''
+    if (srcLot) {
+      const { data: sr } = await supabase.from('production_rolls')
+        .select('machine_no').eq('lot_no', srcLot).limit(1).maybeSingle()
+      gen = swapLotMachine(srcLot, sr?.machine_no ?? '', machine_no)
+    }
+    if (!gen && !lot) gen = genReworkLot(machine_no, job.cust_code ?? '')
+    if (gen && gen !== lot) {
+      lot = gen
+      await supabase.from('rework_jobs').update({ lot_no: gen }).eq('id', job.id)
+    }
+    const prof = jobToProfile({ ...job, lot_no: lot }, machine_no)
+    setPickFor(null)
+    onPickJob(prof, { ...job, lot_no: lot })
+  }
+
+  // กดการ์ดงาน → ถ้าชุดระบบใหม่มีเครื่องล็อกอยู่แล้ว ไปจอชั่งเลย ไม่ต้องเลือกเครื่องซ้ำ
+  async function openJob(job: ReworkJob) {
+    if ((job as any).new_system) {
+      const ic = (job.item_code ?? '').trim()
+      const { data } = await supabase.from('production_rolls')
+        .select('machine_no')
+        .eq('item_code', ic).eq('roll_type', 'good').eq('new_system', true).eq('transferred', false)
+        .limit(1).maybeSingle()
+      if (data?.machine_no) { await pickMachine(job, data.machine_no); return }  // ล็อกเครื่องเดิม → ชั่งต่อเลย
+    }
+    setPickFor(job)  // ยังไม่มีเครื่องล็อก (เริ่มม้วน #1) → เลือกเครื่องก่อน
+  }
+
   // ดึงงานกรอที่ปิดแล้วกลับมาทำต่อ (เปิดงานใหม่ → active)
   async function reopenJob(job: ReworkJob) {
     if (!confirm(`ดึงงานกรอนี้กลับมาชั่งต่อ?\n\n${job.product_name}\nLot ${job.lot_no || '—'}\n\nงานจะกลับไปอยู่ในรายการ "งานกรอ" ให้เลือกเครื่องชั่งต่อได้`)) return
@@ -424,7 +457,7 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
             const isFromProduction = j.source === 'from_production'
             return (
               <div key={j.id} className={`bg-slate-900 border rounded-2xl flex flex-col overflow-hidden transition-colors group relative ${jobStatus==='closed' ? 'border-slate-700' : 'border-slate-700 hover:border-brand-500'}`}>
-                {jobStatus === 'active' && <button onClick={() => setPickFor(j)} className="absolute inset-0 z-0"/>}
+                {jobStatus === 'active' && <button onClick={() => openJob(j)} className="absolute inset-0 z-0"/>}
                 {/* top */}
                 <div className={`flex items-center justify-between px-3 py-2 border-b relative z-0 pointer-events-none ${jobStatus==='closed' ? 'bg-slate-800/40 border-slate-700' : 'bg-brand-600/15 border-brand-500/20'}`}>
                   <div className="flex items-center gap-2 min-w-0">
@@ -531,27 +564,7 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
       {pickFor && (
         <PickMachineModal job={pickFor} machines={machines}
           onClose={() => setPickFor(null)}
-          onPick={async (machine_no) => {
-            const job = pickFor
-            // สร้าง Lot จากเครื่องที่เลือก ถ้ายังไม่มี lot จริง (รูปแบบ yy+เครื่อง+ลูกค้า+เดือน)
-            // Lot กรอ = Lot ผลิตต้นทาง + รหัสเครื่องที่เลือก (เปลี่ยนตามเครื่องที่เลือกเสมอ)
-            let lot = job.lot_no?.trim() ?? ''
-            const srcLot = ((job as any).source_lot_no ?? '').trim()
-            let gen = ''
-            if (srcLot) {
-              const { data: sr } = await supabase.from('production_rolls')
-                .select('machine_no').eq('lot_no', srcLot).limit(1).maybeSingle()
-              gen = swapLotMachine(srcLot, sr?.machine_no ?? '', machine_no)
-            }
-            if (!gen && !lot) gen = genReworkLot(machine_no, job.cust_code ?? '')  // fallback ถ้าไม่มี Lot ต้นทาง
-            if (gen && gen !== lot) {
-              lot = gen
-              await supabase.from('rework_jobs').update({ lot_no: gen }).eq('id', job.id)
-            }
-            const prof = jobToProfile({ ...job, lot_no: lot }, machine_no)
-            setPickFor(null)
-            onPickJob(prof, { ...job, lot_no: lot })
-          }} />
+          onPick={(machine_no) => pickMachine(pickFor, machine_no)} />
       )}
 
       {closeFor && (() => {

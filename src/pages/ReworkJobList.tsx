@@ -190,7 +190,8 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
   const [closeFor, setCloseFor]     = useState<ReworkJob | null>(null)
   const [closeBy, setCloseBy]       = useState('')
   const [closing, setClosing]       = useState(false)
-  const [histItem, setHistItem]     = useState<{ code: string; name: string } | null>(null)   // แถบขวา: ม้วนกรอที่ชั่งแล้วของ item นี้
+  const [histItem, setHistItem]     = useState<{ code: string; name: string } | null>(null)   // drawer: ม้วนกรอที่ชั่งแล้วของ item นี้
+  const [panelKey, setPanelKey]     = useState(0)   // บั๊มพ์เพื่อรีเฟรชแถบขวา (ม้วนกรอรอโอน)
 
   async function load() {
     setLoading(true)
@@ -255,6 +256,7 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
       setJobOrders(ord)
     } else setJobOrders({})
     setJobs(list)
+    setPanelKey(k => k + 1)   // รีเฟรชแถบขวาด้วย
     // ดึง progress (ม้วน good ของแต่ละ lot)
     // งานปกติ: แยกตาม Lot + WO (กัน 2 งานปน Lot เดียว)
     // ชุดระบบใหม่: นับรวมทั้ง Lot (เลขม้วนต่อเนื่องข้าม WO — ไม่งั้นนับไม่ครบ)
@@ -437,7 +439,9 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
   }
 
   return (
-    <div className="min-h-[calc(100vh-48px)] bg-[#0a0f1e] p-3 flex flex-col">
+    <div className="min-h-[calc(100vh-48px)] bg-[#0a0f1e] p-3 flex flex-col xl:pr-[372px]">
+      {/* แถบขวาถาวร: ม้วนกรอที่ชั่งแล้ว (รอโอน) — หายเมื่อโอนออก */}
+      <ReworkPendingPanel refreshKey={panelKey} />
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div>
@@ -993,7 +997,87 @@ function CreateJobModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
   )
 }
 
-// ── แถบขวา: ม้วนกรอที่ชั่งไปแล้วของ item นี้ + ปุ่มรีปริ้น (คล้ายฝั่งผลิต) ──────
+// ── แถบขวาถาวร: ม้วนกรอที่ชั่งแล้ว "รอโอน" จัดกลุ่มตาม item + รีปริ้น (หายเมื่อโอนออก) ──
+function ReworkPendingPanel({ refreshKey }: { refreshKey: number }) {
+  const [rolls, setRolls] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [printing, setPrinting] = useState<string | null>(null)
+
+  async function load() {
+    setLoading(true)
+    const data = await fetchAll(() => supabase.from('production_rolls')
+      .select('id, roll_no, weight, gross_weight, core_weight, length, pcs, item_code, product_name, product_code, mat_code, customer, cust_code, lot_no, machine_no, work_order, sale_order, width_cm, width_unit, thick_mc, inspector, remark, roll_type, section, transferred, new_system, rework_source_lot, created_at')
+      .eq('roll_type', 'good').eq('new_system', true).eq('transferred', false).not('rework_source_roll_id', 'is', null)
+      .order('roll_no', { ascending: true }))
+    setRolls(data ?? [])
+    setLoading(false)
+  }
+  useEffect(() => { load() }, [refreshKey])
+
+  async function doReprint(r: any, size: 'long' | 'short') {
+    setPrinting(r.id + size)
+    try { await reprintRollLabel(r, size) } catch (e: any) { alert('รีปริ้นไม่สำเร็จ: ' + (e?.message ?? e)) }
+    finally { setPrinting(null) }
+  }
+
+  // จัดกลุ่มตาม item
+  const groups: Record<string, any[]> = {}
+  for (const r of rolls) { const k = (r.item_code ?? '').trim() || '(ไม่ระบุ)'; (groups[k] ??= []).push(r) }
+  const keys = Object.keys(groups).sort()
+  const totKg = rolls.reduce((s, r) => s + (r.weight ?? 0), 0)
+
+  return (
+    <aside className="hidden xl:flex fixed top-12 right-0 bottom-0 w-[360px] bg-slate-950 border-l border-slate-800 flex-col z-20">
+      <div className="px-4 py-3 border-b border-slate-800 bg-slate-900">
+        <p className="text-white font-bold">📜 ม้วนกรอที่ชั่งแล้ว · รอโอน</p>
+        <p className="text-slate-400 text-xs mt-0.5">{rolls.length} ม้วน · {fmt(totKg,1)} Kg — หายเมื่อโอนงานออก · กดรีปริ้นได้</p>
+      </div>
+      <div className="flex-1 overflow-y-auto p-2.5 space-y-3">
+        {loading ? (
+          <p className="text-center py-10 text-slate-500 text-sm">กำลังโหลด...</p>
+        ) : keys.length === 0 ? (
+          <div className="text-center py-10 text-slate-600 text-sm"><p className="text-3xl mb-1">✅</p><p>ยังไม่มีม้วนกรอรอโอน</p></div>
+        ) : keys.map(k => {
+          const list = groups[k]
+          const gKg = list.reduce((s, r) => s + (r.weight ?? 0), 0)
+          return (
+            <div key={k}>
+              <div className="flex items-center justify-between px-1 mb-1">
+                <p className="text-slate-300 text-xs font-bold truncate">{list[0].product_name || k} <span className="text-slate-600 font-mono">· {k}</span></p>
+                <span className="text-[10px] text-slate-400 shrink-0">{list.length} ม้วน · {fmt(gKg,1)}</span>
+              </div>
+              <div className="space-y-1.5">
+                {list.map(r => (
+                  <div key={r.id} className="bg-emerald-500/5 border border-emerald-500/25 rounded-lg px-2.5 py-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-white font-black text-sm">#{r.roll_no} <span className="text-slate-400 font-normal">· {fmt(r.weight,2)} Kg</span></p>
+                        <p className="text-slate-500 text-[10px] truncate">
+                          {r.machine_no || '—'}{r.length ? ` · ${r.length} M.` : ''}{r.work_order ? ` · WO ${r.work_order}` : ''}
+                          {r.rework_source_lot ? ` · จาก ${r.rework_source_lot}` : ''}
+                        </p>
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                        <button onClick={() => doReprint(r, 'long')} disabled={!!printing}
+                          title="รีปริ้นใบยาว" className="text-[10px] bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white px-1.5 py-1 rounded font-bold">
+                          {printing === r.id+'long' ? '...' : '🖨ยาว'}</button>
+                        <button onClick={() => doReprint(r, 'short')} disabled={!!printing}
+                          title="รีปริ้นใบสั้น" className="text-[10px] bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white px-1.5 py-1 rounded font-bold">
+                          {printing === r.id+'short' ? '...' : '🖨สั้น'}</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </aside>
+  )
+}
+
+// ── drawer: ม้วนกรอที่ชั่งไปแล้วของ item นี้ + ปุ่มรีปริ้น (คล้ายฝั่งผลิต) ──────
 function ItemReworkPanel({ itemCode, itemName, onClose }: { itemCode: string; itemName: string; onClose: () => void }) {
   const [rolls, setRolls] = useState<any[]>([])
   const [loading, setLoading] = useState(true)

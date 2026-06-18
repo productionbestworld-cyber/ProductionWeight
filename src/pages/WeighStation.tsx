@@ -1786,7 +1786,7 @@ function loadQueue(): any[] {
 function saveQueue(q: any[]) { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)) }
 
 // ── Weigh Page ────────────────────────────────────────────────────────────────
-function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfile; onBack: () => void }) {
+function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: MachineProfile; onBack: () => void; asModal?: boolean }) {
   // เก็บ profile เป็น state + refresh จาก DB ตอน mount — กันใช้ข้อมูล cached เก่า (เช่น widthUnit ไม่ตรง)
   const [profile, setProfile] = useState<MachineProfile>(initialProfile)
   useEffect(() => {
@@ -2818,10 +2818,10 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
   }
 
   return (
-    <div className="h-[calc(100vh-48px)] bg-[#0a0f1e] flex flex-col">
+    <div className={`${asModal ? 'h-full' : 'h-[calc(100vh-48px)]'} bg-[#0a0f1e] flex flex-col`}>
 
-      {/* ── Popup "ม้วนที่จะชั่ง" — เด้งตอนเข้าจอกรอ พร้อมรายละเอียด แล้วกดชั่งเลย ── */}
-      {reworkIntro && (
+      {/* ── Popup "ม้วนที่จะชั่ง" — เด้งตอนเข้าจอกรอ พร้อมรายละเอียด แล้วกดชั่งเลย (ไม่ต้องโชว์ถ้าเป็น modal อยู่แล้ว) ── */}
+      {reworkIntro && !asModal && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={gotoScale}>
           <div className="bg-slate-900 border border-brand-500/40 rounded-2xl w-full max-w-md p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
             <p className="text-brand-300 font-bold text-sm mb-1">🔁 พร้อมชั่งม้วนกรอ</p>
@@ -3952,11 +3952,22 @@ export default function WeighStation({ dept }: { dept?: 'blow' | 'print' | 'rewi
   // filter เครื่องตาม dept
   const filtered = dept ? profiles.filter(p => (p.section ?? 'blow') === dept) : profiles
 
+  // แผนกกรอ: รายการงานเป็นพื้นหลัง + จอชั่งเด้งเป็น popup (ไม่ทับทั้งหน้า)
+  if (dept === 'rewind') {
+    return (
+      <>
+        <ReworkJobList onPickJob={(prof) => setSelected(prof)} />
+        {selected && (
+          <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-2 sm:p-4">
+            <div className="w-full max-w-5xl h-[94vh] bg-[#0a0f1e] rounded-2xl overflow-hidden border border-slate-700 shadow-2xl flex flex-col">
+              <WeighPage asModal profile={selected} onBack={() => { setSelected(null); reload() }} />
+            </div>
+          </div>
+        )}
+      </>
+    )
+  }
   if (!selected) {
-    // แผนกกรอ: ใช้ job-centric list แทน machine picker
-    if (dept === 'rewind') {
-      return <ReworkJobList onPickJob={(prof) => setSelected(prof)} />
-    }
     return <MachinePicker profiles={filtered} onSelect={setSelected} onProfileUpdated={reload} dept={dept} />
   }
   return <WeighPage profile={selected} onBack={() => { setSelected(null); reload() }} />

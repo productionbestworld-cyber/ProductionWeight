@@ -1997,6 +1997,12 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
   // ── Popup "ม้วนที่จะชั่ง" — เด้งตอนเข้าจอกรอ บอกเลขม้วนถัดไป/เครื่อง/ต้นทาง แล้วกดชั่งเลย ──
   const [reworkIntro, setReworkIntro] = useState<{ next: number; src: any } | null>(null)
   const introShownRef = useRef(false)
+  const scaleRef = useRef<HTMLDivElement>(null)
+  // ปิด popup → เลื่อนมาที่จอกิโลทันที (ไม่ต้องเลื่อนผ่านหน้าเลือกม้วน)
+  function gotoScale() {
+    setReworkIntro(null)
+    setTimeout(() => scaleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50)
+  }
   useEffect(() => {
     if (!isRework || manualMode || introShownRef.current) return
     const first = selSrc || srcRolls.find((s: any) => ((s.weight ?? 0) - (srcProg[s.id] ?? 0)) > 0.001)
@@ -2787,7 +2793,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
 
       {/* ── Popup "ม้วนที่จะชั่ง" — เด้งตอนเข้าจอกรอ พร้อมรายละเอียด แล้วกดชั่งเลย ── */}
       {reworkIntro && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setReworkIntro(null)}>
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={gotoScale}>
           <div className="bg-slate-900 border border-brand-500/40 rounded-2xl w-full max-w-md p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
             <p className="text-brand-300 font-bold text-sm mb-1">🔁 พร้อมชั่งม้วนกรอ</p>
             <p className="text-white font-black text-2xl mb-3">{profile.productName}</p>
@@ -2806,7 +2812,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
               {!!(reworkLen.trim()) && <><span className="text-slate-500">ความยาว</span><span className="text-sky-200 text-right">{reworkLen} M.</span></>}
               {!!(reworkCause.trim()) && <><span className="text-slate-500">สาเหตุ</span><span className="text-rose-300 text-right text-xs">{reworkCause}</span></>}
             </div>
-            <button onClick={() => setReworkIntro(null)}
+            <button onClick={gotoScale}
               className="w-full bg-brand-600 hover:bg-brand-500 text-white py-3.5 rounded-xl font-black text-lg">
               ⚖️ ชั่งม้วนนี้เลย
             </button>
@@ -3140,7 +3146,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
           )}
 
           {/* Scale display */}
-          <div className={`border-2 rounded-2xl px-5 py-6 text-center shadow-xl ${
+          <div ref={scaleRef} className={`border-2 rounded-2xl px-5 py-6 text-center shadow-xl ${
             weighType==='good' ? 'bg-slate-900 border-slate-700' :
             weighType==='bad'  ? 'bg-orange-500/5 border-orange-500/30' :
             'bg-slate-900 border-slate-700'

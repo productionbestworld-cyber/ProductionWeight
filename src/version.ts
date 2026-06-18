@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.4.1'
+export const APP_VERSION = '1.4.2'
 export const APP_BUILD_DATE = '2026-06-18'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.4.2', date: '2026-06-18',
+    items: [
+      'จอชั่งกรอ: กด "⚖️ ชั่งม้วนนี้เลย" → เลื่อนมาที่จอกิโล (Gross/Net) ทันที พร้อมชั่ง ไม่ต้องเลื่อนผ่านหน้าเลือกม้วนเอง',
+    ],
+  },
   {
     version: '1.4.1', date: '2026-06-18',
     items: [

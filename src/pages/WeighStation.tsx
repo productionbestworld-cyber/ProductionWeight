@@ -1932,6 +1932,7 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
   // ── ม้วนต้นทางที่เบิกมา (ของสินค้านี้) + ความคืบหน้ากรอต่อม้วน ──
   const [srcRolls, setSrcRolls]   = useState<any[]>([])         // ม้วนเสียที่เบิกมา (reworking)
   const [selSrc, setSelSrc]       = useState<any | null>(null)  // ม้วนต้นทางที่กำลังกรอ
+  const [selSrc2, setSelSrc2]     = useState<any | null>(null)  // ม้วนต้นทางที่ 2 (กรอต่อ — 2 ม้วน→1)
   const [srcProg, setSrcProg]     = useState<Record<string, number>>({})  // sourceId → กรอได้สะสม (kg)
   // ม้วนนอกระบบ (เอามาจากงานอื่น/ที่อื่น มาชั่งรวมในงานนี้)
   const [manualMode, setManualMode]       = useState(false)
@@ -2409,10 +2410,14 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       const useSrc = (isRework && isGood && selSrc) ? selSrc : null
       const useManual = (isRework && isGood && manualMode && manualSrcText.trim())
         ? { text: manualSrcText.trim(), kg: parseFloat(manualSrcKg) || 0 } : null
-      const srcKg  = useSrc ? (useSrc.weight ?? 0) : useManual ? useManual.kg : 0
-      const cumKg  = useSrc ? ((srcProg[useSrc.id] ?? 0) + saveWeight) : saveWeight
+      // กรอต่อ: ม้วนต้นทางที่ 2 (รวม 2 ม้วน → ออก 1 ม้วน)
+      const useSrc2 = (isRework && isGood && selSrc && selSrc2) ? selSrc2 : null
+      const srcKg  = useSrc ? ((useSrc.weight ?? 0) + (useSrc2 ? (useSrc2.weight ?? 0) : 0)) : useManual ? useManual.kg : 0
+      const cumKg  = useSrc ? (useSrc2 ? saveWeight : ((srcProg[useSrc.id] ?? 0) + saveWeight)) : saveWeight
       const scrapKg = Math.max(0, srcKg - cumKg)
-      const reworkNote = useSrc
+      const reworkNote = useSrc2
+        ? `🔁 กรอต่อ: Lot ${useSrc.lot_no} #${useSrc.roll_no} + Lot ${useSrc2.lot_no} #${useSrc2.roll_no} · หยิบมา ${fmt(srcKg,dec)} · ชั่งได้ ${fmt(cumKg,dec)} · เศษ ${fmt(scrapKg,dec)} Kg`
+        : useSrc
         ? `🔁 กรอจาก Lot ${useSrc.lot_no} #${useSrc.roll_no} · หยิบมา ${fmt(srcKg,dec)} · ชั่งได้ ${fmt(cumKg,dec)} · เศษ ${fmt(scrapKg,dec)} Kg`
         : useManual
         ? `🔁 กรอแทนจาก ${useManual.text}${useManual.kg ? ` · หยิบมา ${fmt(srcKg,dec)} · ชั่งได้ ${fmt(cumKg,dec)} · เศษ ${fmt(scrapKg,dec)} Kg` : ''}`
@@ -2575,6 +2580,13 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         setRollNo(nextRollNo(newList.filter((r:any) => r?.roll_type === 'good')))
         // print fire-and-forget (ไม่ await — ไม่บล็อก save flow)
         printLabel({...profile, length: lengthVal || profile.length, pcs: pcsVal || profile.pcs, inspector}, rollNo, gross, saveWeight, profile.labelSize ?? 'long', 'good', '', data.id)
+        // กรอต่อ: ม้วนต้นทางที่ 2 ถูกรวมเข้าม้วนนี้แล้ว → mark consumed (หลุดจากลิสต์ต้นทาง)
+        if (useSrc2) {
+          supabase.from('production_rolls')
+            .update({ rework_status: 'reworked', rework_remark: `กรอต่อรวมกับ Lot ${useSrc.lot_no} #${useSrc.roll_no} → ออกม้วน #${useRollNo}` })
+            .eq('id', useSrc2.id).then(() => loadSrcRolls(), () => {})
+          setSelSrc2(null)
+        }
         // แผนกกรอ: บันทึกสาเหตุที่ม้วนนี้เสีย/มาจากอะไร กลับเข้างานกรอ (ตาม Lot)
         if (isRework && reworkCause.trim()) {
           const upd = supabase.from('rework_jobs').update({ source_defect_reason: reworkCause.trim() })
@@ -2896,17 +2908,27 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                   const left = Math.max(0, (s.weight ?? 0) - done)
                   const full = left <= 0.001          // กรอครบแล้ว → ล็อก
                   const sel = selSrc?.id === s.id
+                  const sel2 = selSrc2?.id === s.id
                   return (
                     <div key={s.id}
-                      className={`rounded-lg px-2.5 py-1.5 border transition-colors ${full ? 'bg-slate-800/40 border-slate-700 opacity-60' : sel ? 'bg-blue-500/20 border-blue-500' : 'bg-slate-800 border-slate-700 hover:border-blue-500/50'}`}>
+                      className={`rounded-lg px-2.5 py-1.5 border transition-colors ${full ? 'bg-slate-800/40 border-slate-700 opacity-60' : sel ? 'bg-blue-500/20 border-blue-500' : sel2 ? 'bg-emerald-500/20 border-emerald-500' : 'bg-slate-800 border-slate-700 hover:border-blue-500/50'}`}>
                       <div className="flex items-center justify-between gap-2">
-                        <button disabled={full} onClick={() => { const ns = sel ? null : s; setSelSrc(ns); if (ns) { setReworkCause(ns.remark ?? ''); setReworkLen(String(ns.length ?? '')) } }} className="flex-1 text-left disabled:cursor-not-allowed">
+                        <button disabled={full} onClick={() => { const ns = sel ? null : s; setSelSrc(ns); if (ns) { setReworkCause(ns.remark ?? ''); setReworkLen(String(ns.length ?? '')) } else { setSelSrc2(null) } }} className="flex-1 text-left disabled:cursor-not-allowed">
                           <span className="text-xs font-bold text-white flex items-center gap-1.5 flex-wrap">
-                            <span className="shrink-0">{full ? '✓ กรอครบ' : sel ? '☑' : '☐'}</span>
+                            <span className="shrink-0">{full ? '✓ กรอครบ' : sel ? '☑' : sel2 ? '➕2' : '☐'}</span>
+                            {sel2 && <span className="text-[9px] bg-emerald-500/30 text-emerald-200 px-1.5 py-0.5 rounded font-black">กรอต่อ ม้วนที่ 2</span>}
                             {s.work_order && <span className="text-sm font-black bg-amber-500/25 text-amber-100 border border-amber-400/40 px-2 py-0.5 rounded whitespace-nowrap">WO {s.work_order}</span>}
                             <span className="text-slate-300 font-mono">Lot {s.lot_no} #{s.roll_no}</span>
                           </span>
                         </button>
+                        {/* ➕ กรอต่อ: เลือกม้วนที่ 2 (มีม้วนแรกแล้ว · ม้วนนี้ยังไม่ใช่แรก/สอง) */}
+                        {selSrc && !sel && !sel2 && !full && (
+                          <button onClick={() => setSelSrc2(s)} title="รวมม้วนนี้กรอต่อกับม้วนแรก (2 ม้วน → 1)"
+                            className="text-[10px] bg-emerald-700/80 hover:bg-emerald-600 text-white px-2 py-0.5 rounded font-bold shrink-0 whitespace-nowrap">➕ กรอต่อ</button>
+                        )}
+                        {sel2 && (
+                          <button onClick={() => setSelSrc2(null)} title="เอาออก" className="text-[10px] bg-slate-700 hover:bg-slate-600 text-white px-2 py-0.5 rounded shrink-0">✕</button>
+                        )}
                         <span className="text-[10px] text-slate-300 shrink-0">หยิบมา <b className="text-orange-300">{fmt(s.weight,dec)}</b></span>
                         <button onClick={() => finishSource(s)} title="กรอไม่ได้/เป็นเศษทั้งม้วน → เอาออกจากลิสต์"
                           className="text-[10px] bg-red-700/70 hover:bg-red-600 text-white px-2 py-0.5 rounded font-bold shrink-0">🗑 เศษทั้งม้วน</button>
@@ -2966,9 +2988,15 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                 </div>
               )}
 
-              {selSrc && (
+              {selSrc && !selSrc2 && (
                 <p className="text-[10px] text-blue-200 bg-blue-500/10 rounded px-2 py-1">
                   ม้วนถัดไปจะบันทึกหมายเหตุ: หยิบมา {fmt(selSrc.weight,dec)} · ชั่งได้ + เศษ อัตโนมัติ
+                </p>
+              )}
+              {selSrc && selSrc2 && (
+                <p className="text-[11px] text-emerald-200 bg-emerald-500/15 border border-emerald-500/30 rounded px-2 py-1.5 font-bold">
+                  🔗 กรอต่อ 2 ม้วน → 1 ม้วน · หยิบมารวม {fmt((selSrc.weight ?? 0) + (selSrc2.weight ?? 0), dec)} kg
+                  <span className="block text-[9px] text-emerald-300/80 font-normal">Lot {selSrc.lot_no} #{selSrc.roll_no} + Lot {selSrc2.lot_no} #{selSrc2.roll_no} · ชั่งได้ค่าเดียว เศษคิดอัตโนมัติ</span>
                 </p>
               )}
               {manualMode && manualSrcText.trim() && (

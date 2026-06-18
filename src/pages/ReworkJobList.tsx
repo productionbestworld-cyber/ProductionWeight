@@ -355,7 +355,38 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
     }
   }
   async function deleteJob(job: ReworkJob) {
-    if (!confirm(`ลบงาน "${job.product_name}" (Lot ${job.lot_no}) ทิ้ง?\nม้วนใน production_rolls ยังอยู่`)) return
+    if (!confirm(`ลบงาน "${job.product_name}" (Lot ${job.lot_no}) ทิ้ง?\n\nม้วนต้นทางที่ยังไม่ได้ชั่งกรอจะถูกคืนกลับคิว "รับจากผลิต"\nม้วนที่กรอไปแล้วยังอยู่ในระบบ`)) return
+    try {
+      if ((job as any).new_system) {
+        // ชุดระบบใหม่: คืนม้วนต้นทางที่ "ยังไม่ได้กรอ" กลับคิว · ม้วนที่กรอแล้ว = reworked
+        const ic = (job.item_code ?? '').trim()
+        const { data: outs } = await supabase.from('production_rolls')
+          .select('rework_source_roll_id').eq('item_code', ic).eq('roll_type', 'good')
+          .eq('new_system', true).not('rework_source_roll_id', 'is', null)
+        const used = new Set((outs ?? []).map((o: any) => o.rework_source_roll_id))
+        const { data: srcs } = await supabase.from('production_rolls')
+          .select('id').eq('item_code', ic).eq('roll_type', 'bad').eq('rework_status', 'reworking')
+        for (const s of srcs ?? []) {
+          if (used.has(s.id)) {
+            await supabase.from('production_rolls').update({ rework_status: 'reworked' }).eq('id', s.id)
+          } else {
+            await supabase.from('production_rolls').update({
+              rework_status: null, rework_received_by: null, rework_received_at: null, rework_remark: null, new_system: false,
+            }).eq('id', s.id)   // ยังไม่ได้กรอ → กลับคิว
+          }
+        }
+      } else {
+        // งานเก่า: คืนม้วนต้นทางของ Lot นี้ที่กำลังกรอกลับคิว
+        const srcLot = ((job as any).source_lot_no || '').trim()
+        if (srcLot) {
+          await supabase.from('production_rolls').update({
+            rework_status: null, rework_received_by: null, rework_received_at: null, rework_remark: null,
+          }).eq('lot_no', srcLot).eq('roll_type', 'bad').eq('rework_status', 'reworking')
+        }
+      }
+    } catch (e: any) {
+      console.warn('คืนม้วนต้นทางไม่สำเร็จ (non-fatal):', e?.message ?? e)
+    }
     await supabase.from('rework_jobs').delete().eq('id', job.id)
     load()
   }

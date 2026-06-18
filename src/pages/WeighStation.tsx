@@ -1786,7 +1786,7 @@ function loadQueue(): any[] {
 function saveQueue(q: any[]) { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)) }
 
 // ── Weigh Page ────────────────────────────────────────────────────────────────
-function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: MachineProfile; onBack: () => void; asModal?: boolean }) {
+function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: MachineProfile; onBack: (opts?: { weighed?: boolean }) => void; asModal?: boolean }) {
   // เก็บ profile เป็น state + refresh จาก DB ตอน mount — กันใช้ข้อมูล cached เก่า (เช่น widthUnit ไม่ตรง)
   const [profile, setProfile] = useState<MachineProfile>(initialProfile)
   useEffect(() => {
@@ -2724,9 +2724,9 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
           setAwaitingClear(true)
         }
       }
-      // งานกรอจบ (ม้วนต้นทางครบ) → ปริ้นแล้วเด้งกลับรายการงานอัตโนมัติ
+      // งานกรอจบ (ม้วนต้นทางครบ) → ปริ้นแล้วปิด popup + เด้งไปแท็บ "ประวัติกรอ"
       if (jobDoneAutoExit) {
-        setTimeout(() => onBack(), 1200)
+        setTimeout(() => onBack({ weighed: true }), 1200)
       }
     } catch (e: any) {
       alert('บันทึกไม่สำเร็จ: ' + (e?.message ?? JSON.stringify(e)))
@@ -2912,7 +2912,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
             }`}>
             🏁 ปิดงาน
           </button>
-          <button onClick={onBack}
+          <button onClick={() => onBack()}
             className="flex items-center gap-1 text-slate-500 hover:text-white text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg transition-colors">
             <ArrowLeft size={12}/> เปลี่ยนเครื่อง
           </button>
@@ -3738,7 +3738,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
           <div className="bg-slate-900 border-2 border-brand-500/40 rounded-2xl w-full max-w-md shadow-2xl">
             <div className="px-6 py-5 text-center relative">
               {/* ปุ่ม X → กลับหน้าแรก */}
-              <button onClick={onBack}
+              <button onClick={() => onBack()}
                 className="absolute top-3 right-3 text-slate-500 hover:text-white w-7 h-7 rounded-lg hover:bg-slate-700 flex items-center justify-center transition-colors">
                 <X size={16}/>
               </button>
@@ -3905,6 +3905,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
 export default function WeighStation({ dept }: { dept?: 'blow' | 'print' | 'rewind' }) {
   const [selected, setSelected] = useState<MachineProfile | null>(null)
   const [profiles, setProfiles] = useState<MachineProfile[]>(loadProfiles())
+  const [jumpHistory, setJumpHistory] = useState(0)   // บั๊มพ์ → สั่งรายการงานสลับไปแท็บ "ประวัติกรอ" หลังชั่งเสร็จ
 
   function reload() {
     supabase.from('machine_profiles').select('*').order('machine_no')
@@ -3956,11 +3957,12 @@ export default function WeighStation({ dept }: { dept?: 'blow' | 'print' | 'rewi
   if (dept === 'rewind') {
     return (
       <>
-        <ReworkJobList onPickJob={(prof) => setSelected(prof)} />
+        <ReworkJobList onPickJob={(prof) => setSelected(prof)} jumpHistory={jumpHistory} />
         {selected && (
           <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-2 sm:p-4">
             <div className="w-full max-w-5xl h-[94vh] bg-[#0a0f1e] rounded-2xl overflow-hidden border border-slate-700 shadow-2xl flex flex-col">
-              <WeighPage asModal profile={selected} onBack={() => { setSelected(null); reload() }} />
+              <WeighPage asModal profile={selected}
+                onBack={(opts) => { setSelected(null); reload(); if (opts?.weighed) setJumpHistory(n => n + 1) }} />
             </div>
           </div>
         )}

@@ -125,9 +125,11 @@ export async function nextReworkSeq(machine: string): Promise<number> {
   return max + 1
 }
 
-export default function ReworkJobList({ onPickJob }: { onPickJob: (profile: MachineProfile, job: ReworkJob) => void }) {
+export default function ReworkJobList({ onPickJob, jumpHistory }: { onPickJob: (profile: MachineProfile, job: ReworkJob) => void; jumpHistory?: number }) {
   const [view, setView] = useState<'jobs' | 'inbox' | 'history'>('jobs')
   const [inboxCount, setInboxCount] = useState(0)
+  // ชั่งเสร็จ → เด้งไปแท็บประวัติกรออัตโนมัติ
+  useEffect(() => { if (jumpHistory) setView('history') }, [jumpHistory])
 
   // นับม้วนรอกรอ (queue) — แสดง badge บนแท็บ + auto refresh
   useEffect(() => {
@@ -540,7 +542,7 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
           <table className="w-full text-sm">
             <thead className="text-[10px] text-slate-500 uppercase tracking-wider bg-slate-900 sticky top-0 z-10">
               <tr>
-                {['สินค้า','ขนาด','WO','SO','👤 ผู้เบิก','ม้วนที่','เบิกมา','กรอได้','สถานะ',''].map((h,i) => (
+                {['สินค้า','ขนาด','WO','SO','👤 ผู้เบิก','ม้วนที่','เบิกมา',''].map((h,i) => (
                   <th key={i} className="px-3 py-2 text-left font-semibold whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -553,9 +555,7 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
                 const gkeys = Object.keys(grp).sort()
                 const multi = gkeys.length > 1
                 const renderRow = (j: ReworkJob) => {
-                const p = progress[progKey(j)] ?? { rolls: 0, kg: 0 }
                 const planned = parseFloat(j.planned_qty ?? '') || 0
-                const pct = planned > 0 ? Math.min(100, Math.round((p.kg / planned) * 100)) : 0
                 const o = jobOrders[j.id]
                 const bys = o?.bys?.length ? o.bys : (j.inspector ? [j.inspector] : [])
                 const wos = o?.wos?.length ? o.wos : (j.work_order ? [j.work_order] : [])
@@ -574,13 +574,6 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
                     <td className="px-3 py-2 text-sky-200 text-xs whitespace-nowrap">{bys.join(', ') || '—'}</td>
                     <td className="px-3 py-2 text-amber-200 font-mono text-xs whitespace-nowrap">{rolls.length ? '#'+rolls.join(', #') : (j.source_roll_count ? `${j.source_roll_count} ม้วน` : '—')}</td>
                     <td className="px-3 py-2 text-slate-300 font-bold whitespace-nowrap">{fmt(planned,1)}</td>
-                    <td className="px-3 py-2 text-green-300 font-bold whitespace-nowrap">{fmt(p.kg,1)}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      {jobStatus==='closed' ? <span className="text-[10px] text-slate-400">ปิดแล้ว</span>
-                        : j.lot_no?.trim()
-                          ? <span className={`text-[10px] font-bold ${pct>=100?'text-green-400':'text-amber-400'}`}>{pct>=100?'✓ ครบ':`${pct}%`}</span>
-                          : <span className="text-[10px] text-slate-500">🆕 รอเลือกเครื่อง</span>}
-                    </td>
                     <td className="px-3 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                       <div className="flex gap-1">
                         {jobStatus==='closed' ? (
@@ -600,12 +593,11 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
                 return gkeys.flatMap(k => {
                   const gj = grp[k]
                   const gPlanned = gj.reduce((s, j) => s + (parseFloat(j.planned_qty ?? '') || 0), 0)
-                  const gKg = gj.reduce((s, j) => s + (progress[progKey(j)]?.kg ?? 0), 0)
                   return [
                     <tr key={'h'+k} className="bg-slate-800/70 sticky">
-                      <td colSpan={10} className="px-3 py-1.5 text-xs font-bold text-brand-200">
+                      <td colSpan={8} className="px-3 py-1.5 text-xs font-bold text-brand-200">
                         📦 {gj[0].product_name || k} <span className="text-slate-500 font-mono font-normal">· {k}</span>
-                        <span className="text-slate-400 font-normal"> — {gj.length} งาน · เบิกรวม {fmt(gPlanned,1)} · กรอได้ {fmt(gKg,1)} kg</span>
+                        <span className="text-slate-400 font-normal"> — {gj.length} งาน · เบิกรวม {fmt(gPlanned,1)} kg</span>
                       </td>
                     </tr>,
                     ...gj.map(renderRow),

@@ -182,7 +182,7 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
   const [pickFor, setPickFor]       = useState<ReworkJob | null>(null)
   const [machines, setMachines]     = useState<{machine_no:string}[]>([])
   const [progress, setProgress]     = useState<Record<string,{rolls:number,kg:number}>>({})
-  const [jobOrders, setJobOrders]   = useState<Record<string,{wos:string[],sos:string[]}>>({})   // job.id → WO/SO ทั้งหมดที่เบิกเข้างานนี้
+  const [jobOrders, setJobOrders]   = useState<Record<string,{wos:string[],sos:string[],bys:string[],reasons:string[],count:number}>>({})   // job.id → WO/SO/ผู้เบิก/สาเหตุ ทั้งหมดที่เบิกเข้างานนี้
   const [closeFor, setCloseFor]     = useState<ReworkJob | null>(null)
   const [closeBy, setCloseBy]       = useState('')
   const [closing, setClosing]       = useState(false)
@@ -199,14 +199,26 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
     const jobIds = list.map(j => j.id).filter(Boolean)
     if (jobIds.length) {
       const { data: wds } = await supabase.from('rework_withdrawals')
-        .select('job_id, work_order, sale_order').in('job_id', jobIds as string[])
-      const ord: Record<string,{wos:string[],sos:string[]}> = {}
+        .select('job_id, work_order, sale_order, withdrawn_by, source_roll_id').in('job_id', jobIds as string[])
+      // ดึงสาเหตุของม้วนต้นทางแต่ละม้วน (remark = สาเหตุที่แผนกเป่าระบุ)
+      const srcIds = [...new Set((wds ?? []).map((w: any) => w.source_roll_id).filter(Boolean))]
+      const reasonById: Record<string,string> = {}
+      if (srcIds.length) {
+        const { data: srcs } = await supabase.from('production_rolls')
+          .select('id, remark, rework_remark').in('id', srcIds as string[])
+        for (const s of srcs ?? []) reasonById[(s as any).id] = ((s as any).remark || (s as any).rework_remark || '').trim()
+      }
+      const ord: Record<string,{wos:string[],sos:string[],bys:string[],reasons:string[],count:number}> = {}
       for (const w of wds ?? []) {
         const k = w.job_id; if (!k) continue
-        if (!ord[k]) ord[k] = { wos: [], sos: [] }
+        if (!ord[k]) ord[k] = { wos: [], sos: [], bys: [], reasons: [], count: 0 }
+        ord[k].count++
         const wo = (w.work_order ?? '').trim(); const so = (w.sale_order ?? '').trim()
+        const by = ((w as any).withdrawn_by ?? '').trim(); const rs = reasonById[(w as any).source_roll_id] ?? ''
         if (wo && !ord[k].wos.includes(wo)) ord[k].wos.push(wo)
         if (so && !ord[k].sos.includes(so)) ord[k].sos.push(so)
+        if (by && !ord[k].bys.includes(by)) ord[k].bys.push(by)
+        if (rs && !ord[k].reasons.includes(rs)) ord[k].reasons.push(rs)
       }
       setJobOrders(ord)
     } else setJobOrders({})
@@ -536,19 +548,35 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
                     {(j.source_roll_count ?? 1) > 1 && <span className="text-[10px] bg-rose-500/15 text-rose-300 border border-rose-500/25 px-2 py-0.5 rounded font-bold">รวม {j.source_roll_count} ม้วนเสีย</span>}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-x-2 text-xs bg-slate-800/40 rounded-lg px-2 py-1.5">
-                    <span className="text-slate-500">Mat</span><span className="text-slate-200 font-mono text-right truncate">{j.mat_code || '—'}</span>
-                    <span className="text-slate-500">ผู้ตรวจ</span><span className="text-slate-200 text-right truncate">{j.inspector || '—'}</span>
-                  </div>
+                  {(() => {
+                    const o = jobOrders[j.id]
+                    const bys = o?.bys?.length ? o.bys : (j.inspector ? [j.inspector] : [])
+                    const cnt = o?.count ?? (j.source_roll_count ?? 0)
+                    return (
+                      <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-xs bg-slate-800/40 rounded-lg px-2 py-1.5">
+                        <span className="text-slate-500">Mat</span><span className="text-slate-200 font-mono text-right truncate">{j.mat_code || '—'}</span>
+                        <span className="text-slate-500">👤 ผู้เบิก</span><span className="text-sky-200 text-right truncate font-bold">{bys.length ? bys.join(', ') : '—'}</span>
+                        <span className="text-slate-500">ม้วนเบิกมา</span><span className="text-slate-200 text-right truncate">{cnt ? `${cnt} ม้วน` : '—'}</span>
+                      </div>
+                    )
+                  })()}
 
-                  {/* สาเหตุการกรอ */}
-                  {(j.source_defect_reason || j.rework_reason || j.rewinder_name) && (
-                    <div className="text-[10px] bg-emerald-500/5 border border-emerald-500/20 rounded-lg px-2 py-1.5 space-y-0.5">
-                      {j.source_defect_reason && <p className="text-rose-300 truncate">⚠ เสีย: <span className="text-slate-300">{j.source_defect_reason}</span></p>}
-                      {j.rework_reason && <p className="text-emerald-300 truncate">🔧 กรอ: <span className="text-slate-300">{j.rework_reason}</span></p>}
-                      {j.rewinder_name && <p className="text-sky-300 truncate">👤 คนกรอ: <span className="text-slate-300">{j.rewinder_name}</span></p>}
-                    </div>
-                  )}
+                  {/* สาเหตุการกรอ — รวมสาเหตุทุกม้วนที่เบิกเข้างานนี้ */}
+                  {(() => {
+                    const reasons = jobOrders[j.id]?.reasons?.length
+                      ? jobOrders[j.id].reasons
+                      : (j.source_defect_reason ? [j.source_defect_reason] : [])
+                    if (!reasons.length && !j.rework_reason && !j.rewinder_name) return null
+                    return (
+                      <div className="text-[10px] bg-emerald-500/5 border border-emerald-500/20 rounded-lg px-2 py-1.5 space-y-0.5">
+                        {reasons.map((r, i) => (
+                          <p key={i} className="text-rose-300 line-clamp-2">⚠ เสีย: <span className="text-slate-300">{r}</span></p>
+                        ))}
+                        {j.rework_reason && <p className="text-emerald-300 truncate">🔧 กรอ: <span className="text-slate-300">{j.rework_reason}</span></p>}
+                        {j.rewinder_name && <p className="text-sky-300 truncate">👤 คนกรอ: <span className="text-slate-300">{j.rewinder_name}</span></p>}
+                      </div>
+                    )
+                  })()}
 
                   {/* progress: เบิกมา / กรอได้ / เศษ */}
                   <div className="mt-auto">

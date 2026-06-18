@@ -23,6 +23,8 @@ export interface Product {
   thick_mc:      string
   mat_code?:     string
   core_weight?:  string
+  length?:       string   // ความยาว (เมตร) — ผูกกับสินค้า (item_code) ✨
+  pcs?:          string
   cust_code:     string
   // join-ed (จาก view products_with_customer)
   cust_name?:    string
@@ -35,7 +37,20 @@ const EMPTY_PROD: Product  = { item_code:'', product_code:'', product_name:'', w
 // ─── Exports สำหรับใช้ที่อื่น (autocomplete) ─────────────────────────────────
 export async function fetchProducts(): Promise<Product[]> {
   const { data } = await supabase.from('products_with_customer').select('*').order('item_code')
-  return (data ?? []) as Product[]
+  const list = (data ?? []) as Product[]
+  // merge ความยาว/pcs จากตาราง products ตรง ๆ (view อาจยังไม่มีคอลัมน์ใหม่)
+  try {
+    const { data: lp } = await supabase.from('products').select('item_code, length, pcs')
+    if (lp) {
+      const m = new Map<string, any>()
+      for (const r of lp) m.set((r.item_code ?? '').trim(), r)
+      for (const p of list) {
+        const r = m.get((p.item_code ?? '').trim())
+        if (r) { (p as any).length = r.length ?? ''; (p as any).pcs = r.pcs ?? '' }
+      }
+    }
+  } catch { /* คอลัมน์ยังไม่ถูกเพิ่ม — ข้าม */ }
+  return list
 }
 export async function fetchCustomers(): Promise<Customer[]> {
   const { data } = await supabase.from('customers').select('*').order('cust_name')
@@ -565,15 +580,16 @@ function ProductsTab({ products, customers, loading, onChanged }: {
               <th className="text-left px-3 py-2.5">ขนาด</th>
               <th className="text-left px-3 py-2.5">Mat Code</th>
               <th className="text-right px-3 py-2.5">นน.แกน</th>
+              <th className="text-right px-3 py-2.5">ความยาว (M.)</th>
               <th className="text-left px-3 py-2.5">ลูกค้า</th>
               <th className="text-right px-3 py-2.5">จัดการ</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} className="text-center py-8 text-slate-500">กำลังโหลด...</td></tr>
+              <tr><td colSpan={9} className="text-center py-8 text-slate-500">กำลังโหลด...</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={8} className="text-center py-8 text-slate-500">{q ? 'ไม่พบ' : 'ยังไม่มีข้อมูล'}</td></tr>
+              <tr><td colSpan={9} className="text-center py-8 text-slate-500">{q ? 'ไม่พบ' : 'ยังไม่มีข้อมูล'}</td></tr>
             ) : filtered.map(p => (
               <tr key={p.id} className="border-t border-slate-800 hover:bg-slate-800/30">
                 <td className="px-3 py-2 font-mono text-brand-400 font-bold whitespace-nowrap">{p.item_code}</td>
@@ -582,6 +598,7 @@ function ProductsTab({ products, customers, loading, onChanged }: {
                 <td className="px-3 py-2 text-slate-300 whitespace-nowrap">{p.width_cm ? `${p.width_cm}${p.width_unit ?? 'cm'}×${p.thick_mc}mc` : '—'}</td>
                 <td className="px-3 py-2 font-mono text-amber-300 text-xs whitespace-nowrap">{p.mat_code || '—'}</td>
                 <td className="px-3 py-2 text-right text-cyan-300 whitespace-nowrap">{p.core_weight ? `${p.core_weight}` : '—'}</td>
+                <td className="px-3 py-2 text-right whitespace-nowrap">{(p as any).length ? <b className="text-emerald-300">{(p as any).length} M.</b> : <span className="text-slate-600">—</span>}</td>
                 <td className="px-3 py-2 text-slate-300">
                   <span className="text-slate-500 text-xs">{p.cust_code} </span>
                   {p.cust_name || '—'}
@@ -661,6 +678,7 @@ function ProductEditModal({ product, customers, onClose }: { product: Product; c
             <Field label="รหัสสินค้า"      value={p.product_code} onChange={v => setP({ ...p, product_code: v })} ph="(ถ้ามี)"/>
             <Field label="Mat Code"        value={p.mat_code ?? ''}    onChange={v => setP({ ...p, mat_code: v })} ph="60001585"/>
             <Field label="น้ำหนักแกน (kg)" value={p.core_weight ?? ''} onChange={v => setP({ ...p, core_weight: v })} ph="1.15"/>
+            <Field label="ความยาว (เมตร) ✨" value={(p as any).length ?? ''} onChange={v => setP({ ...p, length: v } as any)} ph="1570"/>
           </div>
           <div>
             <label className="block text-[10px] text-slate-500 mb-1">ลูกค้า</label>

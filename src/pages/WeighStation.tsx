@@ -2425,14 +2425,22 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       // อ้างอิง WO/SO: ม้วนในระบบ → ตามต้นทาง · ม้วนนอกระบบ → ออกเป็น Lot/ออเดอร์ที่กำลังชั่ง
       const useWo = useSrc ? (useSrc.work_order ?? profile.woNo ?? '') : (profile.woNo ?? '')
       const useSo = useSrc ? (useSrc.sale_order ?? profile.soNo ?? '') : (profile.soNo ?? '')
-      // ความยาว/Pcs: งานปกติ → จาก profile · งานกรอ → ค่าที่กรอก (reworkLen) มาก่อน แล้ว fallback ม้วนต้นทาง
-      // อ้างอิงม้วนต้นทางโดยตรง (ผูกกับ WO/SO ของงาน) — ไม่อ้างอิง lot ที่อาจถูกใช้ซ้ำข้ามสินค้า
+      // ความยาว/Pcs — fallback สุดท้ายดึงจาก "มาสเตอร์สินค้า" (products.length ผูก item_code) ✨
+      // → ถ้าตั้งงาน/ม้วนต้นทางไม่มี ก็ได้จากมาสเตอร์เสมอ ไม่ต้อง backfill รายตัวอีก
+      let masterLen = '', masterPcs = ''
+      if (isGood && (profile.itemCode ?? '').trim()) {
+        try {
+          const { data: pm } = await supabase.from('products')
+            .select('length, pcs').eq('item_code', (profile.itemCode ?? '').trim()).limit(1).maybeSingle()
+          masterLen = (pm as any)?.length ?? ''; masterPcs = (pm as any)?.pcs ?? ''
+        } catch { /* คอลัมน์ยังไม่ถูกเพิ่ม — ข้าม */ }
+      }
       const lengthVal = (isRework && isGood)
-        ? (reworkLen.trim() || String(useSrc?.length ?? '') || '')
-        : (profile.length || '')
+        ? (reworkLen.trim() || String(useSrc?.length ?? '') || masterLen || '')
+        : (profile.length || masterLen || '')
       const pcsVal = (isRework && isGood)
-        ? (String(useSrc?.pcs ?? '') || '')
-        : (profile.pcs || '')
+        ? (String(useSrc?.pcs ?? '') || masterPcs || '')
+        : (profile.pcs || masterPcs || '')
 
       const payload = {
         job_id:       null,

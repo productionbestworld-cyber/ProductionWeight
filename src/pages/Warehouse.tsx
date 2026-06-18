@@ -678,9 +678,10 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                             return (
                             <Fragment key={r.id}>
                             <tr onClick={() => setExpandedRoll(isOpen ? null : r.id)}
-                              className={`cursor-pointer ${isOpen ? 'bg-slate-800/40' : 'hover:bg-slate-800/30'}`}>
+                              className={`cursor-pointer ${rr.new_system ? 'bg-emerald-500/10 border-l-4 border-emerald-400' : ''} ${isOpen ? 'bg-slate-800/40' : 'hover:bg-slate-800/30'}`}>
                               <td className="px-4 py-2.5 text-slate-500 text-xs">{idx + 1}</td>
-                              <td className="px-4 py-2.5 font-mono font-bold text-white">{isOpen ? '▲' : '▼'} #{r.roll_no}
+                              <td className={`px-4 py-2.5 font-mono font-bold ${rr.new_system ? 'text-emerald-200' : 'text-white'}`}>{isOpen ? '▲' : '▼'} #{r.roll_no}
+                                {rr.new_system && <span className="ml-1.5 text-[9px] bg-emerald-500/25 text-emerald-200 px-1.5 py-0.5 rounded font-black">✨ ใหม่</span>}
                                 {isReworkRoll(r) && <span className="ml-1.5 text-[9px] bg-amber-500/25 text-amber-200 px-1.5 py-0.5 rounded font-bold" title={(r as any).rework_remark || `กรอจาก Lot ${(r as any).rework_source_lot||''}`}>🔄 กรอ</span>}
                                 {((r as any).remark || '').includes('คืน NC') && <span className="ml-1.5 text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold" title={(r as any).remark}>↩ เคยถูก NC</span>}
                               </td>

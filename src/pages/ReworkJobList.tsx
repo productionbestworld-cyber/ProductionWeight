@@ -285,15 +285,33 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
         alert('ปิดงานไม่สำเร็จ: ไม่มีสิทธิ์อัปเดต (RLS) หรือไม่พบงานนี้\nให้เปิดสิทธิ์ UPDATE บนตาราง rework_jobs ใน Supabase')
         return
       }
-      // ปิดงานแล้ว → ม้วนต้นทางที่ยัง "กำลังกรอ" ของ Lot นี้ ถือว่ากรอเสร็จ → reworked
-      const srcLot = ((closeFor as any).source_lot_no || '').trim()
-      if (srcLot) {
-        const { error: rollErr } = await supabase.from('production_rolls')
-          .update({ rework_status: 'reworked' })
-          .eq('lot_no', srcLot)
-          .eq('roll_type', 'bad')
-          .eq('rework_status', 'reworking')
-        if (rollErr) console.warn('อัปเดตสถานะม้วนต้นทางไม่สำเร็จ (non-fatal):', rollErr.message)
+      if ((closeFor as any).new_system) {
+        // ชุดระบบใหม่: ปิดงาน → ม้วนต้นทางที่ "กรอแล้ว" = reworked · ที่ "ยังไม่กรอ" = กลับคิว (รับจากผลิต)
+        const ic = (closeFor.item_code ?? '').trim()
+        const { data: outs } = await supabase.from('production_rolls')
+          .select('rework_source_roll_id').eq('item_code', ic).eq('roll_type', 'good')
+          .eq('new_system', true).not('rework_source_roll_id', 'is', null)
+        const used = new Set((outs ?? []).map((o: any) => o.rework_source_roll_id))
+        const { data: srcs } = await supabase.from('production_rolls')
+          .select('id').eq('item_code', ic).eq('roll_type', 'bad').eq('rework_status', 'reworking')
+        for (const s of srcs ?? []) {
+          if (used.has(s.id)) {
+            await supabase.from('production_rolls').update({ rework_status: 'reworked' }).eq('id', s.id)
+          } else {
+            await supabase.from('production_rolls').update({
+              rework_status: null, rework_received_by: null, rework_received_at: null, rework_remark: null, new_system: false,
+            }).eq('id', s.id)   // เหลือไม่ได้กรอ → กลับคิว
+          }
+        }
+      } else {
+        // งานเก่า: เดิม — ม้วนกำลังกรอของ Lot ต้นทาง → reworked
+        const srcLot = ((closeFor as any).source_lot_no || '').trim()
+        if (srcLot) {
+          const { error: rollErr } = await supabase.from('production_rolls')
+            .update({ rework_status: 'reworked' })
+            .eq('lot_no', srcLot).eq('roll_type', 'bad').eq('rework_status', 'reworking')
+          if (rollErr) console.warn('อัปเดตสถานะม้วนต้นทางไม่สำเร็จ (non-fatal):', rollErr.message)
+        }
       }
       setCloseFor(null)
       await load()
@@ -583,6 +601,11 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
                 {prog.rolls === 0 && (
                   <div className="bg-amber-500/10 border border-amber-500/25 rounded-xl px-3 py-2 text-xs text-amber-300">
                     ⚠️ ยังไม่มีม้วนดีที่ชั่งออกจากงานนี้ — ปิดงานโดยไม่มีผลผลิต?
+                  </div>
+                )}
+                {(closeFor as any).new_system && (
+                  <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-xl px-3 py-2 text-xs text-emerald-300">
+                    ✨ ชุดระบบใหม่: ปิดได้เลยแม้กรอไม่หมด — ม้วนที่ยังไม่กรอจะ<b>กลับเข้าคิว "รับจากผลิต"</b> ให้กรอต่อทีหลังได้
                   </div>
                 )}
 

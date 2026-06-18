@@ -2550,6 +2550,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       setWeighedRolls(prev => [...prev, data].filter(Boolean))
       // ม้วนต้นทาง: ชั่งได้แล้ว → ปิดม้วน (ที่เหลือเป็นเศษ) → หายจากลิสต์ กันชั่งซ้ำ
       // ⚠ เฉพาะตอนเซฟสำเร็จ (online) — ถ้าออฟไลน์ ม้วนใหม่ยังไม่ลง DB จึงไม่หักม้วนต้นทาง
+      let jobDoneAutoExit = false
       if (useSrc && inserted) {
         const sc = Math.max(0, (useSrc.weight ?? 0) - saveWeight)
         await supabase.from('production_rolls').update({
@@ -2570,6 +2571,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                 await supabase.from('rework_jobs').update({
                   status: 'closed', closed_at: new Date().toISOString(), closed_by: inspector || 'auto',
                 }).eq('id', reworkJobId)
+                jobDoneAutoExit = true   // งานนี้กรอครบ → เด้งกลับรายการงานหลังปริ้นเสร็จ
               }
             }
           } catch (e: any) { console.warn('auto-close job err (non-fatal):', e?.message ?? e) }
@@ -2663,6 +2665,10 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
           awaitingClearRef.current = true
           setAwaitingClear(true)
         }
+      }
+      // งานกรอจบ (ม้วนต้นทางครบ) → ปริ้นแล้วเด้งกลับรายการงานอัตโนมัติ
+      if (jobDoneAutoExit) {
+        setTimeout(() => onBack(), 1200)
       }
     } catch (e: any) {
       alert('บันทึกไม่สำเร็จ: ' + (e?.message ?? JSON.stringify(e)))

@@ -91,17 +91,19 @@ export async function addProductIfMissing(p: {
 // ─── เติมกลับ (back-fill) Mat Code / น้ำหนักแกน เข้า master ──────────────────
 // ใช้ตอนพนักงานกรอกค่าที่ master ยังไม่มี → ครั้งหน้าจะ auto-fill ให้เลย
 // เงื่อนไข: เติม "เฉพาะช่องที่ว่างอยู่" เท่านั้น — ไม่ทับค่าที่มีอยู่แล้ว
-export async function backfillProductMatCore(itemCode?: string, matCode?: string, coreWeight?: string, productName?: string, productCode?: string) {
+export async function backfillProductMatCore(itemCode?: string, matCode?: string, coreWeight?: string, productName?: string, productCode?: string, length?: string, pcs?: string) {
   const ic = (itemCode ?? '').trim()
   if (!ic) return
   const mat = (matCode ?? '').trim()
   const core = (coreWeight ?? '').trim()
   const name = (productName ?? '').trim()
   const pcode = (productCode ?? '').trim()
-  if (!mat && !core && !name && !pcode) return
+  const len = (length ?? '').trim()
+  const pc = (pcs ?? '').trim()
+  if (!mat && !core && !name && !pcode && !len && !pc) return
   try {
     const { data } = await supabase.from('products')
-      .select('id, mat_code, core_weight, product_name, product_code').eq('item_code', ic).limit(1)
+      .select('id, mat_code, core_weight, product_name, product_code, length, pcs').eq('item_code', ic).limit(1)
     const p = data?.[0]
     if (!p) return  // ไม่มีสินค้านี้ใน master (เช่น item code ใหม่) → ไม่ทำอะไร
     const patch: Record<string, string> = {}
@@ -112,6 +114,9 @@ export async function backfillProductMatCore(itemCode?: string, matCode?: string
     if (name && name !== ic && !((p as any).product_name ?? '').trim()) patch.product_name = name
     // จำ Product Code ที่พิมพ์เอง — เฉพาะตอน master ยังว่าง
     if (pcode && pcode !== ic && !((p as any).product_code ?? '').trim()) patch.product_code = pcode
+    // ✨ ความยาว/Pcs ยึดตาม item — แก้ที่เป่าแล้วทับ master ได้เลย (อัปเดตเมื่อต่างจากเดิม)
+    if (len && len !== String((p as any).length ?? '').trim()) patch.length = len
+    if (pc && pc !== String((p as any).pcs ?? '').trim()) patch.pcs = pc
     if (Object.keys(patch).length === 0) return  // master มีครบแล้ว → ไม่ทับ
     await supabase.from('products').update(patch).eq('id', (p as any).id)
   } catch (e) {

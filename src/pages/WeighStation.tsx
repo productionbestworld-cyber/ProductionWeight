@@ -1443,8 +1443,8 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
         updated_at:    new Date().toISOString(),
       }, { onConflict: 'machine_no' })
       if (error) throw new Error(error.message)
-      // จำ Mat Code / แกน / ชื่อสินค้า ที่พิมพ์เอง กลับเข้า master (เฉพาะตอน master ว่าง)
-      backfillProductMatCore(p.itemCode, p.matCode, p.coreWeight, p.productName, (p as any).productCode)
+      // จำ Mat Code / แกน / ชื่อสินค้า + ความยาว/Pcs ที่ตั้งตอนสร้าง/แก้เครื่อง กลับเข้า master (ยึดตาม item · ความยาวแก้แล้วทับได้)
+      backfillProductMatCore(p.itemCode, p.matCode, p.coreWeight, p.productName, (p as any).productCode, (p as any).length, (p as any).pcs)
       // จำลูกค้าที่พิมพ์เอง → เพิ่มเข้าคลังลูกค้าอัตโนมัติ
       backfillCustomer(p.custName, p.custCode)
       saveAllSuggestions(p)
@@ -2648,8 +2648,8 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         setManualSrcText(''); setManualSrcKg('')
       }
 
-      // ── จำค่าที่กรอกเอง: ถ้า master ยังไม่มี Mat Code/แกน → เติมกลับให้ครั้งหน้า auto-fill ──
-      backfillProductMatCore(profile.itemCode, profile.matCode, profile.coreWeight, profile.productName, (profile as any).productCode)
+      // ── จำค่าที่กรอกเอง: Mat/แกน/ชื่อ (เติมตอนว่าง) + ความยาว/Pcs (ยึด item · แก้แล้วทับ) กลับเข้า master ──
+      backfillProductMatCore(profile.itemCode, profile.matCode, profile.coreWeight, profile.productName, (profile as any).productCode, lengthVal || (profile as any).length, pcsVal || (profile as any).pcs)
       backfillCustomer((profile as any).custName, (profile as any).custCode)
 
       // บันทึก log ทุกการชั่ง (await + retry 2 ครั้ง — log สำคัญสำหรับ recovery)

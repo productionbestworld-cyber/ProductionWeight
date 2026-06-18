@@ -1961,6 +1961,13 @@ function WeighPage({ profile: initialProfile, onBack }: { profile: MachineProfil
     setSrcProg(prog)
   }
   useEffect(() => { loadSrcRolls() }, [isRework, profile.itemCode, profile.lotNo])
+  // ติ๊กม้วนต้นทางมาแล้วตอนเบิก → จอชั่งเลือก "ม้วนแรกที่ยังไม่ครบ" ให้อัตโนมัติ (ไม่ต้องติ๊กซ้ำ)
+  //   ถ้าอยากเปลี่ยนเป็นม้วนอื่น ค่อยติ๊กเอง (override)
+  useEffect(() => {
+    if (!isRework || manualMode || selSrc) return
+    const first = srcRolls.find((s: any) => ((s.weight ?? 0) - (srcProg[s.id] ?? 0)) > 0.001)
+    if (first) { setSelSrc(first); setReworkCause(first.remark ?? ''); setReworkLen(String(first.length ?? '')) }
+  }, [srcRolls, srcProg, manualMode])
 
   // กดเสร็จม้วนต้นทาง → ที่เหลือเป็นเศษ → ม้วนหายจากลิสต์ (กันชั่งซ้ำ)
   async function finishSource(s: any) {

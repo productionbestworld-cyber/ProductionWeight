@@ -403,7 +403,7 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
     }
   }
   async function deleteJob(job: ReworkJob) {
-    if (!confirm(`ลบงาน "${job.product_name}" (Lot ${job.lot_no}) ทิ้ง?\n\nม้วนต้นทางที่ยังไม่ได้ชั่งกรอจะถูกคืนกลับคิว "รับจากผลิต"\nม้วนที่กรอไปแล้วยังอยู่ในระบบ`)) return
+    if (!confirm(`ยกเลิกงาน "${job.product_name}" (Lot ${job.lot_no})?\n\n→ ม้วนต้นทางที่ยังไม่ได้ชั่งกรอจะถูก "คืนกลับคิว รับจากผลิต" (โยนกลับที่เก่า)\n→ ม้วนที่กรอไปแล้วยังอยู่ในระบบตามเดิม`)) return
     try {
       if ((job as any).new_system) {
         // ชุดระบบใหม่: คืนม้วนต้นทางที่ "ยังไม่ได้กรอ" กลับคิว · ม้วนที่กรอแล้ว = reworked
@@ -577,14 +577,13 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                       <div className="flex gap-1">
-                        <button onClick={() => setHistItem({ code: (j.item_code ?? '').trim(), name: j.product_name ?? '' })}
-                          title="ม้วนที่ชั่งกรอแล้ว (รีปริ้น)" className="text-[10px] bg-slate-700/60 hover:bg-brand-600 text-slate-300 hover:text-white px-1.5 py-0.5 rounded">📜</button>
                         {jobStatus==='closed' ? (
                           <button onClick={() => reopenJob(j)} disabled={reopening===j.id}
-                            className="text-[10px] bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white px-2 py-0.5 rounded font-bold">↩</button>
+                            title="ดึงกลับมาชั่งต่อ" className="text-[10px] bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white px-2 py-0.5 rounded font-bold">↩ ชั่งต่อ</button>
                         ) : (<>
-                          <button onClick={() => closeJob(j)} title="ปิดงาน" className="text-[10px] bg-slate-700/60 hover:bg-green-600 text-slate-300 hover:text-white px-1.5 py-0.5 rounded">✓</button>
-                          <button onClick={() => deleteJob(j)} title="ลบงาน" className="text-[10px] bg-slate-700/60 hover:bg-red-600 text-slate-300 hover:text-white px-1.5 py-0.5 rounded"><Trash2 size={10}/></button>
+                          <button onClick={() => openJob(j)}
+                            title="ชั่งม้วนนี้" className="text-[11px] bg-brand-600 hover:bg-brand-500 text-white px-2.5 py-1 rounded font-bold">⚖️ ชั่ง</button>
+                          <button onClick={() => deleteJob(j)} title="ยกเลิกงาน — คืนม้วนกลับคิว 'รับจากผลิต'" className="text-[10px] bg-slate-700/60 hover:bg-red-600 text-slate-300 hover:text-white px-1.5 py-1 rounded"><Trash2 size={10}/></button>
                         </>)}
                       </div>
                     </td>
@@ -624,14 +623,12 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
                       <button onClick={e => { e.stopPropagation(); reopenJob(j) }} disabled={reopening===j.id}
                         title="ดึงกลับมาชั่งต่อ" className="text-[10px] bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white px-2 py-0.5 rounded font-bold">
                         {reopening===j.id ? '...' : '↩ ดึงกลับมาชั่ง'}</button>
-                    ) : (<>
-                      <button onClick={e => { e.stopPropagation(); closeJob(j) }}
-                        title="ปิดงาน" className="text-[10px] bg-slate-700/60 hover:bg-green-600 text-slate-300 hover:text-white px-1.5 py-0.5 rounded">✓</button>
+                    ) : (
                       <button onClick={e => { e.stopPropagation(); deleteJob(j) }}
-                        title="ลบงาน" className="text-[10px] bg-slate-700/60 hover:bg-red-600 text-slate-300 hover:text-white px-1.5 py-0.5 rounded">
+                        title="ยกเลิกงาน — คืนม้วนกลับคิว 'รับจากผลิต'" className="text-[10px] bg-slate-700/60 hover:bg-red-600 text-slate-300 hover:text-white px-1.5 py-0.5 rounded">
                         <Trash2 size={10}/>
                       </button>
-                    </>)}
+                    )}
                   </div>
                 </div>
                 {/* body */}

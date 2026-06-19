@@ -1985,10 +1985,14 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
       if (ids.length) scopeIds = ids
     }
     // ม้วนเสียที่เบิกมา = bad + reworking + สินค้าเดียวกัน
+    //   กรอต่อ (mergeMode): รวมม้วนที่ยังอยู่ในคิว (ยังไม่เบิก) ด้วย → เลือกม้วนที่ 2 ได้แม้ยังไม่เบิก
     let q = supabase.from('production_rolls')
-      .select('id, lot_no, roll_no, weight, core_weight, length, pcs, work_order, sale_order, remark, inbound_type, product_name, customer, width_cm, width_unit, thick_mc, machine_no, review_action_reason, review_decision_by, new_system')
-      .eq('roll_type', 'bad').eq('item_code', ic).eq('rework_status', 'reworking')
+      .select('id, lot_no, roll_no, weight, core_weight, length, pcs, work_order, sale_order, remark, inbound_type, product_name, customer, width_cm, width_unit, thick_mc, machine_no, review_action_reason, review_decision_by, new_system, rework_status')
+      .eq('roll_type', 'bad').eq('item_code', ic)
       .order('created_at', { ascending: true })
+    q = mergeMode
+      ? q.or('rework_status.eq.reworking,rework_status.is.null,rework_status.eq.pending')
+      : q.eq('rework_status', 'reworking')
     if (scopeIds) q = q.in('id', scopeIds)
     const { data: src } = await q
     setSrcRolls(src ?? [])
@@ -3082,6 +3086,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                             {sel2 && <span className="text-[9px] bg-emerald-500/30 text-emerald-200 px-1.5 py-0.5 rounded font-black">กรอต่อ ม้วนที่ 2</span>}
                             {s.work_order && <span className="text-sm font-black bg-amber-500/25 text-amber-100 border border-amber-400/40 px-2 py-0.5 rounded whitespace-nowrap">WO {s.work_order}</span>}
                             <span className="text-slate-300 font-mono">Lot {s.lot_no} #{s.roll_no}</span>
+                            {(!s.rework_status || s.rework_status === 'pending') && <span className="text-[9px] bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded whitespace-nowrap">🆕 ยังไม่เบิก</span>}
                           </span>
                         </button>
                         {/* ➕ กรอต่อ: เลือกม้วนที่ 2 (มีม้วนแรกแล้ว · ม้วนนี้ยังไม่ใช่แรก/สอง) */}

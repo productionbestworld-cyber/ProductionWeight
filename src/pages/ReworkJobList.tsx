@@ -299,7 +299,7 @@ function JobListView({ onPickJob, refreshSignal }: { onPickJob: (profile: Machin
   useEffect(() => { if (refreshSignal) load() }, [refreshSignal]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // เลือกเครื่องแล้ว → สร้าง Lot + เปิดจอชั่งของเครื่องนั้น (ใช้ทั้งจากปุ่มเลือกเครื่อง และกดม้วน "ชั่งเลย")
-  async function pickMachine(job: ReworkJob, machine_no: string) {
+  async function pickMachine(job: ReworkJob, machine_no: string, mergeSourceIds?: string[]) {
     let lot = job.lot_no?.trim() ?? ''
     const srcLot = ((job as any).source_lot_no ?? '').trim()
     let gen = ''
@@ -314,8 +314,9 @@ function JobListView({ onPickJob, refreshSignal }: { onPickJob: (profile: Machin
       await supabase.from('rework_jobs').update({ lot_no: gen }).eq('id', job.id)
     }
     const prof = jobToProfile({ ...job, lot_no: lot }, machine_no)
-    if (pendingMergeIds && pendingMergeIds.length >= 2) {
-      (prof as any).mergeSourceIds = pendingMergeIds   // ✨ ส่งม้วนกรอต่อเข้าจอชั่ง (preset)
+    const mIds = mergeSourceIds ?? pendingMergeIds   // จาก param (เชื่อถือได้) หรือ state (เผื่อ pickFor)
+    if (mIds && mIds.length >= 2) {
+      (prof as any).mergeSourceIds = mIds   // ✨ ส่งม้วนกรอต่อเข้าจอชั่ง (preset)
       setPendingMergeIds(null)
     }
     setPickFor(null)
@@ -332,21 +333,21 @@ function JobListView({ onPickJob, refreshSignal }: { onPickJob: (profile: Machin
       .select('job_id, source_roll_id').in('job_id', jobsSel.map(j => j.id!))
     const srcIds = [...new Set((wds ?? []).map((w: any) => w.source_roll_id).filter(Boolean))]
     if (srcIds.length < 2) { alert('ไม่พบม้วนต้นทางครบ 2 ม้วน'); return }
-    setPendingMergeIds(srcIds)
     setMergeSelMode(false); setMergeSel(new Set())
-    await openJob(jobsSel[0])   // เปิดจอชั่งของงานแรก (pickMachine จะแนบ mergeSourceIds)
+    await openJob(jobsSel[0], srcIds)   // ส่ง srcIds ผ่าน param ตรงๆ (ไม่พึ่ง state ที่อัปเดตไม่ทัน)
   }
 
   // กดการ์ดงาน → ถ้าชุดระบบใหม่มีเครื่องล็อกอยู่แล้ว ไปจอชั่งเลย ไม่ต้องเลือกเครื่องซ้ำ
-  async function openJob(job: ReworkJob) {
+  async function openJob(job: ReworkJob, mergeSourceIds?: string[]) {
     if ((job as any).new_system) {
       const ic = (job.item_code ?? '').trim()
       const { data } = await supabase.from('production_rolls')
         .select('machine_no')
         .eq('item_code', ic).eq('roll_type', 'good').eq('new_system', true).eq('transferred', false)
         .limit(1).maybeSingle()
-      if (data?.machine_no) { await pickMachine(job, data.machine_no); return }  // ล็อกเครื่องเดิม → ชั่งต่อเลย
+      if (data?.machine_no) { await pickMachine(job, data.machine_no, mergeSourceIds); return }  // ล็อกเครื่องเดิม → ชั่งต่อเลย
     }
+    if (mergeSourceIds) setPendingMergeIds(mergeSourceIds)   // ไม่มีเครื่องล็อก → เก็บไว้ให้ pickMachine ตอนเลือกเครื่อง
     setPickFor(job)  // ยังไม่มีเครื่องล็อก (เริ่มม้วน #1) → เลือกเครื่องก่อน
   }
 

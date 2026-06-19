@@ -1132,6 +1132,8 @@ function ReworkPendingPanel({ refreshKey }: { refreshKey: number }) {
   const [loading, setLoading] = useState(true)
   const [printing, setPrinting] = useState<string | null>(null)
   const [detail, setDetail] = useState<any | null>(null)
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const [allCollapsed, setAllCollapsed] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -1158,10 +1160,18 @@ function ReworkPendingPanel({ refreshKey }: { refreshKey: number }) {
   return (
     <aside className="hidden xl:flex w-[360px] shrink-0 bg-slate-950 border-l border-slate-800 flex-col h-full">
       <div className="px-4 py-3 border-b border-slate-800 bg-slate-900">
-        <p className="text-white font-bold">📜 ม้วนกรอที่ชั่งแล้ว · รอโอน</p>
-        <p className="text-slate-400 text-xs mt-0.5">{rolls.length} ม้วน · {fmt(totKg,1)} Kg — หายเมื่อโอนงานออก · แตะม้วนดูรายละเอียด/รีปริ้น</p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-white font-bold">📜 ม้วนกรอรอโอน</p>
+          {keys.length > 1 && (
+            <button onClick={() => { const nv = !allCollapsed; setAllCollapsed(nv); setCollapsed(nv ? Object.fromEntries(keys.map(k => [k, true])) : {}) }}
+              className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded font-bold">
+              {allCollapsed ? '▼ ขยายทั้งหมด' : '▲ ยุบทั้งหมด'}
+            </button>
+          )}
+        </div>
+        <p className="text-slate-400 text-xs mt-0.5">{rolls.length} ม้วน · {keys.length} สินค้า · {fmt(totKg,1)} Kg — หายเมื่อโอน · แตะม้วนดู/รีปริ้น</p>
       </div>
-      <div className="flex-1 overflow-y-auto p-2.5 space-y-3">
+      <div className="flex-1 overflow-y-auto p-2.5 space-y-2">
         {loading ? (
           <p className="text-center py-10 text-slate-500 text-sm">กำลังโหลด...</p>
         ) : keys.length === 0 ? (
@@ -1169,24 +1179,32 @@ function ReworkPendingPanel({ refreshKey }: { refreshKey: number }) {
         ) : keys.map(k => {
           const list = groups[k]
           const gKg = list.reduce((s, r) => s + (r.weight ?? 0), 0)
+          const open = !(collapsed[k] ?? false)
           return (
-            <div key={k}>
-              <div className="flex items-center justify-between px-1 mb-1">
-                <p className="text-slate-300 text-xs font-bold truncate">{list[0].product_name || k} <span className="text-slate-600 font-mono">· {k}</span></p>
-                <span className="text-[10px] text-slate-400 shrink-0">{list.length} ม้วน · {fmt(gKg,1)}</span>
-              </div>
-              <div className="space-y-1.5">
-                {list.map(r => (
-                  <button key={r.id} onClick={() => setDetail(r)}
-                    className="w-full text-left bg-emerald-500/5 border border-emerald-500/25 hover:border-emerald-400 rounded-lg px-2.5 py-1.5 transition-colors">
-                    <p className="text-white font-black text-sm">#{r.roll_no} <span className="text-slate-400 font-normal">· {fmt(r.weight,2)} Kg</span> <span className="text-slate-600 text-[10px] font-normal">· แตะดูรายละเอียด</span></p>
-                    <p className="text-slate-500 text-[10px] truncate">
-                      {r.machine_no || '—'}{r.length ? ` · ${r.length} M.` : ''}{r.work_order ? ` · WO ${r.work_order}` : ''}
-                      {r.rework_source_lot ? ` · จาก ${r.rework_source_lot}` : ''}
-                    </p>
-                  </button>
-                ))}
-              </div>
+            <div key={k} className="border border-slate-800 rounded-lg overflow-hidden">
+              {/* หัวกลุ่ม — แถบสีเด่น คลิกยุบ/ขยาย */}
+              <button onClick={() => setCollapsed(c => ({ ...c, [k]: open }))}
+                className="w-full flex items-center justify-between gap-2 px-2.5 py-2 bg-emerald-600/15 hover:bg-emerald-600/25 border-l-4 border-emerald-500 text-left sticky top-0 z-10">
+                <p className="text-emerald-100 text-xs font-black truncate">
+                  <span className="text-emerald-400">{open ? '▼' : '▶'}</span> {list[0].product_name || k}
+                  <span className="text-emerald-300/50 font-mono font-normal"> · {k}</span>
+                </p>
+                <span className="text-[10px] text-emerald-200 font-bold shrink-0 bg-emerald-900/40 px-1.5 py-0.5 rounded">{list.length} ม้วน · {fmt(gKg,1)}</span>
+              </button>
+              {open && (
+                <div className="space-y-1.5 p-2">
+                  {list.map(r => (
+                    <button key={r.id} onClick={() => setDetail(r)}
+                      className="w-full text-left bg-emerald-500/5 border border-emerald-500/25 hover:border-emerald-400 rounded-lg px-2.5 py-1.5 transition-colors">
+                      <p className="text-white font-black text-sm">#{r.roll_no} <span className="text-slate-400 font-normal">· {fmt(r.weight,2)} Kg</span></p>
+                      <p className="text-slate-500 text-[10px] truncate">
+                        {r.machine_no || '—'}{r.length ? ` · ${r.length} M.` : ''}{r.work_order ? ` · WO ${r.work_order}` : ''}
+                        {r.rework_source_lot ? ` · จาก ${r.rework_source_lot}` : ''}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )
         })}

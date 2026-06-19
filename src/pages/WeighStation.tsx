@@ -2723,9 +2723,9 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
 
       if (isGood) {
         setWeighedKg(prev => parseFloat((prev + saveWeight).toFixed(dec)))
-        // หาเลขถัดไปจาก gap (ไม่ +1 ตรงๆ — กันกรณีลบม้วนกลางๆ)
+        // เป่า: เลขต่อเนื่อง (max+1) · กรอ: gap-fill
         const newList = [...weighedRolls, data]
-        setRollNo(nextRollNo(newList.filter((r:any) => r?.roll_type === 'good')))
+        setRollNo(nextRollNo(newList.filter((r:any) => r?.roll_type === 'good'), isRework))
         // print fire-and-forget (ไม่ await — ไม่บล็อก save flow)
         printLabel({...profile, length: lengthVal || profile.length, pcs: pcsVal || profile.pcs, inspector}, rollNo, gross, saveWeight, profile.labelSize ?? 'long', 'good', '', data.id)
         // กรอต่อ: ม้วนต้นทางที่ 2 ถูกรวมเข้าม้วนนี้แล้ว → mark consumed (หลุดจากลิสต์ต้นทาง)

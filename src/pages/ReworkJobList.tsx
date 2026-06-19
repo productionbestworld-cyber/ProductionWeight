@@ -621,7 +621,7 @@ function JobListView({ onPickJob, refreshSignal }: { onPickJob: (profile: Machin
                     <td className="px-3 py-2 text-amber-300 text-xs whitespace-nowrap">{sos.join(', ') || '—'}</td>
                     <td className="px-3 py-2 text-sky-200 text-xs whitespace-nowrap">{bys.join(', ') || '—'}</td>
                     <td className="px-3 py-2 text-amber-200 font-mono text-xs whitespace-nowrap">{rolls.length ? '#'+rolls.join(', #') : (j.source_roll_count ? `${j.source_roll_count} ม้วน` : '—')}</td>
-                    <td className="px-3 py-2 text-slate-300 font-bold whitespace-nowrap">{fmt(planned,1)}</td>
+                    <td className="px-3 py-2 text-slate-300 font-bold whitespace-nowrap">{fmt(planned,2)}</td>
                     <td className="px-3 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                       <div className="flex gap-1">
                         {jobStatus==='closed' ? (
@@ -645,7 +645,7 @@ function JobListView({ onPickJob, refreshSignal }: { onPickJob: (profile: Machin
                     <tr key={'h'+k} className="bg-slate-800/70 sticky">
                       <td colSpan={8} className="px-3 py-1.5 text-xs font-bold text-brand-200">
                         📦 {gj[0].product_name || k} <span className="text-slate-500 font-mono font-normal">· {k}</span>
-                        <span className="text-slate-400 font-normal"> — {gj.length} งาน · เบิกรวม {fmt(gPlanned,1)} kg</span>
+                        <span className="text-slate-400 font-normal"> — {gj.length} งาน · เบิกรวม {fmt(gPlanned,2)} kg</span>
                       </td>
                     </tr>,
                     ...gj.map(renderRow),
@@ -752,15 +752,15 @@ function JobListView({ onPickJob, refreshSignal }: { onPickJob: (profile: Machin
                     <div className="grid grid-cols-3 gap-1 text-center mb-1.5">
                       <div className="bg-slate-800/60 rounded-lg py-1">
                         <p className="text-[9px] text-slate-500">เบิกมา</p>
-                        <p className="text-xs font-black text-slate-200">{fmt(planned,1)}</p>
+                        <p className="text-xs font-black text-slate-200">{fmt(planned,2)}</p>
                       </div>
                       <div className="bg-green-500/10 rounded-lg py-1">
                         <p className="text-[9px] text-green-400/70">กรอได้</p>
-                        <p className="text-xs font-black text-green-300">{fmt(p.kg,1)}</p>
+                        <p className="text-xs font-black text-green-300">{fmt(p.kg,2)}</p>
                       </div>
                       <div className="bg-red-500/10 rounded-lg py-1">
                         <p className="text-[9px] text-red-400/70">เศษ(คาด)</p>
-                        <p className="text-xs font-black text-red-300">{fmt(Math.max(0, planned - p.kg),1)}</p>
+                        <p className="text-xs font-black text-red-300">{fmt(Math.max(0, planned - p.kg),2)}</p>
                       </div>
                     </div>
                     <div className="flex justify-between text-[10px] mb-1">

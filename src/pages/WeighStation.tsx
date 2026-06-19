@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Save, Printer, RefreshCw, CheckCircle2, ArrowLeft, Wind, X, Settings } from 'lucide-react'
 import QRCode from 'react-qr-code'
 import QRCodeLib from 'qrcode'
-import { supabase } from '../lib/supabase'
+import { supabase, fetchAll } from '../lib/supabase'
 import { loadProfiles, saveProfiles, fmtSize, convertWidth, type MachineProfile } from './MachineSettings'
 import ReworkJobList from './ReworkJobList'
 import { loadLongLayout, loadShortLayout, loadWasteLayout, type FieldConfig } from './LabelDesigner'
@@ -2143,11 +2143,14 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
           let { error } = await supabase.from('production_rolls').insert(item)
           // ถ้า roll_no ชน — gen ใหม่จาก DB แล้วลองอีกครั้ง
           if (error && (error as any).code === '23505') {
-            const { data: existing } = await supabase.from('production_rolls')
-              .select('roll_no, roll_type')
+            const existing = await fetchAll(() => supabase.from('production_rolls')
+              .select('roll_no, roll_type, work_order')
               .eq('machine_no', item.machine_no)
               .eq('lot_no', item.lot_no)
-            const sameType = (existing ?? []).filter((x:any) => x.roll_type === item.roll_type)
+              .order('id', { ascending: true }))
+            // เลขม้วนนับแยกตาม WO (freshStart) → หาเลขว่างเฉพาะ WO เดียวกัน
+            const sameType = existing.filter((x:any) => x.roll_type === item.roll_type
+              && (x.work_order ?? '') === (item.work_order ?? ''))
             const taken = new Set(sameType.map((x:any) => x.roll_no).filter(Boolean))
             let n = 1; while (taken.has(n)) n++
             const retry = await supabase.from('production_rolls').insert({ ...item, roll_no: n })
@@ -2199,51 +2202,58 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
   const goodPlusBadKg = weighedKg + badKgSum
 
   // หาเลขม้วนที่หายไปเลขแรก (เช่น มี 1,2,3,5 → คืน 4) — ถ้าไม่มีช่องว่าง คืน max+1
-  function nextRollNo(rolls: any[]): number {
-    const taken = new Set(rolls.map(r => r.roll_no).filter(n => n && n > 0))
+  // gapFill=true → เติมเลขที่หาย (กรอ/กู้ชน) · gapFill=false → ต่อเนื่อง max+1 (เป่า: โอนแล้วชั่งต่อไม่ถอยเลข)
+  function nextRollNo(rolls: any[], gapFill = true): number {
+    const nums = rolls.map(r => r.roll_no).filter(n => n && n > 0) as number[]
+    if (!gapFill) return (nums.length ? Math.max(...nums) : 0) + 1
+    const taken = new Set(nums)
     let i = 1
     while (taken.has(i)) i++
     return i
   }
 
   // โหลดม้วนทั้งหมดของ machine+lot นี้ — merge กับ offline queue เพื่อไม่ให้เลขม้วนชน
-  function loadRollsForMachine() {
-    supabase.from('production_rolls')
-      .select('*')
-      .eq('machine_no', profile.machine_no)
-      .eq('lot_no', profile.lotNo)
-      .order('created_at', { ascending: true })
-      .then(({ data, error }) => {
-        if (error) { console.warn('load rolls error:', error.message); return }
-        // ── รวมม้วนที่ค้างใน offline queue (ของ machine+lot นี้เท่านั้น) ──
-        const offlineForThis = loadQueue()
-          .filter((q: any) => q.machine_no === profile.machine_no && q.lot_no === profile.lotNo)
-          .map((q: any) => ({ ...q, id: `offline_${q.created_at}_${q.roll_no}`, _offline: true }))
-        let merged = [...(data ?? []), ...offlineForThis]
-        // freshStart (งานผลิตดึงกลับ): นับเฉพาะม้วนของ WO นี้
-        // ⚠ งานกรอ: ห้ามกรองตาม WO — เพราะงานรวมข้ามไซส์มีหลาย WO ใน Lot เดียว
-        //   เลขม้วนต้อง unique ทั้ง Lot ไม่งั้นแจกเลขซ้ำ (เช่น #12 ชนกัน)
-        if ((profile as any).freshStart && !isRework) {
-          merged = merged.filter((r: any) => (r.work_order ?? '') === (profile.woNo ?? ''))
-        }
-        // ชุดระบบใหม่ (กรอ): พอโอนแล้วม้วนหลุดจากจอชั่ง → เริ่มชุดใหม่ #1 สะอาด (ไม่โชว์ประวัติที่โอนไปแล้ว)
-        if (isRework && (profile as any).newSystem) {
-          merged = merged.filter((r: any) => !r.transferred)
-        }
-        if (!merged.length) {
-          setRollNo(1); setBadRollNo(1); setWeighedRolls([]); setWeighedKg(0); return
-        }
-        const goodRolls = merged.filter((r: any) => r.roll_type === 'good')
-        const total = goodRolls.reduce((s: number, r: any) => s + (r.weight ?? 0), 0)
-        setWeighedKg(parseFloat(total.toFixed(dec)))
-        setWeighedRolls(merged)
-        // กรอ: ตั้งรอบปัจจุบัน = รอบล่าสุดที่มีในข้อมูล (ม้วนใหม่ต่อในรอบนั้น จนกว่าจะกดเริ่มรอบใหม่)
-        if (isRework) setReworkRound(Math.max(1, ...merged.map((r:any)=>r.rework_batch ?? 1)))
-        const badRolls = merged.filter((r: any) => r.roll_type === 'bad')
-        // ใช้เลขที่หายไปก่อน เพื่อทดแทนม้วนที่ถูกลบ
-        setRollNo(nextRollNo(goodRolls))
-        setBadRollNo(nextRollNo(badRolls))
-      })
+  async function loadRollsForMachine() {
+    // freshStart (งานผลิตดึงกลับ): นับเฉพาะม้วนของ WO นี้
+    // ⚠ งานกรอ: ห้ามกรองตาม WO — เพราะงานรวมข้ามไซส์มีหลาย WO ใน Lot เดียว
+    //   เลขม้วนต้อง unique ทั้ง Lot ไม่งั้นแจกเลขซ้ำ (เช่น #12 ชนกัน)
+    const useFreshWO = !!(profile as any).freshStart && !isRework
+    // ⚠ Lot ที่ถูกใช้ซ้ำหลาย WO สะสมเกิน 1000 ม้วน → ต้องดึงทีละหน้า ไม่งั้นโดน cap 1000
+    //   เอาม้วนใหม่สุดหาย → เลขม้วนถัดไปเด้งผิด (เคยได้ 44 แทน 47). freshStart กรอง WO ในตัว
+    //   query เลยลดจำนวนแถวลงมาก + เร็วขึ้น
+    const data = await fetchAll(() => {
+      let q = supabase.from('production_rolls')
+        .select('*')
+        .eq('machine_no', profile.machine_no)
+        .eq('lot_no', profile.lotNo)
+      if (useFreshWO) q = q.eq('work_order', profile.woNo ?? '')
+      return q.order('created_at', { ascending: true }).order('id', { ascending: true })
+    })
+    // ── รวมม้วนที่ค้างใน offline queue (ของ machine+lot นี้เท่านั้น) ──
+    const offlineForThis = loadQueue()
+      .filter((q: any) => q.machine_no === profile.machine_no && q.lot_no === profile.lotNo)
+      .map((q: any) => ({ ...q, id: `offline_${q.created_at}_${q.roll_no}`, _offline: true }))
+    let merged = [...data, ...offlineForThis]
+    if (useFreshWO) {
+      merged = merged.filter((r: any) => (r.work_order ?? '') === (profile.woNo ?? ''))
+    }
+    // ชุดระบบใหม่ (กรอ): พอโอนแล้วม้วนหลุดจากจอชั่ง → เริ่มชุดใหม่ #1 สะอาด (ไม่โชว์ประวัติที่โอนไปแล้ว)
+    if (isRework && (profile as any).newSystem) {
+      merged = merged.filter((r: any) => !r.transferred)
+    }
+    if (!merged.length) {
+      setRollNo(1); setBadRollNo(1); setWeighedRolls([]); setWeighedKg(0); return
+    }
+    const goodRolls = merged.filter((r: any) => r.roll_type === 'good')
+    const total = goodRolls.reduce((s: number, r: any) => s + (r.weight ?? 0), 0)
+    setWeighedKg(parseFloat(total.toFixed(dec)))
+    setWeighedRolls(merged)
+    // กรอ: ตั้งรอบปัจจุบัน = รอบล่าสุดที่มีในข้อมูล (ม้วนใหม่ต่อในรอบนั้น จนกว่าจะกดเริ่มรอบใหม่)
+    if (isRework) setReworkRound(Math.max(1, ...merged.map((r:any)=>r.rework_batch ?? 1)))
+    const badRolls = merged.filter((r: any) => r.roll_type === 'bad')
+    // เป่า: เลขต่อเนื่อง (max+1 — โอนแล้วชั่งต่อไม่ถอยกลับ) · กรอ: เติมเลขที่หาย (gap-fill)
+    setRollNo(nextRollNo(goodRolls, isRework))
+    setBadRollNo(nextRollNo(badRolls, isRework))
   }
 
   useEffect(() => {
@@ -2391,12 +2401,16 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
     setClosing(true)
     try {
       // ── H6: ใช้ ground truth จาก DB ไม่ใช่ state ใน memory ──
-      const { data: dbRolls, error: loadErr } = await supabase.from('production_rolls')
-        .select('weight, roll_type, transferred')
-        .eq('machine_no', profile.machine_no)
-        .eq('lot_no', profile.lotNo)
-      if (loadErr) throw loadErr
-      const all = dbRolls ?? []
+      // ดึงทีละหน้า (กัน cap 1000) + freshStart นับเฉพาะ WO นี้ ให้ตรงกับยอดบนจอชั่ง/การ์ด
+      const closeFreshWO = !!(profile as any).freshStart && !isRework
+      const all = await fetchAll(() => {
+        let q = supabase.from('production_rolls')
+          .select('weight, roll_type, transferred')
+          .eq('machine_no', profile.machine_no)
+          .eq('lot_no', profile.lotNo)
+        if (closeFreshWO) q = q.eq('work_order', profile.woNo ?? '')
+        return q.order('id', { ascending: true })
+      })
       const dbGood  = all.filter((r:any) => r.roll_type === 'good')
       const dbBad   = all.filter((r:any) => r.roll_type === 'bad')
       const dbScrap = all.filter((r:any) => typeof r.roll_type === 'string' && r.roll_type.startsWith('scrap'))
@@ -2598,11 +2612,12 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       // ── ถ้า roll_no ชน (unique violation 23505) → reload + retry ครั้งเดียว ──
       if (insertErr && (insertErr as any).code === '23505') {
         console.warn('roll_no ชน — กำลังหาเลขใหม่...')
-        const { data: existing } = await supabase.from('production_rolls')
+        const existing = await fetchAll(() => supabase.from('production_rolls')
           .select('roll_no, roll_type, work_order')
           .eq('machine_no', profile.machine_no)
           .eq('lot_no', profile.lotNo)
-        const sameTypeRolls = (existing ?? []).filter((x:any) =>
+          .order('id', { ascending: true }))
+        const sameTypeRolls = existing.filter((x:any) =>
           x.roll_type === actualType && (!(profile as any).freshStart || (x.work_order ?? '') === (profile.woNo ?? '')))
         const newRollNo = nextRollNo(sameTypeRolls)
         const retryPayload = { ...payload, roll_no: newRollNo }

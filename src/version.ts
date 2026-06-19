@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.6.5'
-export const APP_BUILD_DATE = '2026-06-18'
+export const APP_VERSION = '1.6.6'
+export const APP_BUILD_DATE = '2026-06-19'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.6.6', date: '2026-06-19',
+    items: [
+      'แก้เลขม้วนถัดไปเด้งผิดเมื่อ Lot ใช้ซ้ำหลาย WO จนเกิน 1000 ม้วน (query โดน cap 1000 → ม้วนใหม่หาย เด้งเลขย้อน) · หน้าชั่งดึงม้วนทีละหน้า + กรอง WO ในตัว query ตอน freshStart · แก้ครอบคลุมถึงสรุปปิดงาน + retry เลขชน + flush offline',
+    ],
+  },
   {
     version: '1.6.5', date: '2026-06-19',
     items: [

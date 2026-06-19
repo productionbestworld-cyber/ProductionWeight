@@ -1963,6 +1963,7 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
   const [srcRolls, setSrcRolls]   = useState<any[]>([])         // ม้วนเสียที่เบิกมา (reworking)
   const [selSrc, setSelSrc]       = useState<any | null>(null)  // ม้วนต้นทางที่กำลังกรอ
   const [selSrc2, setSelSrc2]     = useState<any | null>(null)  // ม้วนต้นทางที่ 2 (กรอต่อ — 2 ม้วน→1)
+  const [mergeMode, setMergeMode] = useState(false)            // กรอต่อ: ดึงม้วนอื่นของสินค้านี้มาเลือกเป็นม้วนที่ 2
   const [srcProg, setSrcProg]     = useState<Record<string, number>>({})  // sourceId → กรอได้สะสม (kg)
   // ม้วนนอกระบบ (เอามาจากงานอื่น/ที่อื่น มาชั่งรวมในงานนี้)
   const [manualMode, setManualMode]       = useState(false)
@@ -1975,9 +1976,10 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
     if (!ic) return
     // ถ้าผูกกับงานกรอ → โหลดเฉพาะม้วนที่เบิกเข้างานนี้ (เบิกทีละม้วน = เห็นม้วนเดียว)
     // ถ้างานไม่มีประวัติเบิก (งานเก่า/สร้างเอง) → fallback เป็นม้วนทั้งหมดของสินค้า
+    //   กรอต่อ (mergeMode): ดึงม้วนทั้งหมดของสินค้าที่ "กำลังกรอ" มาเลือกม้วนที่ 2 ได้
     let scopeIds: string[] | null = null
     const jobId = (profile as any).reworkJobId
-    if (jobId) {
+    if (jobId && !mergeMode) {
       const { data: wds } = await supabase.from('rework_withdrawals').select('source_roll_id').eq('job_id', jobId)
       const ids = [...new Set((wds ?? []).map((w: any) => w.source_roll_id).filter(Boolean))]
       if (ids.length) scopeIds = ids
@@ -2001,7 +2003,7 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
     }
     setSrcProg(prog)
   }
-  useEffect(() => { loadSrcRolls() }, [isRework, profile.itemCode, profile.lotNo, (profile as any).reworkJobId])
+  useEffect(() => { loadSrcRolls() }, [isRework, profile.itemCode, profile.lotNo, (profile as any).reworkJobId, mergeMode])
   // ติ๊กม้วนต้นทางมาแล้วตอนเบิก → จอชั่งเลือก "ม้วนแรกที่ยังไม่ครบ" ให้อัตโนมัติ (ไม่ต้องติ๊กซ้ำ)
   //   ถ้าอยากเปลี่ยนเป็นม้วนอื่น ค่อยติ๊กเอง (override)
   // โหลดความยาวจาก master สินค้า (สำรองเมื่อต้นทางไม่เก็บ length เช่นงานเก่า)
@@ -2699,6 +2701,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
             .update({ rework_status: 'reworked', rework_remark: `กรอต่อรวมกับ Lot ${useSrc.lot_no} #${useSrc.roll_no} → ออกม้วน #${useRollNo}` })
             .eq('id', useSrc2.id).then(() => loadSrcRolls(), () => {})
           setSelSrc2(null)
+          setMergeMode(false)   // กรอต่อเสร็จ → กลับโหมดปกติ (เห็นเฉพาะม้วนของงาน)
         }
         // แผนกกรอ: บันทึกสาเหตุที่ม้วนนี้เสีย/มาจากอะไร กลับเข้างานกรอ (ตาม Lot)
         if (isRework && reworkCause.trim()) {
@@ -3053,7 +3056,15 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
           {/* แผนกกรอ: เลือกม้วนต้นทางที่กำลังกรอ (ติ๊กก่อนชั่ง) */}
           {isRework && isGood && (
             <div className="space-y-1.5 bg-slate-900 border border-blue-500/30 rounded-xl p-2.5 order-last">
-              <p className="text-blue-300 text-xs font-bold">📌 กำลังกรอจากม้วนต้นทางไหน? (ติ๊กก่อนชั่ง)</p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-blue-300 text-xs font-bold">📌 กำลังกรอจากม้วนต้นทางไหน? (ติ๊กก่อนชั่ง)</p>
+                <button onClick={() => setMergeMode(v => !v)}
+                  title="กรอต่อ: นำ 2 ม้วนมากรอเป็นม้วนเดียว — กดเพื่อดึงม้วนอื่นของสินค้านี้มาเลือกม้วนที่ 2"
+                  className={`text-[10px] px-2 py-1 rounded font-bold shrink-0 ${mergeMode ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/15'}`}>
+                  {mergeMode ? '✓ โหมดกรอต่อ (ดึงม้วนอื่นแล้ว)' : '🔁 กรอต่อ 2→1'}
+                </button>
+              </div>
+              {mergeMode && <p className="text-[10px] text-emerald-300/80 leading-tight">ติ๊กม้วนแรก → กด "➕ กรอต่อ" ที่ม้วนที่ 2 → ชั่งออกเป็นม้วนเดียว (รวม 2 Lot)</p>}
               <div className="space-y-1 max-h-[55vh] overflow-y-auto">
                 {srcRolls.map(s => {
                   const done = srcProg[s.id] ?? 0

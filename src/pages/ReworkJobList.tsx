@@ -62,7 +62,8 @@ export function jobToProfile(job: ReworkJob, machine_no: string): MachineProfile
     length:       '',
     pcs:          '',
     coreWeight:   job.core_weight  ?? '1.25',
-    inspector:    job.inspector    ?? '',
+    inspector:    '',                          // ✨ คนชั่งคนละคนกับคนเบิก → ไม่ดึงชื่อผู้เบิกมา · คนกรอต้องใส่ชื่อตัวเอง
+    withdrawnBy:  job.inspector    ?? '',      // ชื่อผู้เบิก (โชว์อ้างอิงใน popup จอชั่ง)
     locked:       false,
     plannedQty:   job.planned_qty  ?? '',
     labelSize:   (job.label_size   ?? 'long') as 'long'|'short',

@@ -2939,9 +2939,9 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                             'bg-slate-800 border-slate-700 hover:bg-slate-700/50'
             }`}>
             <div className="flex items-center gap-2 text-left">
-              <span className="text-slate-500 text-xs">ผู้ตรวจสอบ:</span>
+              <span className="text-slate-500 text-xs">{isRework ? '👤 ผู้กรอ (คนชั่ง):' : 'ผู้ตรวจสอบ:'}</span>
               <span className={`font-bold text-sm ${!inspector ? 'text-red-400' : isStale ? 'text-amber-300' : 'text-white'}`}>
-                {inspector || '⚠️ ยังไม่ได้กรอก!'}
+                {inspector || (isRework ? '⚠️ ใส่ชื่อผู้กรอก่อนชั่ง!' : '⚠️ ยังไม่ได้กรอก!')}
               </span>
               {isStale && inspector && (
                 <span className="text-[10px] text-amber-400">· ผ่านมา {Math.floor(hoursSinceSet)} ชม. — กดยืนยันใหม่</span>
@@ -2949,6 +2949,12 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
             </div>
             <span className="text-slate-500 text-[10px]">เปลี่ยน ▸</span>
           </button>
+          {/* ผู้เบิก (คนละคนกับคนกรอ) — โชว์อ้างอิงเฉยๆ ไม่ปนกับชื่อผู้กรอ */}
+          {isRework && (profile as any).withdrawnBy && (
+            <div className="-mt-1 text-[11px] text-slate-400 px-1">
+              📥 เบิกโดย: <b className="text-sky-300">{(profile as any).withdrawnBy}</b> <span className="text-slate-600">· คนกรอใส่ชื่อตัวเองด้านบน</span>
+            </div>
+          )}
 
           {/* แผนกกรอ: เอาปุ่ม "ม้วนกรอ" ออก — เหลือแค่ ม้วนดี + เศษ */}
           <div className={`grid ${profile.section === 'rewind' ? 'grid-cols-2' : 'grid-cols-3'} gap-1.5`}>

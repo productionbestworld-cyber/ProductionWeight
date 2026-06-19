@@ -2020,8 +2020,22 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
       } catch { /* view อาจไม่มีคอลัมน์ */ }
     })()
   }, [isRework, profile.itemCode])
+  // กรอต่อจากตาราง: เปิดมาพร้อม mergeSourceIds → preset โหมดกรอต่อ + เลือกม้วนทั้งคู่ให้เลย
+  const mergeIds = (profile as any).mergeSourceIds as string[] | undefined
+  const mergeAppliedRef = useRef(false)
+  useEffect(() => { if (mergeIds && mergeIds.length >= 2) setMergeMode(true) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (!isRework || manualMode) return
+    if (!mergeIds || mergeIds.length < 2 || mergeAppliedRef.current) return
+    const a = srcRolls.find((s: any) => s.id === mergeIds[0])
+    const b = srcRolls.find((s: any) => s.id === mergeIds[1])
+    if (a && b) {
+      mergeAppliedRef.current = true
+      setSelSrc(a); setReworkCause(a.remark ?? ''); setReworkLen(String(a.length ?? '') || masterLenState)
+      setSelSrc2(b)
+    }
+  }, [srcRolls, masterLenState])  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!isRework || manualMode || mergeIds) return   // โหมดกรอต่อ: ไม่ auto-select ทับ
     const cur = selSrc || srcRolls.find((s: any) => ((s.weight ?? 0) - (srcProg[s.id] ?? 0)) > 0.001)
     if (!cur) return
     if (!selSrc) { setSelSrc(cur); setReworkCause(cur.remark ?? '') }

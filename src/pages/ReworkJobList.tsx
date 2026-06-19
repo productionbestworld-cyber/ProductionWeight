@@ -1134,13 +1134,22 @@ function ReworkPendingPanel({ refreshKey }: { refreshKey: number }) {
   const [detail, setDetail] = useState<any | null>(null)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [allCollapsed, setAllCollapsed] = useState(false)
+  const [srcNo, setSrcNo] = useState<Record<string, number>>({})   // source_roll_id → เลขม้วนต้นทาง
 
   async function load() {
     setLoading(true)
     const data = await fetchAll(() => supabase.from('production_rolls')
-      .select('id, roll_no, weight, gross_weight, core_weight, length, pcs, item_code, product_name, product_code, mat_code, customer, cust_code, lot_no, machine_no, work_order, sale_order, width_cm, width_unit, thick_mc, inspector, remark, roll_type, section, transferred, new_system, rework_source_lot, created_at')
+      .select('id, roll_no, weight, gross_weight, core_weight, length, pcs, item_code, product_name, product_code, mat_code, customer, cust_code, lot_no, machine_no, work_order, sale_order, width_cm, width_unit, thick_mc, inspector, remark, roll_type, section, transferred, new_system, rework_source_roll_id, rework_source_lot, created_at')
       .eq('roll_type', 'good').eq('new_system', true).eq('transferred', false)      .order('roll_no', { ascending: true }))
     setRolls(data ?? [])
+    // ดึงเลขม้วนต้นทาง (rework_source_roll_id → roll_no) เพื่อโชว์ว่า "ดึงมาจากม้วนไหน"
+    const sids = [...new Set((data ?? []).map((r: any) => r.rework_source_roll_id).filter(Boolean))]
+    if (sids.length) {
+      const sd = await fetchAll(() => supabase.from('production_rolls').select('id, roll_no').in('id', sids as string[]))
+      const m: Record<string, number> = {}
+      for (const s of sd ?? []) m[(s as any).id] = (s as any).roll_no
+      setSrcNo(m)
+    } else setSrcNo({})
     setLoading(false)
   }
   useEffect(() => { load() }, [refreshKey])
@@ -1196,11 +1205,13 @@ function ReworkPendingPanel({ refreshKey }: { refreshKey: number }) {
                   {list.map(r => (
                     <button key={r.id} onClick={() => setDetail(r)}
                       className="w-full text-left bg-emerald-500/5 border border-emerald-500/25 hover:border-emerald-400 rounded-lg px-2.5 py-1.5 transition-colors">
-                      <p className="text-white font-black text-sm">#{r.roll_no} <span className="text-slate-400 font-normal">· {fmt(r.weight,2)} Kg</span></p>
+                      <p className="font-black text-sm text-amber-300">#{r.roll_no} <span className="font-normal">· {fmt(r.weight,2)} Kg</span></p>
                       <p className="text-slate-500 text-[10px] truncate">
                         {r.machine_no || '—'}{r.length ? ` · ${r.length} M.` : ''}{r.work_order ? ` · WO ${r.work_order}` : ''}
-                        {r.rework_source_lot ? ` · จาก ${r.rework_source_lot}` : ''}
                       </p>
+                      {r.rework_source_lot && (
+                        <p className="text-[10px] text-slate-500 truncate">↩ ดึงจาก Lot {r.rework_source_lot}{srcNo[r.rework_source_roll_id] ? <span className="text-amber-300 font-bold"> #{srcNo[r.rework_source_roll_id]}</span> : ''}</p>
+                      )}
                     </button>
                   ))}
                 </div>

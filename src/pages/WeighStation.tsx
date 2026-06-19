@@ -2596,6 +2596,8 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         mat_code:     profile.matCode     ?? '',
         product_name: profile.productName,
         customer:     profile.custName,
+        cust_code:    (profile as any).custCode ?? '',   // ✨ เก็บรหัสลูกค้า → รีปริ้นรู้ลูกค้า 08 = มี EXP
+        cust_branch:  (profile as any).custBranch ?? '',
         section:      profile.section ?? 'blow',
         width_cm:     profile.widthCm || null,
         width_unit:   profile.widthUnit ?? 'cm',

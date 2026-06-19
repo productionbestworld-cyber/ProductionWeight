@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.6.9'
+export const APP_VERSION = '1.7.0'
 export const APP_BUILD_DATE = '2026-06-19'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.7.0', date: '2026-06-19',
+    items: [
+      'แก้บั๊กดึงงานจอดกลับมา (doRestore) ไม่คืน WO/SO/วันส่ง/fresh_start → ทำให้ profile ค้างค่าจากงานอื่น (ติด WO ผิด) และเลขม้วนไม่รีเซ็ต (เด้งต่อจากม้วนเก่าใน lot) · ตอนนี้คืนครบจาก snapshot แล้ว',
+    ],
+  },
   {
     version: '1.6.9', date: '2026-06-19',
     items: [

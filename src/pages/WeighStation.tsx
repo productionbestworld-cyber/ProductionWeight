@@ -604,6 +604,12 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
       inspector: snap.inspector, locked: snap.locked, planned_qty: snap.plannedQty,
       label_size: snap.labelSize, header_text: snap.headerText ?? '',
       blank_header: snap.blankHeader ?? false, section: snap.section ?? 'blow',
+      // ⚠ ต้องคืน WO/SO/วันส่ง/fresh_start จาก snapshot ด้วย ไม่งั้น profile ค้างค่าจากงานอื่นที่เพิ่งดู
+      //   → ม้วนติด WO ผิด + เลขม้วนไม่รีเซ็ต (เด้งต่อจากม้วนเก่าใน lot)
+      sale_order: (snap as any).soNo ?? '',
+      work_order: (snap as any).woNo ?? '',
+      delivery_date: (snap as any).deliveryDate || null,
+      fresh_start: (snap as any).freshStart ?? false,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'machine_no' })
     await supabase.from('parked_jobs').delete().eq('id', job.id)

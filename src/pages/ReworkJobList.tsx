@@ -169,7 +169,7 @@ export default function ReworkJobList({ onPickJob, jumpHistory }: { onPickJob: (
         ))}
       </div>
       <div className="flex-1 min-h-0">
-        {view === 'jobs' ? <JobListView onPickJob={onPickJob} />
+        {view === 'jobs' ? <JobListView onPickJob={onPickJob} refreshSignal={jumpHistory} />
           : view === 'inbox' ? <ReworkInbox />
           : <ReworkHistory />}
       </div>
@@ -177,7 +177,7 @@ export default function ReworkJobList({ onPickJob, jumpHistory }: { onPickJob: (
   )
 }
 
-function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: ReworkJob) => void }) {
+function JobListView({ onPickJob, refreshSignal }: { onPickJob: (profile: MachineProfile, job: ReworkJob) => void; refreshSignal?: number }) {
   const [jobs, setJobs] = useState<ReworkJob[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -292,6 +292,8 @@ function JobListView({ onPickJob }: { onPickJob: (profile: MachineProfile, job: 
 
   useEffect(() => { loadMachines() }, [])
   useEffect(() => { load() }, [jobStatus]) // eslint-disable-line react-hooks/exhaustive-deps
+  // ชั่งเสร็จ (popup ปิด) → รีเฟรชรายการ + แถบขวาอัตโนมัติ ไม่ต้องกดรีเฟรชเอง
+  useEffect(() => { if (refreshSignal) load() }, [refreshSignal]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // เลือกเครื่องแล้ว → สร้าง Lot + เปิดจอชั่งของเครื่องนั้น (ใช้ทั้งจากปุ่มเลือกเครื่อง และกดม้วน "ชั่งเลย")
   async function pickMachine(job: ReworkJob, machine_no: string) {
@@ -1143,13 +1145,31 @@ function ReworkPendingPanel({ refreshKey }: { refreshKey: number }) {
           )
         })}
       </div>
-      {detail && <RollDetailModal roll={detail} onClose={() => setDetail(null)} doReprint={doReprint} printing={printing} />}
+      {detail && <RollDetailModal roll={detail} onClose={() => setDetail(null)} doReprint={doReprint} printing={printing} onChanged={() => { setDetail(null); load() }} />}
     </aside>
   )
 }
 
 // ── popup รายละเอียดม้วนกรอ + รีปริ้น (คล้ายฝั่งผลิตกดที่ม้วน) ──────────────────
-function RollDetailModal({ roll: r, onClose, doReprint, printing }: { roll: any; onClose: () => void; doReprint: (r:any,s:'long'|'short')=>void; printing: string | null }) {
+function RollDetailModal({ roll: r, onClose, doReprint, printing, onChanged }: { roll: any; onClose: () => void; doReprint: (r:any,s:'long'|'short')=>void; printing: string | null; onChanged?: () => void }) {
+  const [editing, setEditing] = useState(false)
+  const [w, setW] = useState(String(r.weight ?? ''))
+  const [by, setBy] = useState('')
+  const [saving, setSaving] = useState(false)
+  async function saveWeight() {
+    const nw = parseFloat(w)
+    if (isNaN(nw) || nw <= 0) { alert('น้ำหนักไม่ถูกต้อง'); return }
+    if (!by.trim()) { alert('กรอกชื่อผู้แก้ก่อน'); return }
+    setSaving(true)
+    const core = parseFloat(String(r.core_weight ?? 0)) || 0
+    const note = `${r.remark ?? ''} · ✏️แก้นน. ${fmt(r.weight,2)}→${fmt(nw,2)} โดย ${by.trim()}`.replace(/^ · /,'').trim()
+    const { error } = await supabase.from('production_rolls')
+      .update({ weight: nw, gross_weight: parseFloat((nw + core).toFixed(2)), remark: note }).eq('id', r.id)
+    setSaving(false)
+    if (error) { alert('แก้ไม่สำเร็จ: ' + error.message); return }
+    alert(`✓ แก้น้ำหนักม้วน #${r.roll_no} เป็น ${fmt(nw,2)} Kg แล้ว — อย่าลืมรีปริ้นใบใหม่`)
+    onChanged?.()
+  }
   const rows: [string, any][] = [
     ['ม้วนที่', `#${r.roll_no}`],
     ['น้ำหนักสุทธิ', `${fmt(r.weight,2)} Kg`],
@@ -1184,6 +1204,32 @@ function RollDetailModal({ roll: r, onClose, doReprint, printing }: { roll: any;
             ))}
           </div>
           {r.remark && <p className="text-rose-300/80 text-xs mt-2">⚠ {r.remark}</p>}
+
+          {/* แก้ไขน้ำหนัก (กรณีชั่งผิด) */}
+          {!r.transferred && (
+            editing ? (
+              <div className="mt-3 bg-amber-500/5 border border-amber-500/30 rounded-xl p-3 space-y-2">
+                <p className="text-amber-300 text-xs font-bold">✏️ แก้ไขน้ำหนักสุทธิ (Kg)</p>
+                <div className="flex items-center gap-2">
+                  <input value={w} onChange={e => setW(e.target.value.replace(/[^\d.]/g,''))} inputMode="decimal"
+                    className="w-28 bg-slate-800 border border-amber-500/40 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-amber-500"/>
+                  <span className="text-slate-400 text-sm">Kg (เดิม {fmt(r.weight,2)})</span>
+                </div>
+                <input value={by} onChange={e => setBy(e.target.value)} placeholder="ชื่อผู้แก้ *"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-amber-500"/>
+                <div className="flex gap-2">
+                  <button onClick={saveWeight} disabled={saving} className="flex-1 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white py-2 rounded-lg font-bold text-sm">{saving ? 'กำลังบันทึก...' : '✓ บันทึกน้ำหนักใหม่'}</button>
+                  <button onClick={() => setEditing(false)} className="px-3 bg-slate-700 hover:bg-slate-600 text-white py-2 rounded-lg text-sm">ยกเลิก</button>
+                </div>
+                <p className="text-[10px] text-slate-500">แก้แล้วต้องรีปริ้นใบปะหน้าใหม่ (ปุ่มด้านล่าง)</p>
+              </div>
+            ) : (
+              <button onClick={() => { setW(String(r.weight ?? '')); setEditing(true) }}
+                className="mt-3 w-full text-amber-300 text-xs font-bold bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg py-2">
+                ✏️ ชั่งผิด? แก้ไขน้ำหนัก
+              </button>
+            )
+          )}
         </div>
         <div className="flex gap-2 px-4 py-3 border-t border-slate-800">
           <button onClick={() => doReprint(r, 'long')} disabled={!!printing}

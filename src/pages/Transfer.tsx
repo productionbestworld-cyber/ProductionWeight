@@ -1,6 +1,7 @@
 import { useEffect, useState, Fragment } from 'react'
-import { Package, Search, CheckCircle2, ArrowRightFromLine, RefreshCw, Wind, Printer, FileText, Download } from 'lucide-react'
+import { Package, Search, CheckCircle2, ArrowRightFromLine, RefreshCw, Wind, Printer, FileText, Download, X } from 'lucide-react'
 import { supabase, fetchAll } from '../lib/supabase'
+import { reprintRollLabel } from './WeighStation'
 import * as XLSX from 'xlsx'
 
 // ── พิมพ์ใบโอนเข้าคลัง ─────────────────────────────────────────────────────────
@@ -298,6 +299,13 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   const NS_WO = '__NS__'   // ตัวระบุงานชุดระบบใหม่ (รวมทุก WO ใน Lot เดียว — เลขม้วนต่อเนื่อง)
   const [showDone,    setShowDone]    = useState(false)
   const [search,      setSearch]      = useState('')
+  const [detailRoll,  setDetailRoll]  = useState<any | null>(null)
+  const [printing,    setPrinting]    = useState<string | null>(null)
+  async function doReprint(r: any, size: 'long'|'short') {
+    setPrinting(r.id + size)
+    try { await reprintRollLabel(r, size) } catch (e: any) { alert('รีปริ้นไม่สำเร็จ: ' + (e?.message ?? e)) }
+    finally { setPrinting(null) }
+  }
   const [docSearch,   setDocSearch]   = useState('')   // ค้นหาในประวัติการโอน
   const [docType,     setDocType]     = useState<'all'|'good'|'bad'|'scrap'>('all')  // กรองประเภทในประวัติ
   const [loading,     setLoading]     = useState(true)
@@ -1130,6 +1138,11 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                           <p className="text-slate-600 text-[10px]">{r.inspector || ''}</p>
                         </div>
 
+                        {/* รายละเอียด/ใบปะหน้า */}
+                        <button onClick={(e) => { e.stopPropagation(); setDetailRoll(r) }}
+                          title="ดูรายละเอียด / รีปริ้นใบปะหน้า"
+                          className="text-sm text-slate-500 hover:text-brand-300 px-2 py-1 rounded hover:bg-slate-800 transition-colors flex-shrink-0">📋</button>
+
                         {/* undo */}
                         {isDone && (
                           <button onClick={(e) => { e.stopPropagation(); undoTransfer(r.id) }}
@@ -1153,6 +1166,52 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
         </div>
         )}
       </div>
+
+      {/* รายละเอียดม้วน + รีปริ้นใบปะหน้า */}
+      {detailRoll && (() => { const r = detailRoll; const rows: [string, any][] = [
+        ['ม้วนที่', String(r.roll_type).startsWith('scrap') ? 'ถุงเศษ' : `#${r.roll_no}`],
+        ['น้ำหนักสุทธิ', `${fmt(r.weight)} Kg`],
+        ['น้ำหนักเต็ม', `${fmt((r.weight ?? 0) + (r.core_weight ?? 0))} Kg`],
+        ['แกน', `${fmt(r.core_weight ?? 0)} Kg`],
+        ['ความยาว', r.length ? `${r.length} M.` : '—'],
+        ['ขนาด', r.width_cm && r.thick_mc ? `${r.width_cm}${r.width_unit ?? 'cm'}×${r.thick_mc}mc` : '—'],
+        ['Lot', r.lot_no || '—'],
+        ['เครื่อง', r.machine_no || '—'],
+        ['WO', r.work_order || '—'],
+        ['SO', r.sale_order || '—'],
+        ['ลูกค้า', r.customer || '—'],
+        ['ผู้ตรวจ', r.inspector || '—'],
+        ['ชั่งเมื่อ', r.created_at ? new Date(r.created_at).toLocaleString('th-TH', { timeZone:'Asia/Bangkok' }) : '—'],
+        ['สถานะ', r.transferred ? 'โอนแล้ว' : 'ยังไม่โอน'],
+      ]; return (
+        <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4" onClick={() => setDetailRoll(null)}>
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+              <p className="text-white font-bold">{String(r.roll_type).startsWith('scrap') ? 'ถุงเศษ' : `ม้วนที่ #${r.roll_no}`} · {fmt(r.weight)} Kg</p>
+              <button onClick={() => setDetailRoll(null)} className="text-slate-400 hover:text-white"><X size={18}/></button>
+            </div>
+            <div className="px-4 py-3 max-h-[55vh] overflow-y-auto">
+              <p className="text-white font-bold text-sm mb-2">{r.product_name || r.item_code}</p>
+              <div className="space-y-1 text-sm">
+                {rows.map(([k,v]) => (
+                  <div key={k} className="flex justify-between gap-3 border-b border-slate-800/50 py-1">
+                    <span className="text-slate-500 shrink-0">{k}</span><span className="text-slate-200 text-right">{v}</span>
+                  </div>
+                ))}
+              </div>
+              {r.remark && <p className="text-rose-300/80 text-xs mt-2">⚠ {r.remark}</p>}
+            </div>
+            <div className="flex gap-2 px-4 py-3 border-t border-slate-800">
+              <button onClick={() => doReprint(r, 'long')} disabled={!!printing}
+                className="flex-1 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white py-2.5 rounded-xl font-bold text-sm">
+                {printing === r.id+'long' ? 'กำลังพิมพ์...' : '🖨 ใบปะหน้า (ยาว)'}</button>
+              <button onClick={() => doReprint(r, 'short')} disabled={!!printing}
+                className="flex-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white py-2.5 rounded-xl font-bold text-sm">
+                {printing === r.id+'short' ? 'กำลังพิมพ์...' : '🖨 ใบสั้น'}</button>
+            </div>
+          </div>
+        </div>
+      ) })()}
     </div>
   )
 }

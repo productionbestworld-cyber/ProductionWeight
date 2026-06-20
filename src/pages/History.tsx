@@ -8,10 +8,10 @@ function fmt(n: number | null | undefined, d = 2) {
   return (n as number).toLocaleString('th-TH', { minimumFractionDigits: d, maximumFractionDigits: d })
 }
 function fmtDateTime(iso: string) {
-  return new Date(iso).toLocaleString('th-TH', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })
+  return new Date(iso).toLocaleString('th-TH', { timeZone:'Asia/Bangkok', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })
 }
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit', year:'numeric' })
+  return new Date(iso).toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok', day:'2-digit', month:'2-digit', year:'numeric' })
 }
 
 export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
@@ -546,8 +546,8 @@ export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                             good:'ดี', bad:'กรอ', scrap_clear:'เศษใส', scrap_color:'เศษสี', scrap_lump:'เศษก้อน'
                           }
                           const d = new Date(r.created_at)
-                          const dateShort = `${d.getDate()}/${d.getMonth()+1}`
-                          const timeStr   = d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})
+                          const dateShort = d.toLocaleDateString('th-TH',{day:'numeric',month:'numeric',timeZone:'Asia/Bangkok'})
+                          const timeStr   = d.toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'})
                           return (
                             <tr key={r.id} onClick={() => setSelectedRoll(r)}
                               className="hover:bg-slate-700/50 cursor-pointer transition-colors">

@@ -220,7 +220,7 @@ export default function Admin({ dept: _dept }: { dept?: 'blow'|'print'|'rewind' 
       // ชีตสรุปหน้าแรก
       const summary: any[][] = [
         ['BACKUP ฐานข้อมูล BWP', ''],
-        ['วันที่ backup', new Date().toLocaleString('th-TH')],
+        ['วันที่ backup', new Date().toLocaleString('th-TH', { timeZone:'Asia/Bangkok' })],
         ['รวมทุกตาราง (แถว)', totalRows],
         ['', ''],
         ['ตาราง', 'จำนวนแถว'],

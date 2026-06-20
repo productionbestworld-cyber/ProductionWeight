@@ -8,7 +8,7 @@ function fmt(n: number | null | undefined, d = 2) {
   return (n as number).toLocaleString('th-TH', { minimumFractionDigits: d, maximumFractionDigits: d })
 }
 function fmtDT(iso: string) {
-  return new Date(iso).toLocaleString('th-TH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+  return new Date(iso).toLocaleString('th-TH', { timeZone:'Asia/Bangkok', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 function thaiDate(d = new Date()) {
   return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()+543}`
@@ -425,7 +425,7 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
       ['Lot :', lot,  '',  'สินค้า :', product],
       ['WO :', (groupRolls[0] as any)?.work_order ?? '', '', 'SO :', (groupRolls[0] as any)?.sale_order ?? ''],
       ['ลูกค้า :', customer, '',  'จำนวน :', `${groupRolls.length} ม้วน`,  'น้ำหนักรวม (สุทธิ) :', `${totalKg.toFixed(2)} Kgs.`],
-      ['วันที่ Export :', new Date().toLocaleDateString('th-TH')],
+      ['วันที่ Export :', new Date().toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok' })],
       [],
       ['ลำดับ','ม้วนที่','นน.ม้วน (Kgs.)','นน.แกน (Kgs.)','นน.สุทธิ (Kgs.)','เครื่อง','ผู้ตรวจสอบ','วันผลิต','วันรับโอน'],
     ]
@@ -595,7 +595,7 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
               const isOpen = expandedLots.has(key)
               const totalKg = group.rolls.reduce((s,r) => s+(r.weight??0), 0)
               const ncInLot = ncByLotKey.get(`${group.lot}__${group.product}`) ?? []
-              const dtShort = (iso?: string) => iso ? new Date(iso).toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit',year:'2-digit'})+' '+new Date(iso).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}) : '—'
+              const dtShort = (iso?: string) => iso ? new Date(iso).toLocaleDateString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',year:'2-digit'})+' '+new Date(iso).toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'}) : '—'
               return (
                 <div key={key} className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
                   {ncInLot.length > 0 && (
@@ -764,7 +764,7 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                     {so.note && <p className="text-slate-500 text-xs mt-0.5">{so.note}</p>}
                   </div>
                   <div className="text-right">
-                    <p className="text-slate-400 text-xs">{new Date(so.created_at).toLocaleDateString('th-TH')}</p>
+                    <p className="text-slate-400 text-xs">{new Date(so.created_at).toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok' })}</p>
                     <p className="text-white font-black text-xl mt-1">{fmt(so.shippedKg,1)} <span className="text-xs font-normal text-slate-400">Kgs. ส่งแล้ว</span></p>
                     {so.target_kg > 0 && <p className="text-slate-500 text-xs">เป้า {fmt(so.target_kg,1)} Kgs. · {so.shippedRolls} ม้วน</p>}
                   </div>

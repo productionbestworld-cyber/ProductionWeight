@@ -119,7 +119,7 @@ export default function ReviewQueue({ dept, mode = 'prod' }: { dept?: 'blow'|'pr
           <div className="flex gap-2">
             <ExportButton rows={shown}
               cols={[
-                { header:'วันที่', value: r => r.created_at ? new Date(r.created_at).toLocaleString('th-TH') : '', width:18 },
+                { header:'วันที่', value: r => r.created_at ? new Date(r.created_at).toLocaleString('th-TH', { timeZone:'Asia/Bangkok' }) : '', width:18 },
                 { header:'เครื่อง', value:'machine_no' },
                 { header:'Lot', value:'lot_no', width:16 },
                 { header:'ม้วนที่', value:'roll_no' },

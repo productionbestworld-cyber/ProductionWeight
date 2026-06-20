@@ -493,7 +493,7 @@ function JobListView({ onPickJob, refreshSignal }: { onPickJob: (profile: Machin
               { header:'กรอได้ (kg)', value: j => progress[progKey(j)]?.kg ?? 0 },
               { header:'ม้วนกรอได้', value: j => progress[progKey(j)]?.rolls ?? 0 },
               { header:'ผู้รับ', value: j => j.inspector ?? '' },
-              { header:'สร้างเมื่อ', value: j => j.created_at ? new Date(j.created_at).toLocaleString('th-TH') : '', width:18 },
+              { header:'สร้างเมื่อ', value: j => j.created_at ? new Date(j.created_at).toLocaleString('th-TH', { timeZone:'Asia/Bangkok' }) : '', width:18 },
             ]}
             fileName="งานกรอ_active" sheetName="งานกรอ" />
           <button onClick={load}
@@ -1258,7 +1258,7 @@ function RollDetailModal({ roll: r, onClose, doReprint, printing, onChanged }: {
     ['กรอจาก Lot', r.rework_source_lot || '—'],
     ['ลูกค้า', r.customer || '—'],
     ['ผู้ตรวจ', r.inspector || '—'],
-    ['ชั่งเมื่อ', r.created_at ? new Date(r.created_at).toLocaleString('th-TH') : '—'],
+    ['ชั่งเมื่อ', r.created_at ? new Date(r.created_at).toLocaleString('th-TH', { timeZone:'Asia/Bangkok' }) : '—'],
     ['สถานะ', r.transferred ? 'โอนแล้ว' : 'ยังไม่โอน'],
   ]
   return (
@@ -1376,7 +1376,7 @@ function ItemReworkPanel({ itemCode, itemName, onClose }: { itemCode: string; it
                   </p>
                   <p className="text-slate-600 text-[10px]">
                     {r.rework_source_lot ? `กรอจาก ${r.rework_source_lot} · ` : ''}
-                    {r.created_at ? new Date(r.created_at).toLocaleString('th-TH', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : ''}
+                    {r.created_at ? new Date(r.created_at).toLocaleString('th-TH', { timeZone:'Asia/Bangkok', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : ''}
                     {r.transferred ? ' · โอนแล้ว' : ''}
                   </p>
                 </div>
@@ -1453,7 +1453,7 @@ function ReworkHistory() {
               { header:'SO', value: (r:any) => r.sale_order ?? '' },
               { header:'มาจาก Lot', value: (r:any) => r.rework_source_lot ?? '' },
               { header:'โอนแล้ว', value: (r:any) => r.transferred ? 'โอนแล้ว' : 'ยังไม่โอน' },
-              { header:'ชั่งเมื่อ', value: (r:any) => r.created_at ? new Date(r.created_at).toLocaleString('th-TH') : '', width:18 },
+              { header:'ชั่งเมื่อ', value: (r:any) => r.created_at ? new Date(r.created_at).toLocaleString('th-TH', { timeZone:'Asia/Bangkok' }) : '', width:18 },
             ]}
             fileName="ประวัติกรอ" sheetName="ประวัติกรอ" />
           <button onClick={load} className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 px-3 py-2 rounded-lg text-sm flex items-center gap-1.5">
@@ -1543,7 +1543,7 @@ function ReworkHistory() {
                             <td className="px-2 py-1.5 text-orange-300">{r.work_order || '—'}</td>
                             <td className="px-2 py-1.5 text-amber-300">{r.sale_order || '—'}</td>
                             <td className="px-2 py-1.5 font-mono text-slate-400">{r.rework_source_lot || '—'}</td>
-                            <td className="px-2 py-1.5 text-slate-400 whitespace-nowrap">{r.created_at ? new Date(r.created_at).toLocaleString('th-TH', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—'}</td>
+                            <td className="px-2 py-1.5 text-slate-400 whitespace-nowrap">{r.created_at ? new Date(r.created_at).toLocaleString('th-TH', { timeZone:'Asia/Bangkok', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—'}</td>
                             <td className="px-2 py-1.5 text-center">
                               {r.transferred
                                 ? <span className="text-[10px] text-slate-400">โอนแล้ว</span>

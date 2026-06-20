@@ -29,7 +29,12 @@ function num(n: number, d = 2) {
   return n.toLocaleString('th-TH', { minimumFractionDigits: d, maximumFractionDigits: d })
 }
 function toDateStr(d: Date) {
-  return d.toISOString().slice(0, 10)
+  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })   // YYYY-MM-DD ตามเวลาไทย
+}
+// คีย์ "วัน" ตามเวลาไทย (กันม้วนช่วงดึก/เช้ามืดถูกนับคนละวันเพราะ created_at เป็น UTC)
+function thaiDayKey(iso?: string) {
+  if (!iso) return ''
+  try { return new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }) } catch { return (iso ?? '').slice(0, 10) }
 }
 
 type Roll = {
@@ -338,7 +343,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   const dailyData = useMemo(() => {
     const map = new Map<string, { date: string; FG: number; ของเสีย: number; ซ่อม: number }>()
     filtered.forEach(r => {
-      const d = r.created_at.slice(0, 10)
+      const d = thaiDayKey(r.created_at)
       if (!map.has(d)) map.set(d, { date: d, FG: 0, ของเสีย: 0, ซ่อม: 0 })
       const entry = map.get(d)!
       if (r.roll_type === 'good')                                      entry.FG      += r.weight
@@ -346,7 +351,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
       if (r.roll_type === 'bad')                                       entry.ซ่อม    += r.weight
     })
     return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date))
-      .map(d => ({ ...d, date: new Date(d.date).toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit' }) }))
+      .map(d => ({ ...d, date: new Date(d.date).toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok', day:'2-digit', month:'2-digit' }) }))
   }, [filtered])
 
   // ─── จัดกลุ่ม job_summaries ตาม Sale Order ────────────────────────
@@ -463,7 +468,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
     const map = new Map<string, { wo: string; day: string; shift: string; machine: string; fgKg: number; fgRolls: number; badKg: number; scKg: number }>()
     for (const r of filtered) {
       const wo      = ((r as any).work_order ?? '').trim() || '(ไม่ระบุ WO)'
-      const day     = (r.created_at ?? '').slice(0, 10)
+      const day     = thaiDayKey(r.created_at)
       const shift   = ((r as any).inspector ?? '').trim() || '(ไม่ระบุกะ)'
       const machine = r.machine_no || '—'
       const key = `${wo}|||${day}|||${shift}|||${machine}`
@@ -736,7 +741,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                             <td className="px-3 py-1.5 text-right font-bold">{num(r.weight ?? 0,1)}</td>
                             <td className="px-3 py-1.5 text-rose-600">{r.remark || '—'}</td>
                             <td className="px-3 py-1.5">{st}</td>
-                            <td className="px-3 py-1.5 text-gray-400">{r.created_at ? new Date(r.created_at).toLocaleString('th-TH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—'}</td>
+                            <td className="px-3 py-1.5 text-gray-400">{r.created_at ? new Date(r.created_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—'}</td>
                           </tr>
                         )
                       })}
@@ -897,7 +902,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                           <td className="px-3 py-2 font-mono text-xs text-gray-700">{j.lot_no||j.source_lot_no||'—'}</td>
                           <td className="px-3 py-2"><p className="text-gray-700 text-xs">{j.product_name||'—'}</p><p className="text-[11px] text-gray-400">{j.cust_name||j.customer||'—'}</p></td>
                           <td className="px-3 py-2"><span className="bg-indigo-100 text-indigo-700 font-bold text-xs px-2 py-0.5 rounded">{j.machine_no||'—'}</span></td>
-                          <td className="px-3 py-2 text-gray-500 text-xs">{j.created_at ? new Date(j.created_at).toLocaleString('th-TH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—'}</td>
+                          <td className="px-3 py-2 text-gray-500 text-xs">{j.created_at ? new Date(j.created_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—'}</td>
                           <td className="px-3 py-2">
                             <button onClick={()=>setCtrlCloseJob(j)} className="bg-rose-500 hover:bg-rose-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold">ปิดงาน ✕</button>
                           </td>
@@ -1452,7 +1457,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                           <td className="px-3 py-2.5">
                             {firstOfWo && <span className="bg-amber-100 text-amber-700 font-bold text-xs px-2 py-0.5 rounded font-mono">{row.wo}</span>}
                           </td>
-                          <td className="px-3 py-2.5 text-gray-500 text-xs whitespace-nowrap">{row.day ? new Date(row.day).toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit' }) : '—'}</td>
+                          <td className="px-3 py-2.5 text-gray-500 text-xs whitespace-nowrap">{row.day ? new Date(row.day).toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok', day:'2-digit', month:'2-digit' }) : '—'}</td>
                           <td className="px-3 py-2.5">
                             <span className="bg-indigo-100 text-indigo-700 font-bold text-xs px-2 py-0.5 rounded">{row.shift}</span>
                           </td>
@@ -1605,7 +1610,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                                               const yp  = tot ? ((j.good_kg ?? 0)/tot*100) : 0
                                               return (
                                                 <tr key={j.id} className="hover:bg-white">
-                                                  <td className="px-2 py-1.5 text-gray-500 whitespace-nowrap">{new Date(j.closed_at).toLocaleString('th-TH', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}</td>
+                                                  <td className="px-2 py-1.5 text-gray-500 whitespace-nowrap">{new Date(j.closed_at).toLocaleString('th-TH', { timeZone:'Asia/Bangkok', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}</td>
                                                   <td className="px-2 py-1.5 font-bold text-blue-600">{j.machine_no}</td>
                                                   <td className="px-2 py-1.5 text-gray-600 max-w-[140px] truncate" title={j.customer}>{j.customer}</td>
                                                   <td className="px-2 py-1.5 text-gray-600 max-w-[140px] truncate" title={j.product_name}>{j.product_name}</td>
@@ -1692,7 +1697,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                         <tr key={t.id} className="hover:bg-gray-50">
                           <td className="px-3 py-2.5 font-mono font-bold text-blue-600">{t.doc_no}</td>
                           <td className="px-3 py-2.5"><span className={`text-[10px] font-bold px-2 py-0.5 rounded ${typeBadge}`}>{typeLabel}</span></td>
-                          <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{new Date(t.transferred_at).toLocaleString('th-TH', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' })}</td>
+                          <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{new Date(t.transferred_at).toLocaleString('th-TH', { timeZone:'Asia/Bangkok', day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' })}</td>
                           <td className="px-3 py-2.5 text-amber-600 font-semibold">{t.transferred_by}</td>
                           <td className="px-3 py-2.5 text-amber-600 font-mono text-xs">{t.work_order ?? '—'}</td>
                           <td className="px-3 py-2.5 text-blue-500 font-mono text-xs">{t.sale_order ?? '—'}</td>
@@ -1761,7 +1766,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                         <td className="px-3 py-2 text-blue-600 font-bold">{m.planned_qty ? num(+m.planned_qty, 0) : '—'}</td>
                         <td className="px-3 py-2 text-amber-600 font-mono text-xs">{m.work_order || '—'}</td>
                         <td className="px-3 py-2 text-gray-500 font-mono text-xs">{m.sale_order || '—'}</td>
-                        <td className="px-3 py-2 text-gray-500 text-xs">{m.delivery_date ? new Date(m.delivery_date).toLocaleDateString('th-TH') : '—'}</td>
+                        <td className="px-3 py-2 text-gray-500 text-xs">{m.delivery_date ? new Date(m.delivery_date).toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok' }) : '—'}</td>
                         <td className="px-3 py-2 text-gray-600 text-xs">{m.inspector || '—'}</td>
                         <td className="px-3 py-2"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${m.lot_no ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>{m.lot_no ? '● เดิน' : '⏸ ว่าง'}</span></td>
                       </tr>
@@ -1784,7 +1789,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                       {parkedJobs.map((p, i) => (
                         <tr key={i} className="hover:bg-gray-50">
                           <td className="px-3 py-2 font-bold text-blue-600">{p.machine_no}</td>
-                          <td className="px-3 py-2 text-gray-500">{new Date(p.parked_at).toLocaleString('th-TH')}</td>
+                          <td className="px-3 py-2 text-gray-500">{new Date(p.parked_at).toLocaleString('th-TH', { timeZone:'Asia/Bangkok' })}</td>
                           <td className="px-3 py-2 text-amber-600">{p.parked_by}</td>
                           <td className="px-3 py-2 font-mono text-xs text-gray-700">{p.profile_snapshot?.lotNo ?? '—'}</td>
                           <td className="px-3 py-2 text-gray-600">{p.profile_snapshot?.productName ?? '—'}</td>
@@ -2336,7 +2341,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                                             <td className="px-3 py-1.5 text-amber-600 font-mono">{rr.work_order || '—'}</td>
                                             <td className="px-3 py-1.5 text-blue-500 font-mono">{rr.sale_order || '—'}</td>
                                             <td className="px-3 py-1.5 text-gray-500">{rr.inspector || '—'}</td>
-                                            <td className="px-3 py-1.5 text-gray-400">{new Date(r.created_at).toLocaleString('th-TH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</td>
+                                            <td className="px-3 py-1.5 text-gray-400">{new Date(r.created_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</td>
                                           </tr>
                                         )})}
                                       </tbody>
@@ -2585,7 +2590,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                   <tbody className="divide-y divide-gray-100">
                     {weighLogs.map(l => (
                       <tr key={l.id} className="hover:bg-gray-50">
-                        <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{new Date(l.created_at).toLocaleString('th-TH', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}</td>
+                        <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{new Date(l.created_at).toLocaleString('th-TH', { timeZone:'Asia/Bangkok', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}</td>
                         <td className="px-3 py-2 text-amber-600 font-mono text-xs">{l.work_order ?? '—'}</td>
                         <td className="px-3 py-2 text-blue-500 font-mono text-xs">{l.sale_order ?? '—'}</td>
                         <td className="px-3 py-2 font-bold text-blue-600">{l.machine_no}</td>
@@ -2615,7 +2620,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                   <tbody className="divide-y divide-gray-100">
                     {deletionLogs.map(d => (
                       <tr key={d.id} className="hover:bg-gray-50">
-                        <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{new Date(d.deleted_at).toLocaleString('th-TH', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}</td>
+                        <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{new Date(d.deleted_at).toLocaleString('th-TH', { timeZone:'Asia/Bangkok', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}</td>
                         <td className="px-3 py-2 text-amber-600 font-mono text-xs">{d.work_order ?? '—'}</td>
                         <td className="px-3 py-2 text-blue-500 font-mono text-xs">{d.sale_order ?? '—'}</td>
                         <td className="px-3 py-2 font-bold text-blue-600">{d.machine_no}</td>
@@ -2677,7 +2682,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
           for (const r of rangeRolls) {
             let key = ''
             if (compDim === 'machine')   key = r.machine_no ?? '—'
-            else if (compDim === 'day')  key = (r.created_at as string).slice(0, 10)
+            else if (compDim === 'day')  key = thaiDayKey(r.created_at as string)
             else if (compDim === 'so')   key = ((r as any).sale_order ?? '').trim() || '(ไม่ระบุ SO)'
             else if (compDim === 'wo')   key = ((r as any).work_order ?? '').trim() || '(ไม่ระบุ WO)'
             else if (compDim === 'customer') key = r.customer ?? '—'
@@ -2795,7 +2800,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
               <div className="bg-white rounded-xl border-l-4 border-purple-500 border border-gray-200 shadow-sm p-3">
                 <p className="text-[10px] text-gray-500">⏱ ช่วงเวลา</p>
                 <p className="text-2xl font-black text-gray-800 mt-0.5">{periodLabel}</p>
-                <p className="text-[10px] text-gray-400">{periodFrom.toLocaleDateString('th-TH')} → วันนี้</p>
+                <p className="text-[10px] text-gray-400">{periodFrom.toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok' })} → วันนี้</p>
               </div>
               <div className="bg-white rounded-xl border-l-4 border-green-500 border border-gray-200 shadow-sm p-3">
                 <p className="text-[10px] text-gray-500">📦 ม้วนทั้งหมด</p>
@@ -2910,7 +2915,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                 <p className="text-gray-400 text-xs">{filtered.length.toLocaleString()} รายการ</p>
                 <ExportButton rows={filtered.slice().reverse()}
                   cols={[
-                    { header:'เวลาชั่ง', value: r => r.created_at ? new Date(r.created_at).toLocaleString('th-TH') : '', width:18 },
+                    { header:'เวลาชั่ง', value: r => r.created_at ? new Date(r.created_at).toLocaleString('th-TH', { timeZone:'Asia/Bangkok' }) : '', width:18 },
                     { header:'เครื่อง', value: r => r.machine_no ?? '' },
                     { header:'ม้วนที่', value:'roll_no' },
                     { header:'ประเภท', value: r => r.roll_type === 'good' ? 'FG' : String(r.roll_type).startsWith('scrap') ? 'เศษ' : 'ม้วนกรอ' },
@@ -2943,7 +2948,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                     : filtered.slice().reverse().map(r => (
                       <tr key={r.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-4 py-2 text-gray-500 text-xs whitespace-nowrap">
-                          {new Date(r.created_at).toLocaleString('th-TH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
+                          {new Date(r.created_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
                         </td>
                         <td className="px-4 py-2">
                           <span className="bg-blue-100 text-blue-700 font-bold text-xs px-1.5 py-0.5 rounded">{r.machine_no||'—'}</span>
@@ -3295,7 +3300,7 @@ function ImportProductionModal({ onClose, onDone }: { onClose: () => void; onDon
   const bad   = rows.filter(r => r.roll_type === 'bad').length
   const scrap = rows.filter(r => r.roll_type === 'scrap').length
   const totalKg = rows.reduce((s, r) => s + r.weight, 0)
-  const dates = rows.map(r => r.created_at.slice(0, 10)).sort()
+  const dates = rows.map(r => thaiDayKey(r.created_at)).sort()
   const dateRange = dates.length ? `${dates[0]} → ${dates[dates.length - 1]}` : '—'
 
   return (

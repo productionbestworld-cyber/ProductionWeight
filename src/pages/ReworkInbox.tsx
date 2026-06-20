@@ -9,7 +9,7 @@ function fmt(n: number | null | undefined, d = 2) {
   return (n as number).toLocaleString('th-TH', { minimumFractionDigits: d, maximumFractionDigits: d })
 }
 function fmtDateTime(iso: string) {
-  return new Date(iso).toLocaleString('th-TH', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' })
+  return new Date(iso).toLocaleString('th-TH', { timeZone:'Asia/Bangkok', day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' })
 }
 
 type Tab = 'queue' | 'working' | 'done'

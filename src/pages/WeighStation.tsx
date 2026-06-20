@@ -16,8 +16,10 @@ function fmt(n: number | null | undefined, d: 1|2 = 2) {
   return (n as number).toLocaleString('th-TH', { minimumFractionDigits: d, maximumFractionDigits: d })
 }
 function thaiDate() {
-  const d = new Date()
-  return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()+543}`
+  // วันที่ตามเวลาไทย (ไม่ขึ้นกับ timezone ของเครื่อง) — กัน MFG เพี้ยนช่วงข้ามเที่ยงคืน
+  const p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', day: '2-digit', month: '2-digit', year: 'numeric' }).formatToParts(new Date())
+  const g = (t: string) => p.find(x => x.type === t)?.value ?? ''
+  return `${g('day')}/${g('month')}/${parseInt(g('year')) + 543}`
 }
 function barcodeUrl(text: string, h = 10) {
   return `https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(text||'0')}&scale=2&height=${h}&includetext`
@@ -465,7 +467,7 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
   </div>
   <div class="row1">
     <span class="row1-lbl">วันที่จัดเก็บ</span>
-    <span class="row1-val">${new Date().toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit', year:'numeric' })}</span>
+    <span class="row1-val">${new Date().toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok', day:'2-digit', month:'2-digit', year:'numeric' })}</span>
   </div>
   <div class="wt-row">
     <div class="wt-left">
@@ -497,7 +499,7 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
   // 4 ค่าคงที่ → อ่านจาก layout ที่แก้ไขใน designer (sampleValue คือค่าจริง)
   const getWasteConst = (id: string) => wasteLayout.fields.find(f => f.id === id)?.sampleValue ?? ''
   const sectionLabel = (p as any).section === 'rewind' ? 'แผนกกรอ' : (p as any).section === 'print' ? 'แผนกพิมพ์' : 'แผนกเป่า'
-  const wasteDate    = new Date().toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit', year:'numeric' })
+  const wasteDate    = new Date().toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok', day:'2-digit', month:'2-digit', year:'numeric' })
   const wasteFieldData: Record<string, string> = {
     header:         p.blankHeader ? '' : ((p.headerText || '').trim() || 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด'),
     waste_tag:      'WASTE LABEL  ใบปะหน้า สิ่งปฏิกูล / ของเสียอุตสาหกรรม',
@@ -909,7 +911,7 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
             <div className="px-3 py-3 max-h-[60vh] overflow-y-auto space-y-2">
               {(parked[parkedPickerMachine] ?? []).map(job => {
                 const snap = job.profile_snapshot ?? {}
-                const parkedAt = job.parked_at ? new Date(job.parked_at).toLocaleString('th-TH', { dateStyle:'short', timeStyle:'short' }) : '—'
+                const parkedAt = job.parked_at ? new Date(job.parked_at).toLocaleString('th-TH', { timeZone:'Asia/Bangkok', dateStyle:'short', timeStyle:'short' }) : '—'
                 return (
                   <div key={job.id} className="bg-slate-800 border border-slate-700 rounded-xl p-3">
                     <p className="text-white font-bold text-sm">{snap.productName || '—'}</p>
@@ -1251,7 +1253,7 @@ function ResumeClosedJobModal({ dept, machines, onClose, onResumed }: {
               </thead>
               <tbody className="divide-y divide-slate-800">
                 {filtered.map(r => {
-                  const lastActive = r.last_active ? new Date(r.last_active).toLocaleString('th-TH', { dateStyle:'short', timeStyle:'short' }) : '—'
+                  const lastActive = r.last_active ? new Date(r.last_active).toLocaleString('th-TH', { timeZone:'Asia/Bangkok', dateStyle:'short', timeStyle:'short' }) : '—'
                   const planned = parseFloat(r.planned_qty) || 0
                   const good = r.good_kg || 0
                   const remaining = Math.max(planned - good, 0)
@@ -2335,8 +2337,8 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
   function printJobSummary() {
     const win = window.open('', '_blank', 'width=900,height=700')
     if (!win) return
-    const date  = new Date().toLocaleDateString('th-TH')
-    const time  = new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})
+    const date  = new Date().toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok' })
+    const time  = new Date().toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'})
     win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -2365,7 +2367,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
   <h3>ข้อมูลงาน</h3>
   <div class="row"><span>เลขใบคำสั่งผลิต (WO)</span><b style="color:#d97706">${profile.woNo || '—'}</b></div>
   <div class="row"><span>Sale Order (SO)</span><b style="color:#2563eb">${profile.soNo || '—'}</b></div>
-  <div class="row"><span>วันที่ส่งของ</span><b>${profile.deliveryDate ? new Date(profile.deliveryDate).toLocaleDateString('th-TH') : '—'}</b></div>
+  <div class="row"><span>วันที่ส่งของ</span><b>${profile.deliveryDate ? new Date(profile.deliveryDate).toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok' }) : '—'}</b></div>
   <div class="row"><span>ลูกค้า</span><b>${profile.custName}</b></div>
   <div class="row"><span>สินค้า</span><b>${profile.productName}</b></div>
   <div class="row"><span>Item Code</span><b>${profile.itemCode || '—'}</b></div>
@@ -3481,7 +3483,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                 <span className="text-brand-300 text-xs font-bold">● ม้วนดี</span>
                 <ExportButton rows={[...weighedRolls].filter(Boolean).sort((a:any,b:any)=>(a.roll_no??0)-(b.roll_no??0))}
                   cols={[
-                    { header:'เวลาชั่ง', value:(r:any)=> r.created_at ? new Date(r.created_at).toLocaleString('th-TH') : '', width:18 },
+                    { header:'เวลาชั่ง', value:(r:any)=> r.created_at ? new Date(r.created_at).toLocaleString('th-TH', { timeZone:'Asia/Bangkok' }) : '', width:18 },
                     { header:'ม้วนที่', value:'roll_no' },
                     { header:'ประเภท', value:(r:any)=> r.roll_type==='good'?'ม้วนดี':r.roll_type==='bad'?'ม้วนกรอ':String(r.roll_type).startsWith('scrap')?'เศษ':r.roll_type },
                     { header:'นน.เต็ม (kg)', value:(r:any)=> (r.weight??0)+(r.core_weight??0) },
@@ -3521,7 +3523,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                   const isRep  = isReplacement(r)
                   const d      = new Date(r.created_at)
                   const dateShort = `${d.getDate()}/${d.getMonth()+1}`
-                  const time   = d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})
+                  const time   = d.toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'})
                   return (
                     <div key={r.id} onClick={()=>setSelectedRoll(r)}
                       className={`hover:bg-slate-800/40 cursor-pointer transition-colors ${
@@ -3584,7 +3586,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                   const isRep = isReplacement(r)
                   const d2    = new Date(r.created_at)
                   const dateShort2 = `${d2.getDate()}/${d2.getMonth()+1}`
-                  const time  = d2.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})
+                  const time  = d2.toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'})
                   return (
                     <div key={r.id} onClick={()=>setSelectedRoll(r)}
                       className={`grid grid-cols-4 hover:bg-slate-800/40 cursor-pointer transition-colors ${
@@ -3666,7 +3668,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                       const isNew = lastRoll?.id === r.id
                       const d = new Date(r.created_at)
                       const dateShort = `${d.getDate()}/${d.getMonth()+1}`
-                      const time = d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})
+                      const time = d.toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'})
                       return (
                         <div key={r.id} onClick={()=>setSelectedRoll(r)}
                           className={`grid grid-cols-4 hover:bg-slate-800/40 cursor-pointer transition-colors ${isNew ? 'bg-amber-500/5' : ''}`}>
@@ -3877,7 +3879,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                       : '—') },
                   { k:'เครื่อง',     v: profile.machine_no },
                   { k:'ผู้ตรวจสอบ', v: selectedRoll.inspector || profile.inspector || '—' },
-                  { k:'วันที่ชั่ง',  v: `${new Date(selectedRoll.created_at).toLocaleDateString('th-TH')} ${new Date(selectedRoll.created_at).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})}` },
+                  { k:'วันที่ชั่ง',  v: `${new Date(selectedRoll.created_at).toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok' })} ${new Date(selectedRoll.created_at).toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'})}` },
                 ].map(row => (
                   <div key={row.k} className="flex justify-between items-baseline gap-2">
                     <span className="text-slate-500 text-xs shrink-0">{row.k}</span>

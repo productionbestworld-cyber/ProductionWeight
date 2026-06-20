@@ -5,11 +5,13 @@ import { writeFileSync } from 'node:fs'
 
 const url='https://belwjdajuaxbhaqtlhrj.supabase.co'
 const key='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJlbHdqZGFqdWF4YmhhcXRsaHJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3NzgzNzYsImV4cCI6MjA5NDM1NDM3Nn0.aM-DKa8v0OlQQW6MsDzmCrEFY0d8rEVgzuemZ8UKZJA'
-const APP='https://production-weight-best-world.vercel.app'  // ใช้ทำ QR (โดเมน production)
-const MACHINES=['BL05']
-const NAME_OVERRIDE='PE SHRINK FILM 75CM 60-70MC'  // '' = ใช้ชื่อจากม้วน · ใส่ชื่อ = บังคับใช้ชื่อนี้
-const LOT_ONLY='69BL050025106'   // '' = ทุก lot · ใส่ = เฉพาะ lot นี้
-const WO_ONLY='69/06/048'   // '' = ทุก WO · ใส่ = เฉพาะ WO นี้
+const APP='https://production-weight.vercel.app'  // ใช้ทำ QR (โดเมน production)
+const MACHINES=['BL03']
+const NAME_OVERRIDE=''  // '' = ใช้ชื่อจากม้วน · ใส่ชื่อ = บังคับใช้ชื่อนี้
+const LOT_ONLY='69BL03000106'   // '' = ทุก lot · ใส่ = เฉพาะ lot นี้
+const WO_ONLY='69/06/108'   // '' = ทุก WO · ใส่ = เฉพาะ WO นี้
+const ROLL_FROM=8   // 0 = ไม่จำกัด · ใส่ = เฉพาะม้วนตั้งแต่เลขนี้
+const ROLL_TO=30    // 0 = ไม่จำกัด · ใส่ = เฉพาะม้วนถึงเลขนี้
 const sb=createClient(url,key)
 
 const fmt=(n,d=2)=>{ const x=Number(n); return isNaN(x)?(0).toFixed(d):x.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}) }
@@ -31,6 +33,8 @@ for(const m of MACHINES){
     .eq('machine_no',m).eq('lot_no',useLot).eq('roll_type','good').order('roll_no')
   for(const r of (rolls||[])){
     if(WO_ONLY && String(r.work_order??'').trim()!==WO_ONLY) continue
+    if(ROLL_FROM && Number(r.roll_no)<ROLL_FROM) continue
+    if(ROLL_TO && Number(r.roll_no)>ROLL_TO) continue
     const isRunning = String(r.work_order??'').trim()===curWO
     const jobKey=`${m}|${r.lot_no}|${r.work_order??''}`
     const dec=mp.decimal_places??2
@@ -73,7 +77,7 @@ for(const m of MACHINES){
       return `<div style="position:absolute;left:${f.x}mm;top:${f.y}mm;width:${f.w}mm;height:${f.h}mm;font-size:${f.fontSize}pt;font-weight:${f.fontWeight};text-align:${f.align};${border}display:flex;align-items:center;${justify}padding:0 0.5mm"><span style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.1;width:100%;word-break:break-word">${v}</span></div>`
     }
     const inner=L.fields.map(render).join('\n')
-    if(!jobs.has(jobKey)) jobs.set(jobKey,{ machine:m, lot:r.lot_no, wo:String(r.work_order??''), so:String(r.sale_order??''), prod:mp.product_name||'', running:isRunning, labels:[] })
+    if(!jobs.has(jobKey)) jobs.set(jobKey,{ machine:m, lot:r.lot_no, wo:String(r.work_order??''), so:String(r.sale_order??''), prod:NAME_OVERRIDE||r.product_name||mp.product_name||'', running:isRunning, labels:[] })
     jobs.get(jobKey).labels.push(`<div class="lbl">${inner}</div>`)
   }
 }

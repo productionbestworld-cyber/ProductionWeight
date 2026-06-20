@@ -19,7 +19,7 @@ function printTransferDoc(rollsIn: any[], staff: string, docNoIn?: string, dateI
   const docNo = docNoIn ?? `TR-${Date.now().toString().slice(-8)}`
   const date  = dateIn ?? new Date()
   const dateStr = `${String(date.getDate()).padStart(2,'0')}/${String(date.getMonth()+1).padStart(2,'0')}/${date.getFullYear()+543}`
-  const timeStr = date.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})
+  const timeStr = date.toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'})
 
   // ── จำแนกประเภท: ดูจาก roll_type ของม้วน (ม้วนทุกใบในใบเดียวกันเป็นประเภทเดียวกัน) ──
   const firstType = rolls[0]?.roll_type ?? 'good'
@@ -36,7 +36,7 @@ function printTransferDoc(rollsIn: any[], staff: string, docNoIn?: string, dateI
   const soList = Array.from(new Set(rolls.map(r => r.sale_order).filter(Boolean))).join(', ') || '—'
   const ddList = (() => {
     const dd = rolls.map(r => r.delivery_date).filter(Boolean)
-    return dd.length ? new Date(dd[0]).toLocaleDateString('th-TH') : '—'
+    return dd.length ? new Date(dd[0]).toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok' }) : '—'
   })()
 
   // group by machine
@@ -125,7 +125,7 @@ ${Object.entries(groups).map(([key, items]) => {
             <td style="text-align:right">${(r.core_weight??0).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
             <td style="text-align:right;font-weight:700">${(r.weight??0).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
             <td>${r.inspector??'—'}</td>
-            <td>${new Date(r.created_at).toLocaleString('th-TH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</td>
+            <td>${new Date(r.created_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</td>
           </tr>
         `).join('')}
         <tr class="tot">
@@ -186,10 +186,10 @@ function buildTransferSheet(
   const woNos     = Array.from(new Set(rolls.map(r => r.work_order).filter(Boolean))).join(', ')
   const delivDate = (() => {
     const dd = rolls.map(r => r.delivery_date).filter(Boolean)
-    return dd.length ? new Date(dd[0]).toLocaleDateString('th-TH') : ''
+    return dd.length ? new Date(dd[0]).toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok' }) : ''
   })()
-  const dateStr   = date.toLocaleDateString('th-TH', { day:'2-digit', month:'2-digit', year:'numeric' })
-  const timeStr   = date.toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit' })
+  const dateStr   = date.toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok', day:'2-digit', month:'2-digit', year:'numeric' })
+  const timeStr   = date.toLocaleTimeString('th-TH', { timeZone:'Asia/Bangkok', hour:'2-digit', minute:'2-digit' })
 
   // ── จำแนกประเภท ─────────────────────────────────────
   const firstType = rolls[0]?.roll_type ?? 'good'
@@ -235,8 +235,8 @@ function buildTransferSheet(
     r.lot_no        ?? '',
     r.inspector     ?? '',
     r.remark        ?? '',  // เหตุผลเศษ/กรอ
-    new Date(r.created_at).toLocaleString('th-TH'),
-    r.transferred_at ? new Date(r.transferred_at).toLocaleString('th-TH') : '',
+    new Date(r.created_at).toLocaleString('th-TH', { timeZone:'Asia/Bangkok' }),
+    r.transferred_at ? new Date(r.transferred_at).toLocaleString('th-TH', { timeZone:'Asia/Bangkok' }) : '',
     r.transferred_by ?? '',
   ])
 
@@ -283,7 +283,7 @@ function fmt(n: number | null | undefined, d = 2) {
   return (n as number).toLocaleString('th-TH', { minimumFractionDigits: d, maximumFractionDigits: d })
 }
 function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
+  return new Date(iso).toLocaleTimeString('th-TH', { timeZone:'Asia/Bangkok', hour: '2-digit', minute: '2-digit' })
 }
 
 export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
@@ -696,7 +696,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                           {d.sale_order && <span className="bg-blue-500/15 text-blue-300 px-1.5 py-0.5 rounded font-bold">SO {d.sale_order}</span>}
                           <span className="font-mono text-slate-500">Lot {d.lot_no}</span>
                         </div>
-                        <p className="text-slate-600 text-[10px] mt-1">📄 {d.doc_no} · 🕐 {dt?dt.toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit',year:'2-digit'})+' '+dt.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}):'—'} · โดย {d.transferred_by||'—'}</p>
+                        <p className="text-slate-600 text-[10px] mt-1">📄 {d.doc_no} · 🕐 {dt?dt.toLocaleDateString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',year:'2-digit'})+' '+dt.toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'}):'—'} · โดย {d.transferred_by||'—'}</p>
                       </button>
                     )
                   })}
@@ -718,7 +718,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                     </div>
                     {selectedDoc.product_name && <p className="text-slate-300 text-xs truncate">{selectedDoc.product_name}</p>}
                     <p className="text-slate-500 text-[11px] mt-0.5">
-                      📄 <span className="text-brand-300 font-mono">{selectedDoc.doc_no}</span> · {new Date(selectedDoc.transferred_at).toLocaleDateString('th-TH')} · {fmtTime(selectedDoc.transferred_at)} · โดย <b className="text-slate-300">{selectedDoc.transferred_by}</b>
+                      📄 <span className="text-brand-300 font-mono">{selectedDoc.doc_no}</span> · {new Date(selectedDoc.transferred_at).toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok' })} · {fmtTime(selectedDoc.transferred_at)} · โดย <b className="text-slate-300">{selectedDoc.transferred_by}</b>
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -798,7 +798,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                             <td className="px-3 py-2.5 text-slate-300">{fmt((r.weight??0)+(r.core_weight??0))}</td>
                             <td className="px-3 py-2.5 text-green-300 font-black">{fmt(r.weight)}</td>
                             <td className="px-3 py-2.5 text-slate-400 text-xs">{r.inspector||'—'}</td>
-                            <td className="px-3 py-2.5 text-slate-500 text-xs">{new Date(r.created_at).toLocaleString('th-TH',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</td>
+                            <td className="px-3 py-2.5 text-slate-500 text-xs">{new Date(r.created_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</td>
                           </tr>
                           </Fragment>
                           )
@@ -892,7 +892,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                           {(j as any).so && <span className="bg-blue-500/15 text-blue-300 px-1 py-0.5 rounded font-bold">SO {(j as any).so}</span>}
                           <span className="text-slate-600 font-mono">Lot {String(j.lot_no).slice(-8)}</span>
                         </div>
-                        {(j as any).start && <p className="text-slate-600 text-[9px] mt-0.5">🕐 {new Date((j as any).start).toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit'})} {new Date((j as any).start).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})} → {new Date((j as any).end).toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit'})} {new Date((j as any).end).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})}</p>}
+                        {(j as any).start && <p className="text-slate-600 text-[9px] mt-0.5">🕐 {new Date((j as any).start).toLocaleDateString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit'})} {new Date((j as any).start).toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'})} → {new Date((j as any).end).toLocaleDateString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit'})} {new Date((j as any).end).toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'})}</p>}
                         <div className="flex items-center justify-between mt-1">
                           <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold">รอโอน {j.pending} {typeFilter==='scrap'?'ถุง':'ม้วน'} · {fmt(j.pendingKg)} Kg</span>
                         </div>

@@ -1746,34 +1746,7 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
           )}
         </div>
 
-        <div className="px-5 pt-3 pb-0 border-t border-slate-800 shrink-0">
-          {/* ปุ่มจอดงาน — แสดงเฉพาะเมื่อมีงานอยู่ */}
-          {hasJob && (
-            <div className="mb-3">
-              {!showPark ? (
-                <button onClick={() => setShowPark(true)}
-                  className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold border border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-colors">
-                  🅿 จอดงานนี้ไว้ก่อน (แทรกงานด่วน)
-                </button>
-              ) : (
-                <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 space-y-2">
-                  <p className="text-amber-300 text-xs font-bold">🅿 จอดงาน "{profile.productName}" ไว้ก่อน</p>
-                  <input value={parkBy} onChange={e => setParkBy(e.target.value)}
-                    placeholder="ชื่อผู้จอดงาน *"
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-amber-500"/>
-                  <div className="flex gap-2">
-                    <button onClick={() => setShowPark(false)}
-                      className="flex-1 py-1.5 rounded-lg text-xs text-slate-400 bg-slate-800 hover:bg-slate-700">ยกเลิก</button>
-                    <button onClick={parkJob} disabled={parking}
-                      className="flex-[2] py-1.5 rounded-lg text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-50">
-                      {parking ? 'กำลังจอด...' : '✓ จอดงาน + เปิดรับงานใหม่'}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        {/* ปุ่มจอดงาน/พักงาน เอาออกแล้ว — ใช้ "ปิดงาน" แทน (กันบั๊กข้อมูลปนข้ามงาน) */}
         <div className="flex gap-2 px-5 py-3 shrink-0">
           <button onClick={onClose} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-400 py-2.5 rounded-xl text-sm">ยกเลิก</button>
           <button onClick={save} disabled={!ok || saving}
@@ -2481,6 +2454,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       }
 
       // ── 3) เคลียร์ข้อมูลงาน (เก็บแต่ machine_no, core_weight, label_size, locked) ──
+      //   ⚠ ต้องเคลียร์ WO/SO/วันส่ง/fresh_start ด้วย ไม่งั้นงานใหม่ติด WO เก่า (ข้อมูลปนข้ามงาน)
       await supabase.from('machine_profiles').update({
         cust_code: '', cust_name: '', cust_branch: '', cust_address: '',
         item_code: '', mat_code: '', product_code: '', product_name: '',
@@ -2488,6 +2462,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         lot_no: '', length: '', pcs: '',
         planned_qty: '',
         inspector: '',
+        work_order: '', sale_order: '', delivery_date: null, fresh_start: false,
       }).eq('machine_no', profile.machine_no)
       alert('✓ ปิดงานสำเร็จ — เครื่อง ' + profile.machine_no + ' พร้อมรับงานใหม่ (กรอกข้อมูลที่หน้าตั้งค่า)')
       onBack()
@@ -3753,41 +3728,13 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
             </div>
 
             <div className="px-6 pb-4 space-y-2">
-              <button onClick={async () => {
-                  const by = prompt('ชื่อผู้พักงาน:')
-                  if (!by || !by.trim()) return
-                  setClosing(true)
-                  try {
-                    const { error: parkErr } = await supabase.from('parked_jobs').upsert(
-                      { machine_no: profile.machine_no, lot_no: profile.lotNo, profile_snapshot: profile, parked_by: by.trim(), parked_at: new Date().toISOString() },
-                      { onConflict: 'machine_no,lot_no' }
-                    )
-                    if (parkErr) { alert('พักงานไม่สำเร็จ — งานยังอยู่ที่เครื่อง:\n' + parkErr.message); setClosing(false); return }
-                    await supabase.from('machine_profiles').update({
-                      cust_code:'', cust_name:'', cust_branch:'', cust_address:'',
-                      item_code:'', mat_code:'', product_code:'', product_name:'',
-                      width_cm:'', thick_mc:'',
-                      lot_no:'', length:'', pcs:'',
-                      planned_qty:'',
-                      inspector:'',
-                    }).eq('machine_no', profile.machine_no)
-                    alert(`⏸ พักงาน "${profile.productName}" แล้ว — ดึงคืนได้ที่หน้าเลือกเครื่อง (ปุ่ม 🅿 มีงานจอด)`)
-                    setShowCloseModal(false)
-                    onBack()
-                  } catch (e:any) {
-                    alert('พักงานไม่สำเร็จ: ' + e?.message)
-                  } finally { setClosing(false) }
-                }} disabled={closing}
-                className="w-full bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2">
-                ⏸ พักงาน (ดึงกลับมาทำต่อได้)
-              </button>
+              {/* เอา "พักงาน" ออกแล้ว — ใช้ปิดงานอย่างเดียว (ดึงงานเก่ากลับได้จากปุ่ม "📂 ดึงงานเก่า") */}
               <button onClick={handleCloseJob} disabled={closing}
                 className="w-full bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2">
-                {closing ? 'กำลังปิด...' : '🏁 ปิดงานถาวร (ปิดสรุปยอด)'}
+                {closing ? 'กำลังปิด...' : '🏁 ปิดงาน + สรุปยอด'}
               </button>
               <p className="text-[10px] text-slate-500 text-center">
-                <b className="text-amber-400">พัก:</b> profile หาย ม้วนยังอยู่ — ดึงกลับได้ทุกเมื่อ ·
-                <b className="text-brand-400 ml-2">ปิดถาวร:</b> เขียน summary + ดึงงานเก่าได้จากปุ่ม "📂 ดึงงานเก่า"
+                ปิดงาน → เขียนสรุปยอด + เคลียร์เครื่องพร้อมรับงานใหม่ · ดึงงานเก่ากลับได้จากปุ่ม "📂 ดึงงานเก่า"
               </p>
               <button onClick={() => setShowCloseModal(false)} disabled={closing}
                 className="w-full bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-400 py-2 rounded-xl text-sm transition-colors">

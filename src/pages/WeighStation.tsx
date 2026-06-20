@@ -2069,6 +2069,7 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
 
   function confirmInspector(name: string) {
     if (!name.trim()) return
+    saveSuggestion('inspector', name.trim())   // จำชื่อผู้ตรวจ/ผู้กรอ → ครั้งหน้าแตะเลือกได้
     setInspector(name.trim())
     setInspectorSetAt(Date.now())
     setShowInspectorPrompt(false)
@@ -3773,6 +3774,24 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                 placeholder="ชื่อผู้ตรวจสอบ..."
                 autoFocus
                 className="w-full mt-4 bg-slate-800 border-2 border-slate-700 rounded-xl px-4 py-3 text-white text-lg text-center outline-none focus:border-brand-500" />
+              {/* ชื่อที่เคยใช้ — แตะเลือกได้ ไม่ต้องพิมพ์ */}
+              {(() => {
+                const names = loadSuggestions('inspector')
+                if (!names.length) return null
+                return (
+                  <div className="mt-3">
+                    <p className="text-slate-500 text-[10px] mb-1.5">แตะชื่อที่เคยใช้:</p>
+                    <div className="flex flex-wrap gap-1.5 justify-center max-h-[88px] overflow-y-auto">
+                      {names.map(n => (
+                        <button key={n} onClick={() => confirmInspector(n)}
+                          className="text-sm bg-slate-800 hover:bg-brand-600 border border-slate-700 hover:border-brand-500 text-slate-200 hover:text-white px-3 py-1.5 rounded-lg font-bold transition-colors">
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
             <div className="px-6 py-4 border-t border-slate-800">
               <button onClick={() => confirmInspector(inspectorInput)}

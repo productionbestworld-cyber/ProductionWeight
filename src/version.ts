@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.7.4'
+export const APP_VERSION = '1.7.5'
 export const APP_BUILD_DATE = '2026-06-19'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.7.5', date: '2026-06-19',
+    items: [
+      'จอชั่ง: popup ถามผู้ตรวจสอบ/ผู้กรอ จำชื่อที่เคยใช้ → แตะเลือกได้ ไม่ต้องพิมพ์มือทุกครั้ง (เก็บในเครื่อง)',
+    ],
+  },
   {
     version: '1.7.4', date: '2026-06-19',
     items: [

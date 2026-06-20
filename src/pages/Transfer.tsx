@@ -797,7 +797,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                               </td>
                             </tr>
                           )}
-                          <tr className="hover:bg-slate-800/30">
+                          <tr className="hover:bg-slate-800/30 cursor-pointer" onClick={() => setDetailRoll(r)} title="ดูรายละเอียด / รีปริ้นใบปะหน้า">
                             <td className="px-3 py-2.5 text-slate-600 text-xs">{i+1}</td>
                             <td className="px-3 py-2.5"><span className="text-[10px] bg-brand-500/20 text-brand-300 font-bold px-1.5 py-0.5 rounded">{r.machine_no||'?'}</span></td>
                             <td className="px-3 py-2.5 text-white font-mono font-bold">{String(r.roll_type).startsWith('scrap') ? 'ถุงเศษ' : `#${r.roll_no}`}</td>
@@ -806,7 +806,10 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                             <td className="px-3 py-2.5 text-slate-300">{fmt((r.weight??0)+(r.core_weight??0))}</td>
                             <td className="px-3 py-2.5 text-green-300 font-black">{fmt(r.weight)}</td>
                             <td className="px-3 py-2.5 text-slate-400 text-xs">{r.inspector||'—'}</td>
-                            <td className="px-3 py-2.5 text-slate-500 text-xs">{new Date(r.created_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</td>
+                            <td className="px-3 py-2.5 text-slate-500 text-xs whitespace-nowrap">
+                              {new Date(r.created_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
+                              <button onClick={(e) => { e.stopPropagation(); setDetailRoll(r) }} title="รีปริ้นใบปะหน้า" className="ml-2 text-sm text-slate-500 hover:text-brand-300">📋</button>
+                            </td>
                           </tr>
                           </Fragment>
                           )

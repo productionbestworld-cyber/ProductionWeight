@@ -1212,9 +1212,16 @@ function ReworkPendingPanel({ refreshKey }: { refreshKey: number }) {
                       <p className="text-slate-500 text-[10px] truncate">
                         {r.machine_no || '—'}{r.length ? ` · ${r.length} M.` : ''}{r.work_order ? ` · WO ${r.work_order}` : ''}
                       </p>
-                      {r.rework_source_lot && (
-                        <p className="text-[10px] text-slate-500 truncate">↩ ดึงจาก Lot {r.rework_source_lot}{srcNo[r.rework_source_roll_id] ? <span className="text-amber-300 font-bold"> #{srcNo[r.rework_source_roll_id]}</span> : ''}</p>
-                      )}
+                      {(() => {
+                        const isMerge = (r.remark ?? '').includes('กรอต่อ')
+                        if (isMerge) {
+                          const nums = [...String(r.remark ?? '').matchAll(/#(\d+)/g)].map(m => m[1])
+                          return <p className="text-[10px] text-slate-500 truncate">🔁 กรอต่อจาก <span className="text-amber-300 font-bold">{nums.length ? '#' + nums.join(' + #') : (r.rework_source_lot ?? '')}</span> (2 ม้วน→1)</p>
+                        }
+                        return r.rework_source_lot
+                          ? <p className="text-[10px] text-slate-500 truncate">↩ ดึงจาก Lot {r.rework_source_lot}{srcNo[r.rework_source_roll_id] ? <span className="text-amber-300 font-bold"> #{srcNo[r.rework_source_roll_id]}</span> : ''}</p>
+                          : null
+                      })()}
                     </button>
                   ))}
                 </div>

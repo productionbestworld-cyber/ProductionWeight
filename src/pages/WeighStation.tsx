@@ -1976,7 +1976,10 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
       : q.eq('rework_status', 'reworking')
     if (scopeIds) q = q.in('id', scopeIds)
     const { data: src } = await q
-    setSrcRolls(src ?? [])
+    // เรียงตามเลขม้วน (น้อย→มาก) ให้หาง่าย — เลขไม่โดด (เดิมเรียงตามเวลา)
+    const sorted = [...(src ?? [])].sort((a: any, b: any) =>
+      ((parseInt(a.roll_no) || 0) - (parseInt(b.roll_no) || 0)) || ((a.lot_no ?? '').localeCompare(b.lot_no ?? '')))
+    setSrcRolls(sorted)
     // กรอได้สะสมต่อม้วนต้นทาง = ม้วนดีของ lot นี้ที่อ้างอิง source roll
     const { data: good } = await supabase.from('production_rolls')
       .select('rework_source_roll_id, weight')

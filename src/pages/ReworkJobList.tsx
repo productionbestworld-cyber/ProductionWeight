@@ -637,9 +637,12 @@ function JobListView({ onPickJob, refreshSignal }: { onPickJob: (profile: Machin
                   </tr>
                 )
                 }
-                if (!multi) return filtered.map(renderRow)
+                // เรียงตามเลขม้วนต้นทาง (น้อย→มาก) ให้หาง่าย ไม่โดด
+                const jrn = (j: ReworkJob) => { const r = jobOrders[j.id!]?.rolls; return (r && r.length) ? Math.min(...r.map(x => parseInt(x) || 0)) : 999999 }
+                const byRoll = (a: ReworkJob, b: ReworkJob) => jrn(a) - jrn(b)
+                if (!multi) return [...filtered].sort(byRoll).map(renderRow)
                 return gkeys.flatMap(k => {
-                  const gj = grp[k]
+                  const gj = [...grp[k]].sort(byRoll)
                   const gPlanned = gj.reduce((s, j) => s + (parseFloat(j.planned_qty ?? '') || 0), 0)
                   return [
                     <tr key={'h'+k} className="bg-slate-800/70 sticky">

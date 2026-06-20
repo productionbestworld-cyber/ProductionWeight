@@ -998,7 +998,7 @@ function CreateJobModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
     if (!form.cust_name?.trim())    { alert('กรอกลูกค้า'); return }
     setSaving(true)
     const { error } = await supabase.from('rework_jobs').insert({
-      ...form, source: 'manual', status: 'active', created_at: new Date().toISOString(),
+      ...form, source: 'manual', status: 'active', new_system: true, created_at: new Date().toISOString(),
     })
     setSaving(false)
     if (error) { alert('สร้างไม่สำเร็จ: ' + error.message); return }

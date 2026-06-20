@@ -2995,8 +2995,10 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
             ))}
           </div>
 
-          {/* ── แจ้งเตือน: ม้วนถัดไปกำลังทดแทนเลขที่ลบ ─────────────── */}
-          {((isGood && isFillingGapGood) || (isBad && isFillingGapBad)) && (
+          {/* ── แจ้งเตือน: ม้วนถัดไปกำลังทดแทนเลขที่ลบ ───────────────
+               ⚠ ซ่อนสำหรับกรอ "ชุดระบบใหม่" — เลขยึดจาก item (max+1 ไม่เติมเลขแหว่ง)
+               ไม่ใช่ยึด lot · ไม่งั้นแถบเดาผิดว่า #1 หาย ทั้งที่ตอน save จะเป็น #5 */}
+          {!(isRework && (profile as any).newSystem) && ((isGood && isFillingGapGood) || (isBad && isFillingGapBad)) && (
             <div className="relative bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 rounded-xl p-[2px] shadow-lg shadow-amber-500/40 animate-pulse">
               <div className="bg-slate-900 rounded-[10px] px-4 py-3.5 flex items-center gap-3">
                 <div className="w-12 h-12 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/50 shrink-0">

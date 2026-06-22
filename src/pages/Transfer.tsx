@@ -383,13 +383,14 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
     .map(r => r.lot_no).filter(Boolean))).sort()
 
   // เฉพาะ job ที่ยังมีม้วนรอโอน (pending > 0) เท่านั้น
-  // ⚠ ชุดระบบใหม่ (new_system): เลขม้วนต่อเนื่องข้าม WO → รวมเป็นการ์ดเดียว (key=เครื่อง+Lot, ไม่แยก WO)
+  // ⚠ ชุดระบบใหม่ (new_system): เลขม้วนต่อเนื่องข้าม WO → รวมเป็นการ์ดเดียว แต่ "แยกตาม item"
+  //    (กัน 2 สินค้าคนละไซส์ที่ใช้ Lot กรอเดียวกัน มารวมใบโอนเดียว)
   //    งานปกติ: แยกตาม WO เหมือนเดิม (กัน 2 สินค้าปน Lot เดียว)
   const groupMap = new Map<string, any[]>()
   for (const r of rolls) {
     if (!r.machine_no) continue
     const key = r.new_system
-      ? `${r.machine_no}__${r.lot_no}__${NS_WO}`
+      ? `${r.machine_no}__${r.lot_no}__${r.item_code ?? ''}__${NS_WO}`
       : `${r.machine_no}__${r.lot_no}__${r.work_order ?? ''}`
     ;(groupMap.get(key) ?? groupMap.set(key, []).get(key))!.push(r)
   }

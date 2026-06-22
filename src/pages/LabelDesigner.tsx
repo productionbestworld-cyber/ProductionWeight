@@ -24,6 +24,7 @@ export interface LabelLayout {
   labelW: number   // mm
   labelH: number   // mm
   fields: FieldConfig[]
+  removedIds?: string[]   // ฟิลด์ default ที่ผู้ใช้ "ลบทิ้ง" — กันถูกเติมกลับตอนโหลด
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -355,7 +356,9 @@ async function loadLayoutBySize(size: LabelSize): Promise<LabelLayout> {
     if (data?.layout) {
       const parsed = data.layout as LabelLayout
       const savedIds = new Set(parsed.fields.map((f: FieldConfig) => f.id))
-      const missing  = def.fields.filter(f => !savedIds.has(f.id))
+      const removed  = new Set(parsed.removedIds ?? [])
+      // เติมเฉพาะฟิลด์ default ที่ "เป็นของใหม่จริง" — ไม่ใช่ฟิลด์ที่ผู้ใช้ลบทิ้งไปเอง
+      const missing  = def.fields.filter(f => !savedIds.has(f.id) && !removed.has(f.id))
       return { ...parsed, fields: [...parsed.fields, ...missing] }
     }
     await saveLayoutToDB(def, size)
@@ -487,7 +490,12 @@ export default function LabelDesigner() {
 
   function deleteField(id: string) {
     snapshot()
-    setLayout(prev => ({ ...prev, fields: prev.fields.filter(f => f.id !== id) }))
+    setLayout(prev => ({
+      ...prev,
+      fields: prev.fields.filter(f => f.id !== id),
+      // จำว่าฟิลด์นี้ถูกลบ → กันถูกเติมกลับจาก default ตอนโหลดครั้งหน้า
+      removedIds: [...new Set([...(prev.removedIds ?? []), id])],
+    }))
     setSelected(null)
   }
 

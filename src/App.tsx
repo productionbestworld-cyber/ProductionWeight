@@ -13,6 +13,7 @@ import ReviewQueue from './pages/ReviewQueue'
 import ProductsPage from './pages/Products'
 import Planning from './pages/Planning'
 import CombinedDashboard from './pages/CombinedDashboard'
+import OwnerDashboard from './pages/OwnerDashboard'
 import { APP_VERSION, APP_BUILD_DATE, CHANGELOG } from './version'
 
 type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings' | 'admin' | 'review' | 'nc' | 'products' | 'planning' | 'combined'
@@ -77,6 +78,16 @@ export default function App() {
         </div>
       )
     }
+  }
+
+  // ── ลิงก์แยก: แดชบอร์ดผู้บริหาร (อ่านอย่างเดียว) — ...?owner=1 หรือ /owner ──
+  {
+    const sp = new URLSearchParams(window.location.search)
+    const path = window.location.pathname.replace(/\/+$/, '').toLowerCase()
+    const isOwner = sp.get('owner') !== null
+      || window.location.hash.replace('#', '').toLowerCase() === 'owner'
+      || path === '/owner'
+    if (isOwner) return <OwnerDashboard />
   }
 
   // dept persist ใน localStorage

@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.8.5'
+export const APP_VERSION = '1.8.6'
 export const APP_BUILD_DATE = '2026-06-22'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.8.6', date: '2026-06-22',
+    items: [
+      'หน้าชั่ง (เป่า/พิมพ์): เพิ่ม WO บนแถบหัวงาน (ข้าง SO) — เห็น WO/SO/Lot ครบบนจอชั่งเลย',
+    ],
+  },
   {
     version: '1.8.5', date: '2026-06-22',
     items: [

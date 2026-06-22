@@ -2927,6 +2927,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
           <div>
             <p className="text-white font-bold text-sm">{profile.productName}</p>
             <p className="text-slate-400 text-xs">
+              {profile.woNo && <span className="text-orange-300 font-bold mr-1.5">WO {profile.woNo}</span>}
               {profile.soNo && <span className="text-amber-300 font-bold mr-1.5">SO {profile.soNo}</span>}
               {profile.custName} · Lot {profile.lotNo}
             </p>

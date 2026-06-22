@@ -2122,24 +2122,39 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
       const q = loadQueue()
       if (!q.length || !navigator.onLine) return
       setSyncing(true)
+      // กันบันทึกซ้ำ (idempotent): ม้วนเดียวกัน = machine+lot+created_at เดียวกัน (created_at ตั้งตอนชั่ง มิลลิวินาที)
+      //   → ถ้ามีใน DB อยู่แล้ว ถือว่า "บันทึกสำเร็จ" ลบออกจากคิว ไม่ insert ซ้ำ (flush กี่รอบก็ไม่เกิดม้วนซ้ำ)
+      const alreadySaved = async (item: any): Promise<boolean> => {
+        if (!item.created_at) return false
+        const { data } = await supabase.from('production_rolls')
+          .select('id').eq('machine_no', item.machine_no).eq('lot_no', item.lot_no)
+          .eq('created_at', item.created_at).limit(1)
+        return !!(data && data.length)
+      }
       const remaining: any[] = []
       for (const item of q) {
         try {
+          // ม้วนนี้ถูกบันทึกไปแล้ว? → ข้าม (เอาออกจากคิว ไม่ยิงซ้ำ)
+          if (await alreadySaved(item)) continue
           let { error } = await supabase.from('production_rolls').insert(item)
-          // ถ้า roll_no ชน — gen ใหม่จาก DB แล้วลองอีกครั้ง
+          // ถ้า roll_no ชน (23505) — แยกให้ออกว่า "ม้วนเดิมที่บันทึกแล้ว" หรือ "เลขชนกับม้วนคนละตัว"
           if (error && (error as any).code === '23505') {
-            const existing = await fetchAll(() => supabase.from('production_rolls')
-              .select('roll_no, roll_type, work_order')
-              .eq('machine_no', item.machine_no)
-              .eq('lot_no', item.lot_no)
-              .order('id', { ascending: true }))
-            // เลขม้วนนับแยกตาม WO (freshStart) → หาเลขว่างเฉพาะ WO เดียวกัน
-            const sameType = existing.filter((x:any) => x.roll_type === item.roll_type
-              && (x.work_order ?? '') === (item.work_order ?? ''))
-            const taken = new Set(sameType.map((x:any) => x.roll_no).filter(Boolean))
-            let n = 1; while (taken.has(n)) n++
-            const retry = await supabase.from('production_rolls').insert({ ...item, roll_no: n })
-            error = retry.error
+            // ม้วนเดิม (created_at เดียวกัน) อยู่ใน DB แล้ว → ถือว่าสำเร็จ ห้าม gen เลขใหม่ insert ซ้ำ
+            if (await alreadySaved(item)) { error = null }
+            else {
+              // เลขชนกับม้วน "คนละตัว" จริง → หาเลขว่างเฉพาะ WO เดียวกัน แล้วลองใหม่
+              const existing = await fetchAll(() => supabase.from('production_rolls')
+                .select('roll_no, roll_type, work_order')
+                .eq('machine_no', item.machine_no)
+                .eq('lot_no', item.lot_no)
+                .order('id', { ascending: true }))
+              const sameType = existing.filter((x:any) => x.roll_type === item.roll_type
+                && (x.work_order ?? '') === (item.work_order ?? ''))
+              const taken = new Set(sameType.map((x:any) => x.roll_no).filter(Boolean))
+              let n = 1; while (taken.has(n)) n++
+              const retry = await supabase.from('production_rolls').insert({ ...item, roll_no: n })
+              error = retry.error
+            }
           }
           if (error) remaining.push(item)
         } catch { remaining.push(item) }

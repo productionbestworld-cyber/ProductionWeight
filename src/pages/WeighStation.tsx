@@ -2202,7 +2202,9 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
     // freshStart (งานผลิตดึงกลับ): นับเฉพาะม้วนของ WO นี้
     // ⚠ งานกรอ: ห้ามกรองตาม WO — เพราะงานรวมข้ามไซส์มีหลาย WO ใน Lot เดียว
     //   เลขม้วนต้อง unique ทั้ง Lot ไม่งั้นแจกเลขซ้ำ (เช่น #12 ชนกัน)
-    const useFreshWO = !!(profile as any).freshStart && !isRework
+    // ผลิตเป่า/พิมพ์: นับเลขม้วน "แยกตาม WO เสมอ" (1 WO = เริ่ม #1) — ไม่ขึ้นกับ checkbox อีก
+    //   (item เดียวกันใน Lot เดียวกันคนละ WO ต้องเริ่ม #1 ใหม่ได้) · กรอ: ยึด item
+    const useFreshWO = !isRework
     // ⚠ Lot ที่ถูกใช้ซ้ำหลาย WO สะสมเกิน 1000 ม้วน → ต้องดึงทีละหน้า ไม่งั้นโดน cap 1000
     //   เอาม้วนใหม่สุดหาย → เลขม้วนถัดไปเด้งผิด (เคยได้ 44 แทน 47). freshStart กรอง WO ในตัว
     //   query เลยลดจำนวนแถวลงมาก + เร็วขึ้น
@@ -2387,7 +2389,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
     try {
       // ── H6: ใช้ ground truth จาก DB ไม่ใช่ state ใน memory ──
       // ดึงทีละหน้า (กัน cap 1000) + freshStart นับเฉพาะ WO นี้ ให้ตรงกับยอดบนจอชั่ง/การ์ด
-      const closeFreshWO = !!(profile as any).freshStart && !isRework
+      const closeFreshWO = !isRework
       const all = await fetchAll(() => {
         let q = supabase.from('production_rolls')
           .select('weight, roll_type, transferred')
@@ -2606,9 +2608,10 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
           .eq('machine_no', profile.machine_no)
           .eq('lot_no', profile.lotNo)
           .order('id', { ascending: true }))
+        // เป่า/พิมพ์: หาเลขว่างเฉพาะ WO เดียวกัน (นับตาม WO) · กรอ: ทั้ง item
         const sameTypeRolls = existing.filter((x:any) =>
-          x.roll_type === actualType && (!(profile as any).freshStart || (x.work_order ?? '') === (profile.woNo ?? '')))
-        const newRollNo = nextRollNo(sameTypeRolls)
+          x.roll_type === actualType && (isRework || (x.work_order ?? '') === (profile.woNo ?? '')))
+        const newRollNo = nextRollNo(sameTypeRolls, isRework)
         const retryPayload = { ...payload, roll_no: newRollNo }
         const retry = await supabase.from('production_rolls').insert(retryPayload).select().single()
         inserted = retry.data

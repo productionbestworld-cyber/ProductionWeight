@@ -1029,11 +1029,11 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                   <p className="text-slate-600 text-xs mt-1">ไม่มี{typeFilter==='scrap'?'ถุงเศษ':'ม้วน'}รอโอนในงานนี้</p>
                 </div>
               ) : (() => {
-                // จัดกลุ่มม้วนตามงาน — ชุดระบบใหม่: รวมทุก WO ใน Lot เดียว (เลขม้วนต่อเนื่อง) · งานปกติ: แยกตาม WO
+                // จัดกลุ่มม้วนตามงาน — ชุดระบบใหม่: รวมทุก WO ใน Lot เดียว "แต่แยกตาม item" (กัน 2 สินค้าปน Lot กรอเดียว) · งานปกติ: แยกตาม WO
                 const gmap = new Map<string, any[]>()
                 for (const r of filtered) {
                   const k = r.new_system
-                    ? `${r.machine_no ?? '?'}__${r.lot_no ?? '?'}__${NS_WO}`
+                    ? `${r.machine_no ?? '?'}__${r.lot_no ?? '?'}__${r.item_code ?? ''}__${NS_WO}`
                     : `${r.machine_no ?? '?'}__${r.lot_no ?? '?'}__${r.work_order ?? ''}`
                   if (!gmap.has(k)) gmap.set(k, [])
                   gmap.get(k)!.push(r)

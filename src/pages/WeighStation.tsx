@@ -2695,6 +2695,8 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       backfillCustomer((profile as any).custName, (profile as any).custCode)
 
       // บันทึก log ทุกการชั่ง (await + retry 2 ครั้ง — log สำคัญสำหรับ recovery)
+      // ⚠ weighed_at = "เวลาชั่งจริง" (ตั้งฝั่ง client) + ตรงกับ created_at ของ production_rolls
+      //   ไม่ใช้ default ของเซิร์ฟเวอร์ — ไม่งั้นชั่ง offline แล้ว sync ทีหลัง เวลาจะเพี้ยน
       const logPayload = {
         machine_no:   profile.machine_no,
         lot_no:       profile.lotNo,
@@ -2704,6 +2706,8 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         mat_code:     profile.matCode,
         product_name: profile.productName,
         customer:     profile.custName,
+        cust_branch:  (profile as any).custBranch ?? '',
+        width_unit:   profile.widthUnit ?? 'cm',
         roll_no:      useRollNo,
         roll_type:    actualType,
         gross_weight: gross,
@@ -2711,6 +2715,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         net_weight:   parseFloat(saveWeight.toFixed(dec)),
         remark:       rollRemark,
         inspector:    inspector || null,
+        weighed_at:   payload.created_at,
       }
       let logOk = false
       for (let attempt = 0; attempt < 3; attempt++) {

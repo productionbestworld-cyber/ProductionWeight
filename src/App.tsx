@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Scale, LayoutDashboard, Settings, Package, History, Warehouse as WarehouseIcon, ChevronDown, Wifi, WifiOff, AlertTriangle, Lock, Search, Boxes, CalendarClock } from 'lucide-react'
+import { Scale, LayoutDashboard, Settings, Package, History, Warehouse as WarehouseIcon, ChevronDown, Wifi, WifiOff, AlertTriangle, Lock, Search, Boxes, CalendarClock, ClipboardList } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import WeighStation from './pages/WeighStation'
 import Dashboard from './pages/Dashboard'
@@ -14,9 +14,10 @@ import ProductsPage from './pages/Products'
 import Planning from './pages/Planning'
 import CombinedDashboard from './pages/CombinedDashboard'
 import OwnerDashboard from './pages/OwnerDashboard'
+import WeighLog from './pages/WeighLog'
 import { APP_VERSION, APP_BUILD_DATE, CHANGELOG } from './version'
 
-type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings' | 'admin' | 'review' | 'nc' | 'products' | 'planning' | 'combined'
+type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings' | 'admin' | 'review' | 'nc' | 'products' | 'planning' | 'combined' | 'weighlog'
 type Dept = 'blow' | 'print' | 'rewind'
 
 const DEPT_KEY = 'bwp_dept'
@@ -88,6 +89,16 @@ export default function App() {
       || window.location.hash.replace('#', '').toLowerCase() === 'owner'
       || path === '/owner'
     if (isOwner) return <OwnerDashboard />
+  }
+
+  // ── ลิงก์แยก: Log การชั่ง (อ่านอย่างเดียว) — ...?weighlog=1 หรือ /weighlog ──
+  {
+    const sp = new URLSearchParams(window.location.search)
+    const path = window.location.pathname.replace(/\/+$/, '').toLowerCase()
+    const isWeighLog = sp.get('weighlog') !== null
+      || window.location.hash.replace('#', '').toLowerCase() === 'weighlog'
+      || path === '/weighlog'
+    if (isWeighLog) return <WeighLog />
   }
 
   // dept persist ใน localStorage
@@ -214,6 +225,7 @@ export default function App() {
     { key: 'combined',  label: 'รวมเทียบทั้งปี',  icon: LayoutDashboard, depts: ['blow','print','rewind'] },
     { key: 'planning',  label: 'วางแผน',         icon: CalendarClock,   depts: ['blow','print','rewind'] },
     { key: 'history',   label: 'ประวัติผลิต',    icon: History,         depts: ['blow','print','rewind'] },
+    { key: 'weighlog',  label: 'Log ชั่ง',       icon: ClipboardList,   depts: ['blow','print','rewind'] },
     { key: 'products',  label: 'คลังข้อมูล',     icon: Boxes,           depts: ['blow','print','rewind'] },
     { key: 'review',    label: 'พิจารณาม้วนกรอ', icon: Search,         depts: ['blow','print','rewind'] },
     { key: 'nc',        label: 'NC (คลัง/QC)',   icon: AlertTriangle,   depts: ['blow','print','rewind'] },
@@ -409,6 +421,7 @@ export default function App() {
         )}
         {page === 'planning'  && <Planning dept={dept} />}
         {page === 'history'   && <HistoryPage dept={dept} />}
+        {page === 'weighlog'  && <WeighLog />}
         {page === 'products'  && <ProductsPage />}
         {page === 'review'    && <ReviewQueue dept={dept} mode="prod" />}
         {page === 'nc'        && <ReviewQueue dept={dept} mode="nc" />}

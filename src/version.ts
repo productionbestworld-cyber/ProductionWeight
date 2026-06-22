@@ -1,10 +1,17 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.8.2'
+export const APP_VERSION = '1.8.3'
 export const APP_BUILD_DATE = '2026-06-22'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.8.3', date: '2026-06-22',
+    items: [
+      '✨ หน้าใหม่ "Log ชั่ง" (เมนูบนสุด หรือ /weighlog) — ดูบันทึกทุกการชั่งตามจริง: เวลาชั่ง/เครื่อง/Lot/WO/SO/สินค้า/ลูกค้า/ม้วน/ชนิด/นน.เต็ม-แกน-สุทธิ/ผู้ชั่ง/หมายเหตุ · กรองตามเครื่อง/ชนิด/ช่วงเวลา + ค้นหา + โหลด Excel/CSV',
+      'weigh_logs บันทึก "เวลาชั่งจริง" (weighed_at = เวลาที่กดชั่ง) แทนเวลา sync — ชั่ง offline แล้ว sync ทีหลังเวลาก็ตรง · เพิ่ม cust_branch/width_unit ใน log',
+    ],
+  },
   {
     version: '1.8.2', date: '2026-06-22',
     items: [

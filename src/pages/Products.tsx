@@ -3,6 +3,38 @@ import { Plus, Trash2, Search, Upload, Download, X, Edit3, RefreshCw, Building2,
 import { supabase } from '../lib/supabase'
 import * as XLSX from 'xlsx'
 import { exportToExcel } from '../lib/exportExcel'
+import { reprintRollLabel } from './WeighStation'
+
+// ── ทดสอบใบปะหน้า (สั้น/ยาว) จากข้อมูลสินค้า — ไม่ต้องมีงานจริง ──
+// ใช้ค่าน้ำหนักตัวอย่าง · cust_code ส่งไปด้วย → ลูกค้า 08 จะเห็น EXP
+function previewProductLabel(p: Product, size: 'short' | 'long') {
+  const core = parseFloat((p.core_weight ?? '').trim() || '1.25') || 1.25
+  const net  = 25.00
+  reprintRollLabel({
+    machine_no:  'ทดสอบ',
+    cust_code:   p.cust_code,
+    customer:    p.cust_name ?? '',
+    item_code:   p.item_code,
+    mat_code:    (p as any).mat_code ?? '',
+    product_code: p.product_code,
+    product_name: p.product_name,
+    width_cm:    p.width_cm,
+    width_unit:  p.width_unit ?? 'cm',
+    thick_mc:    p.thick_mc,
+    lot_no:      'TEST0001',
+    length:      (p as any).length ?? '',
+    pcs:         (p as any).pcs ?? '',
+    core_weight: core,
+    inspector:   'ทดสอบระบบ',
+    section:     'blow',
+    sale_order:  'SO-TEST',
+    work_order:  'WO-TEST',
+    roll_no:     1,
+    gross_weight: parseFloat((net + core).toFixed(2)),
+    weight:      net,
+    roll_type:   'good',
+  }, size)
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 export interface Customer {
@@ -485,7 +517,11 @@ function CustomerDetailModal({ customer, products, customers, onClose }: {
                       <td className="px-3 py-2 font-mono text-brand-400 font-bold">{p.item_code}</td>
                       <td className="px-3 py-2 text-white">{p.product_name || '—'}</td>
                       <td className="px-3 py-2 text-slate-300">{p.width_cm ? `${p.width_cm}${p.width_unit ?? 'cm'}×${p.thick_mc}mc` : '—'}</td>
-                      <td className="px-3 py-2 text-right">
+                      <td className="px-3 py-2 text-right whitespace-nowrap">
+                        <button onClick={() => previewProductLabel(p, 'long')} title="ทดสอบใบยาว"
+                          className="text-[11px] font-bold bg-brand-500/15 text-brand-300 hover:bg-brand-500/25 rounded px-1.5 py-1 mr-1">🏷️ยาว</button>
+                        <button onClick={() => previewProductLabel(p, 'short')} title="ทดสอบใบสั้น"
+                          className="text-[11px] font-bold bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 rounded px-1.5 py-1 mr-1">สั้น</button>
                         <button onClick={() => setEditProd(p)} className="text-slate-400 hover:text-brand-400 p-1.5">
                           <Edit3 size={13}/>
                         </button>
@@ -609,6 +645,10 @@ function ProductsTab({ products, customers, loading, onChanged }: {
                   {p.cust_name || '—'}
                 </td>
                 <td className="px-3 py-2 text-right whitespace-nowrap">
+                  <button onClick={() => previewProductLabel(p, 'long')} title="ทดสอบใบยาว"
+                    className="text-[11px] font-bold bg-brand-500/15 text-brand-300 hover:bg-brand-500/25 rounded px-1.5 py-1 mr-1">🏷️ยาว</button>
+                  <button onClick={() => previewProductLabel(p, 'short')} title="ทดสอบใบสั้น"
+                    className="text-[11px] font-bold bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 rounded px-1.5 py-1 mr-1">สั้น</button>
                   <button onClick={() => setEditing(p)} className="text-slate-400 hover:text-brand-400 p-1.5"><Edit3 size={14}/></button>
                   <button onClick={() => remove(p)} className="text-slate-400 hover:text-red-400 p-1.5"><Trash2 size={14}/></button>
                 </td>

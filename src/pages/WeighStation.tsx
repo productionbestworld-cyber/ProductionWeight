@@ -178,10 +178,8 @@ ${savedLayout.fields.map(renderLongField).join('\n')}
                ? `<span style="font-size:0.9em">SO <b>${p.soNo || '—'}</b> · WO <b>${p.woNo || '—'}</b> · รหัส <b>${p.itemCode || '—'}</b></span>${rollTypeLabelLong ? ` [${rollTypeLabelLong}]` : ''}${rollType === 'bad' && reason ? ` <span style="color:#c00">เหตุผล: ${reason}</span>` : ''}`
                : shortHeader + (rollTypeLabelLong ? `${shortHeader ? '&nbsp;' : ''}[${rollTypeLabelLong}]` : ''),
     mat:       `Mat&nbsp;&nbsp;<b>${p.matCode}</b>`,
-    // ลูกค้า 08 (หาดทิพย์): ช่อง MFG ใบสั้นแคบ → แสดง MFG/EXP เป็น 2 บรรทัดเล็ก ให้ EXP ไม่โดนตัด
-    mfg:       showExp
-                 ? `<div style="font-size:6.4px;line-height:1.05;white-space:nowrap">MFG <b>${mfgDate}</b><br>EXP <b>${expDate}</b></div>`
-                 : `MFG&nbsp;&nbsp;<b>${mfgDate}</b>`,
+    // ใบสั้นเล็ก → แสดงแค่วันผลิต (MFG) · วันหมดอายุ (EXP) ให้ดูผ่าน QR แทน
+    mfg:       `MFG&nbsp;&nbsp;<b>${mfgDate}</b>`,
     rollno:    `${rollWord}&nbsp;<b>${rollNo === 0 ? '—' : rollNo}</b>`,
     prodname:  p.productName,
     prodcode:  p.productCode || '—',

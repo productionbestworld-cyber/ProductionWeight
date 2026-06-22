@@ -2239,12 +2239,24 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
     if (useFreshWO) {
       merged = merged.filter((r: any) => (r.work_order ?? '') === (profile.woNo ?? ''))
     }
-    // ชุดระบบใหม่ (กรอ): พอโอนแล้วม้วนหลุดจากจอชั่ง → เริ่มชุดใหม่ #1 สะอาด (ไม่โชว์ประวัติที่โอนไปแล้ว)
+    // ชุดระบบใหม่ (กรอ): เลขม้วน "ยึด item" — Lot กรอใช้ร่วมหลาย item ได้ จึงต้องกรองเฉพาะ item นี้
+    //   (ไม่งั้นจอจะนับข้าม item อื่นในล็อต → เลขเด้งผิด เช่นโชว์ 13 แทน #1) + พอโอนแล้วหลุดจอ เริ่มชุดใหม่สะอาด
     if (isRework && (profile as any).newSystem) {
-      merged = merged.filter((r: any) => !r.transferred)
+      const icNs = (profile.itemCode ?? '').trim()
+      merged = merged.filter((r: any) => !r.transferred && (r.item_code ?? '') === icNs)
+    }
+    // ระบบใหม่ (กรอ): เลขม้วนถัดไป = max(ม้วนดี ระบบใหม่ ยังไม่โอน ของ item นี้ "ทุก Lot") + 1
+    //   ให้ตรงกับตอน save เป๊ะ (กฎ "ยึด item") — ไม่ขึ้นกับม้วน item อื่นที่ใช้ Lot กรอร่วมกัน
+    const nsNextRollNo = async () => {
+      const icNs = (profile.itemCode ?? '').trim()
+      const nsRows = await fetchAll(() => supabase.from('production_rolls')
+        .select('roll_no').eq('item_code', icNs).eq('roll_type', 'good')
+        .eq('new_system', true).eq('transferred', false).order('id', { ascending: true }))
+      return Math.max(0, ...nsRows.map((x: any) => x.roll_no ?? 0)) + 1
     }
     if (!merged.length) {
-      setRollNo(1); setBadRollNo(1); setWeighedRolls([]); setWeighedKg(0); return
+      setRollNo(isRework && (profile as any).newSystem ? await nsNextRollNo() : 1)
+      setBadRollNo(1); setWeighedRolls([]); setWeighedKg(0); return
     }
     const goodRolls = merged.filter((r: any) => r.roll_type === 'good')
     const total = goodRolls.reduce((s: number, r: any) => s + (r.weight ?? 0), 0)
@@ -2254,7 +2266,11 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
     if (isRework) setReworkRound(Math.max(1, ...merged.map((r:any)=>r.rework_batch ?? 1)))
     const badRolls = merged.filter((r: any) => r.roll_type === 'bad')
     // เป่า: เลขต่อเนื่อง (max+1 — โอนแล้วชั่งต่อไม่ถอยกลับ) · กรอ: เติมเลขที่หาย (gap-fill)
-    setRollNo(nextRollNo(goodRolls, isRework))
+    if (isRework && (profile as any).newSystem) {
+      setRollNo(await nsNextRollNo())
+    } else {
+      setRollNo(nextRollNo(goodRolls, isRework))
+    }
     setBadRollNo(nextRollNo(badRolls, isRework))
   }
 

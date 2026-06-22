@@ -8,7 +8,7 @@ import RollDetail from './pages/RollDetail'
 import Transfer from './pages/Transfer'
 import HistoryPage from './pages/History'
 import Warehouse from './pages/Warehouse'
-import Admin, { PinGate, DeptPinGate, isAdminUnlocked, isDeptUnlocked, lockAllDepts, lockAdmin } from './pages/Admin'
+import Admin, { PinGate, DeptPinGate, isAdminUnlocked, isDeptUnlocked, lockAllDepts, lockAdmin, fetchSetting } from './pages/Admin'
 import ReviewQueue from './pages/ReviewQueue'
 import ProductsPage from './pages/Products'
 import Planning from './pages/Planning'
@@ -21,6 +21,39 @@ type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'sett
 type Dept = 'blow' | 'print' | 'rewind'
 
 const DEPT_KEY = 'bwp_dept'
+
+// ── แถบข้อความประกาศวิ่ง — ทุกแผนกเห็น (แก้ข้อความที่หน้า Admin) ──────────────
+function AnnouncementBar() {
+  const [text, setText] = useState('')
+  useEffect(() => {
+    let alive = true
+    const load = () => fetchSetting('announcement').then(t => { if (alive) setText((t ?? '').trim()) }).catch(() => {})
+    load()
+    const iv = setInterval(load, 60_000)        // อัปเดตข้อความใหม่ทุก 1 นาที
+    const onFocus = () => load()
+    window.addEventListener('focus', onFocus)
+    return () => { alive = false; clearInterval(iv); window.removeEventListener('focus', onFocus) }
+  }, [])
+  if (!text) return null
+  // ความเร็ว: ยิ่งข้อความยาวยิ่งใช้เวลามากขึ้น (≈ คงที่ ~60px/วินาที)
+  const dur = Math.max(12, Math.round(text.length * 0.45))
+  return (
+    <div className="shrink-0 bg-amber-500/15 border-b border-amber-500/40 overflow-hidden">
+      <div className="flex items-center">
+        <span className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-slate-900 font-extrabold text-xs uppercase tracking-wider">
+          📢 ประกาศ
+        </span>
+        <div className="relative flex-1 overflow-hidden py-1.5">
+          <div className="bwp-marquee-track text-amber-200 font-semibold text-sm" style={{ animationDuration: `${dur}s` }}>
+            {/* ทำซ้ำ 2 ชุดเพื่อให้วิ่งต่อเนื่องไร้รอยต่อ */}
+            <span className="px-8">{text}</span>
+            <span className="px-8" aria-hidden="true">{text}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // ล็อกทุกแผนก + Admin ตอนโหลดแอปครั้งแรก → บังคับใส่ PIN ทุกครั้งที่เปิด/รีโหลด
 lockAllDepts()
@@ -392,6 +425,9 @@ export default function App() {
           </button>
         </div>
       </nav>
+
+      {/* แถบข้อความประกาศวิ่ง — เห็นทุกแผนก ทุกหน้า */}
+      <AnnouncementBar />
 
       <main className="flex-1 overflow-auto">
         {page === 'weigh'     && <WeighStation key={weighKey} dept={dept} />}

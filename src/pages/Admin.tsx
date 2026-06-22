@@ -82,6 +82,16 @@ export async function setFlag(key: string, value: boolean) {
     .upsert({ key, value: value ? '1' : '0', updated_at: new Date().toISOString() }, { onConflict: 'key' })
 }
 
+// ─── ตั้งค่าแบบข้อความ (เช่น ข้อความประกาศ) ────────────────────────────
+export async function fetchSetting(key: string): Promise<string> {
+  const { data } = await supabase.from('app_settings').select('value').eq('key', key).maybeSingle()
+  return data?.value ?? ''
+}
+export async function setSetting(key: string, value: string) {
+  await supabase.from('app_settings')
+    .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+}
+
 // ─── Session unlock ─────────────────────────────────────────────────────────
 const adminSess     = 'bwp_admin_unlocked'
 const deptSess      = (d: Dept) => `bwp_dept_${d}_unlocked`
@@ -300,6 +310,11 @@ function PinManager() {
       </div>
 
       <div className="mt-6">
+        <h2 className="text-white font-bold text-base mb-2">📢 ข้อความประกาศ (แถบวิ่ง — ทุกแผนกเห็น)</h2>
+        <AnnouncementCard/>
+      </div>
+
+      <div className="mt-6">
         <h2 className="text-white font-bold text-base mb-2">⚙ ฟีเจอร์เพิ่มเติม</h2>
         <FeatureFlagCard flagKey="enable_test_random" label="🎲 ปุ่มสุ่มค่าทดสอบ (หน้าชั่งน้ำหนัก)" desc="เปิดเฉพาะตอนทดสอบระบบ — ใช้งานจริงควรปิดเพื่อไม่ให้กดผิด"/>
       </div>
@@ -307,6 +322,55 @@ function PinManager() {
       <div className="mt-4 text-xs text-slate-500 space-y-0.5">
         <p>💡 PIN เริ่มต้น: Admin <span className="font-mono text-amber-400">9999</span> · เป่า <span className="font-mono text-blue-400">1111</span> · พิมพ์ <span className="font-mono text-purple-400">2222</span> · กรอ <span className="font-mono text-green-400">3333</span></p>
         <p>💡 ผู้ใช้กรอก PIN ครั้งเดียวต่อ session (ปิด tab = ต้องใส่ใหม่)</p>
+      </div>
+    </div>
+  )
+}
+
+function AnnouncementCard() {
+  const [text, setText]     = useState('')
+  const [orig, setOrig]     = useState('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved]   = useState(false)
+  useEffect(() => {
+    fetchSetting('announcement').then(t => { setText(t); setOrig(t); setLoading(false) })
+  }, [])
+  async function save(value: string) {
+    setSaving(true)
+    await setSetting('announcement', value)
+    setOrig(value)
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+  const dirty = text !== orig
+  return (
+    <div className="bg-slate-900 border border-slate-700 rounded-xl p-4">
+      <p className="text-slate-400 text-xs mb-2">
+        พิมพ์ข้อความที่จะวิ่งบนแถบสีเหลืองใต้เมนู — เห็นทุกแผนก ทุกหน้า · เว้นว่าง = ปิดแถบ (อัปเดตให้ทุกเครื่องภายใน 1 นาที)
+      </p>
+      <textarea
+        value={text}
+        onChange={e => setText(e.target.value)}
+        disabled={loading}
+        rows={2}
+        placeholder="เช่น ⚠ วันนี้ปิดระบบเวลา 17:00 เพื่อบำรุงรักษา · กรุณาโอนม้วนเข้าคลังให้ครบก่อนเลิกงาน"
+        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-brand-500 resize-y placeholder:text-slate-600"
+      />
+      <div className="flex items-center gap-2 mt-2">
+        <button onClick={() => save(text)} disabled={saving || loading || !dirty}
+          className="bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-bold px-4 py-1.5 rounded-lg">
+          {saving ? 'กำลังบันทึก...' : 'บันทึกประกาศ'}
+        </button>
+        {orig && (
+          <button onClick={() => { setText(''); save('') }} disabled={saving}
+            className="text-slate-400 hover:text-red-400 text-sm px-3 py-1.5 rounded-lg border border-slate-700 hover:border-red-500/40">
+            ปิดแถบ (ล้างข้อความ)
+          </button>
+        )}
+        {saved && <span className="text-green-400 text-xs">✓ บันทึกแล้ว</span>}
+        {dirty && !saved && <span className="text-amber-400 text-xs">มีการแก้ไขที่ยังไม่บันทึก</span>}
       </div>
     </div>
   )

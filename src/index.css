@@ -3,6 +3,19 @@
 @tailwind utilities;
 
 * { box-sizing: border-box; }
+
+/* แถบข้อความประกาศวิ่ง (marquee) */
+@keyframes bwp-marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.bwp-marquee-track {
+  display: inline-flex;
+  white-space: nowrap;
+  will-change: transform;
+  animation: bwp-marquee linear infinite;
+}
+.bwp-marquee-track:hover { animation-play-state: paused; }
 body {
   margin: 0;
   background: #0a0f1e;

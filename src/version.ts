@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.9.4'
-export const APP_BUILD_DATE = '2026-06-22'
+export const APP_VERSION = '1.9.5'
+export const APP_BUILD_DATE = '2026-06-23'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.9.5', date: '2026-06-23',
+    items: [
+      'แผนกกรอ: ตอนชั่งปริ้นใบปะหน้า "ใบสั้น" เสมอ (เดิมยึด labelSize ของ profile เก่าที่เป็นใบยาว) · เป่า/พิมพ์ยังใช้ขนาดตามตั้งค่าเดิม · รีปริ้นยังเลือกสั้น/ยาวได้',
+    ],
+  },
   {
     version: '1.9.4', date: '2026-06-22',
     items: [

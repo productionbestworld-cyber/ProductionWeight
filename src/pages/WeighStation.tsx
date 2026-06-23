@@ -2767,7 +2767,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         const newList = [...weighedRolls, data]
         setRollNo(nextRollNo(newList.filter((r:any) => r?.roll_type === 'good'), isRework))
         // print fire-and-forget (ไม่ await — ไม่บล็อก save flow)
-        printLabel({...profile, length: lengthVal || profile.length, pcs: pcsVal || profile.pcs, inspector}, rollNo, gross, saveWeight, profile.labelSize ?? 'long', 'good', '', data.id)
+        printLabel({...profile, length: lengthVal || profile.length, pcs: pcsVal || profile.pcs, inspector}, rollNo, gross, saveWeight, (isRework ? 'short' : (profile.labelSize ?? 'long')),'good', '', data.id)
         // กรอต่อ: ม้วนต้นทางที่ 2 ถูกรวมเข้าม้วนนี้แล้ว → mark consumed (หลุดจากลิสต์ต้นทาง)
         if (useSrc2) {
           supabase.from('production_rolls')
@@ -2785,11 +2785,11 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       } else if (isBad) {
         const newList = [...weighedRolls, data]
         setBadRollNo(nextRollNo(newList.filter((r:any) => r?.roll_type === 'bad')))
-        printLabel({...profile, inspector}, badRollNo, gross, saveWeight, profile.labelSize ?? 'long', 'bad', badReason, data.id)
+        printLabel({...profile, inspector}, badRollNo, gross, saveWeight, (isRework ? 'short' : (profile.labelSize ?? 'long')),'bad', badReason, data.id)
         setBadReason('')
       } else {
         // เศษ — ไม่มี roll_no ไม่นับม้วน พิมพ์ label แยก
-        printLabel({...profile, inspector}, 0, gross, gross, profile.labelSize ?? 'long', actualType, scrapReason, data.id)
+        printLabel({...profile, inspector}, 0, gross, gross, (isRework ? 'short' : (profile.labelSize ?? 'long')),actualType, scrapReason, data.id)
         setScrapReason('')
       }
       // หลัง save: ถ้า simMode อยู่ → สุ่มค่าใหม่ให้พร้อมม้วนถัดไป, ถ้าไม่ → reset

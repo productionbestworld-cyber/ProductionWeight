@@ -315,6 +315,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   const [openGroups,  setOpenGroups]  = useState<Record<string, boolean>>({})
   const [docRolls,    setDocRolls]    = useState<any[]>([])
   const [docLoading,  setDocLoading]  = useState(false)
+  const [docRollSearch, setDocRollSearch] = useState('')   // ค้นหาม้วน "ภายในใบโอนที่เปิด" (คนละตัวกับ docSearch ที่ค้นรายการใบ)
   const [machineProfiles, setMachineProfiles] = useState<Record<string,string>>({}) // machine_no → lot_no ปัจจุบัน
   const [typeFilter, setTypeFilter] = useState<'good'|'bad'|'scrap'>('good')
   const [pendingCounts, setPendingCounts] = useState<{ good: number; bad: number; scrap: number }>({ good: 0, bad: 0, scrap: 0 })
@@ -539,6 +540,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   async function openDoc(doc: any) {
     setSelectedDoc(doc)
     setDocRolls([])
+    setDocRollSearch('')
     setDocLoading(true)
     const { data } = await supabase.from('production_rolls')
       .select('*').eq('transfer_doc_id', doc.id)
@@ -770,7 +772,24 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                   <div className="flex-1 flex items-center justify-center text-slate-500 text-sm">กำลังโหลด...</div>
                 ) : docRolls.length === 0 ? (
                   <div className="flex-1 flex items-center justify-center text-slate-600 text-sm">ไม่พบข้อมูลม้วน</div>
-                ) : (
+                ) : (() => {
+                  const dq = docRollSearch.trim().toLowerCase()
+                  const docRollsView = dq
+                    ? docRolls.filter((r:any) => `${r.roll_no} ${r.product_name ?? ''} ${r.work_order ?? ''} ${r.sale_order ?? ''} ${r.lot_no ?? ''} ${r.machine_no ?? ''} ${r.inspector ?? ''}`.toLowerCase().includes(dq))
+                    : docRolls
+                  return (
+                  <>
+                    <div className="px-3 py-2 border-b border-slate-800 bg-slate-800/20 flex items-center gap-2 shrink-0">
+                      <Search size={12} className="text-slate-500 shrink-0"/>
+                      <input value={docRollSearch} onChange={e => setDocRollSearch(e.target.value)}
+                        placeholder="ค้นหาในใบนี้: ม้วน / WO / SO / สินค้า / Lot / เครื่อง"
+                        className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none focus:border-brand-500"/>
+                      {dq && <span className="text-[10px] text-slate-400 whitespace-nowrap">เจอ {docRollsView.length}/{docRolls.length}</span>}
+                      {dq && <button onClick={() => setDocRollSearch('')} className="text-slate-500 hover:text-white text-xs px-1">✕</button>}
+                    </div>
+                  {docRollsView.length === 0 ? (
+                    <div className="flex-1 flex items-center justify-center text-slate-600 text-sm py-10">ไม่พบที่ค้นในใบนี้</div>
+                  ) : (
                   <div className="overflow-auto flex-1">
                     <table className="w-full text-sm">
                       <thead className="sticky top-0">
@@ -781,11 +800,11 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/50">
-                        {docRolls.map((r, i) => {
-                          const prevWo = i > 0 ? (docRolls[i-1].work_order ?? '') : null
+                        {docRollsView.map((r, i) => {
+                          const prevWo = i > 0 ? (docRollsView[i-1].work_order ?? '') : null
                           const curWo = r.work_order ?? ''
                           const showWoHeader = curWo !== prevWo
-                          const woRolls = docRolls.filter(x => (x.work_order ?? '') === curWo)
+                          const woRolls = docRollsView.filter(x => (x.work_order ?? '') === curWo)
                           const ws = woRolls[0] ?? r
                           const woSize = ws.width_cm && ws.thick_mc ? `${ws.width_cm}${ws.width_unit ?? 'cm'}×${ws.thick_mc}mc` : ''
                           return (
@@ -824,15 +843,18 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                       </tbody>
                       <tfoot>
                         <tr className="border-t border-slate-700 bg-green-500/5">
-                          <td colSpan={5} className="px-3 py-3 text-slate-300 font-semibold text-xs">รวม {docRolls.length} {selectedDoc?.transfer_type === 'scrap' ? 'ถุง' : 'ม้วน'}</td>
-                          <td className="px-3 py-3 text-slate-300 font-black">{fmt(docRolls.reduce((s,r)=>s+(r.weight??0)+(r.core_weight??0),0))}</td>
-                          <td className="px-3 py-3 text-green-300 font-black">{fmt(docRolls.reduce((s,r)=>s+(r.weight??0),0))}</td>
+                          <td colSpan={5} className="px-3 py-3 text-slate-300 font-semibold text-xs">{dq ? 'กรองเจอ' : 'รวม'} {docRollsView.length} {selectedDoc?.transfer_type === 'scrap' ? 'ถุง' : 'ม้วน'}{dq ? ` (จาก ${docRolls.length})` : ''}</td>
+                          <td className="px-3 py-3 text-slate-300 font-black">{fmt(docRollsView.reduce((s,r)=>s+(r.weight??0)+(r.core_weight??0),0))}</td>
+                          <td className="px-3 py-3 text-green-300 font-black">{fmt(docRollsView.reduce((s,r)=>s+(r.weight??0),0))}</td>
                           <td colSpan={2}></td>
                         </tr>
                       </tfoot>
                     </table>
                   </div>
-                )}
+                  )}
+                  </>
+                  )
+                })()}
               </div>
             )}
           </div>

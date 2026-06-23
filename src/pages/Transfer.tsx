@@ -296,6 +296,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   const [machine,     setMachine]     = useState<string>('')
   const [lotNo,       setLotNo]       = useState<string>('')
   const [woFilter,    setWoFilter]    = useState<string>('')   // แยกงานตามใบสั่งผลิต (กัน 2 สินค้าปน Lot เดียว)
+  const [itemFilter,  setItemFilter]  = useState<string>('')   // กรอชุดใหม่: แยกตาม item (กัน 2 สินค้าคนละไซส์ใน Lot กรอเดียว)
   const NS_WO = '__NS__'   // ตัวระบุงานชุดระบบใหม่ (รวมทุก WO ใน Lot เดียว — เลขม้วนต่อเนื่อง)
   const [showDone,    setShowDone]    = useState(false)
   const [search,      setSearch]      = useState('')
@@ -407,6 +408,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
     const size = sample?.width_cm && sample?.thick_mc ? `${sample.width_cm}${sample.width_unit ?? 'cm'}×${sample.thick_mc}mc` : ''
     const fromOutside = jobRolls.some(r => r.rework_source_lot && !r.rework_source_roll_id)
     return { machine_no: mNo, lot_no: lot, work_order: wo, woList, so: sample?.sale_order ?? '', size,
+             item_code: sample?.item_code ?? '',
              start: dates[0] ?? '', end: dates[dates.length-1] ?? '', fromOutside, newSystem: isNS,
              product: sample?.product_name, customer: sample?.customer, total: jobRolls.length, pending, pendingKg }
   }).filter(j => j.pending > 0)  // ← ซ่อน job ที่โอนครบแล้ว
@@ -420,7 +422,11 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
     if (!showDone && r.transferred) return false
     if (machine && machine !== '__ALL__' && r.machine_no !== machine) return false
     if (lotNo && r.lot_no !== lotNo) return false
-    if (woFilter === NS_WO) { if (!r.new_system) return false }
+    if (woFilter === NS_WO) {
+      if (!r.new_system) return false
+      // กรอชุดใหม่: คลิกการ์ดสินค้าไหน → โชว์เฉพาะม้วนของ item นั้น (กัน 2 ไซส์ปน Lot กรอเดียว)
+      if (itemFilter && (r.item_code ?? '') !== itemFilter) return false
+    }
     else if (woFilter && (r.work_order ?? '') !== woFilter) return false
     if (search) {
       const q = search.toLowerCase()
@@ -856,7 +862,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                   <span className="w-5 h-5 rounded-full text-[10px] flex items-center justify-center font-black bg-brand-600 text-white">2</span>
                   เลือกงาน — คลิกเพื่อดูม้วน (เรียงตาม ขนาด · ลูกค้า · เครื่อง)
                 </p>
-                <button onClick={() => { setMachine('__ALL__'); setLotNo(''); setWoFilter(''); setSelected(new Set()) }}
+                <button onClick={() => { setMachine('__ALL__'); setLotNo(''); setWoFilter(''); setItemFilter(''); setSelected(new Set()) }}
                   className="text-xs font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded-lg">
                   📋 ดูทุกงานรวม ({rolls.filter(r=>!r.transferred).length} {typeFilter==='scrap'?'ถุง':'ม้วน'})
                 </button>
@@ -868,11 +874,12 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                   {/* แต่ละงาน */}
                   {jobs.map(j => {
                     const isSel      = machine === j.machine_no && lotNo === j.lot_no && woFilter === (j.work_order ?? '')
+                                       && (!(j as any).newSystem || itemFilter === ((j as any).item_code ?? ''))
                     const curLot     = machineProfiles[j.machine_no] ?? ''
                     const isRunning  = curLot === `${j.lot_no}__${j.work_order ?? ''}`  // เครื่องยังเดินงานนี้ (Lot+WO) อยู่
                     return (
                       <button key={`${j.machine_no}-${j.lot_no}-${j.work_order}`}
-                        onClick={() => { setMachine(j.machine_no); setLotNo(j.lot_no); setWoFilter(j.work_order ?? ''); setSelected(new Set()) }}
+                        onClick={() => { setMachine(j.machine_no); setLotNo(j.lot_no); setWoFilter(j.work_order ?? ''); setItemFilter((j as any).item_code ?? ''); setSelected(new Set()) }}
                         className={`w-full text-left p-3 rounded-xl border transition-all ${isSel ? 'border-brand-500 bg-brand-500/15' : 'border-slate-700 hover:border-slate-500 hover:bg-slate-800/50'}`}>
                         {/* แถวบน: ขนาด (เด่นสุด) + เครื่อง + สถานะ */}
                         <div className="flex items-center gap-1.5 mb-1">
@@ -923,7 +930,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
           <div className="space-y-3">
 
             {/* ปุ่มกลับ */}
-            <button onClick={() => { setMachine(''); setLotNo(''); setWoFilter(''); setSelected(new Set()) }}
+            <button onClick={() => { setMachine(''); setLotNo(''); setWoFilter(''); setItemFilter(''); setSelected(new Set()) }}
               className="flex items-center gap-1.5 text-sm font-bold text-brand-300 hover:text-brand-200 bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-xl">
               ← กลับไปเลือกงาน
             </button>

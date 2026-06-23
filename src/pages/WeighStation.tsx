@@ -1340,6 +1340,12 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
       if (!next.machine_no) return next
       const newAuto = genLotNo(next.machine_no, next.custCode ?? '')
       if (newAuto) next.lotNo = newAuto
+      // ⚠ เปลี่ยนสินค้า (Item ต่างจากเดิม) = ขึ้นงานใหม่ → ล้าง WO/SO กัน "เกาะ WO เก่า"
+      //   (เป่ายึด WO · Lot ซ้ำได้ แต่ถ้า WO ค้างของเก่า ม้วน WO เดิมจะโผล่มาในงานใหม่)
+      if (patch.itemCode !== undefined && (patch.itemCode ?? '') !== (prev.itemCode ?? '')) {
+        ;(next as any).woNo = ''
+        ;(next as any).soNo = ''
+      }
       return next
     })
   }
@@ -2523,6 +2529,11 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
     // กันชั่งเบิ้ล: ถ้ายังไม่ยกของออกจากเครื่องชั่ง ห้ามบันทึกซ้ำ
     if (awaitingClearRef.current) {
       alert('⚠ ยกม้วนออกจากเครื่องชั่งก่อน แล้วรอน้ำหนักตกลง จึงชั่งม้วนถัดไปได้')
+      return
+    }
+    // เป่า/พิมพ์ ยึด WO → บังคับมี WO ก่อนชั่ง (กันงานใหม่ "เกาะ WO เก่า" → ม้วนปน)
+    if (!isRework && !((profile as any).woNo ?? '').trim()) {
+      alert('⚠ กรุณากรอกเลข WO (ใบสั่งผลิต) ที่หน้า "ตั้งค่าเครื่อง" ก่อนเริ่มชั่ง\n\nงานเป่ายึดตาม WO — ถ้าไม่มี WO ม้วนจะปนกับงานอื่นใน Lot เดียวกัน')
       return
     }
     if (!inspector.trim()) { setShowInspectorPrompt(true); return }

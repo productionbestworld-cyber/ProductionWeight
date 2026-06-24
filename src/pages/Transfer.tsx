@@ -622,7 +622,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                 const n = pendingCounts[t.key]
                 const isActive = typeFilter === t.key
                 return (
-                  <button key={t.key} onClick={() => { setTypeFilter(t.key); setSelected(new Set()) }}
+                  <button key={t.key} onClick={() => { setTypeFilter(t.key); setSelected(new Set()); setMachine(''); setLotNo(''); setWoFilter(''); setItemFilter('') }}
                     className={`relative px-3.5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
                       isActive ? `${t.color} text-white` : 'text-slate-400 hover:text-white'
                     }`}>

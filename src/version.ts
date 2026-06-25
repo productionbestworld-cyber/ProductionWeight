@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '1.9.7'
-export const APP_BUILD_DATE = '2026-06-23'
+export const APP_VERSION = '1.9.8'
+export const APP_BUILD_DATE = '2026-06-25'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '1.9.8', date: '2026-06-25',
+    items: [
+      'หน้ารวมเทียบทั้งปี: Total Output = รวมทุกอย่าง (FG + เศษ + กรอ) เดิมนับแค่ FG+เศษ · โชว์แยก FG/กรอ/เศษ % + วงเล็บ "กรอคืนได้ X kg" (ม้วนดีที่ได้จากแผนกกรอ)',
+    ],
+  },
   {
     version: '1.9.7', date: '2026-06-23',
     items: [

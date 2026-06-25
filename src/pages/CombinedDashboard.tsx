@@ -60,7 +60,7 @@ export default function CombinedDashboard() {
           return all
         })(),
         fetchAll(() => supabase.from('production_rolls')
-          .select('created_at, roll_type, weight, machine_no, customer, product_name, product_code, width_cm, width_unit, thick_mc, work_order, sale_order, remark')
+          .select('created_at, roll_type, weight, machine_no, customer, product_name, product_code, width_cm, width_unit, thick_mc, work_order, sale_order, remark, section')
           .order('created_at', { ascending: true })),
       ])
       setOldRows(oldData); setNewRows(newData ?? [])
@@ -84,7 +84,7 @@ export default function CombinedDashboard() {
         shift: 'unknown', fg_kg: 0, fg_rolls: 0, scrap_kg: 0, rework_kg: 0, rework_rolls: 0,
       } as ProductionRecord)
       const rec = m.get(k)!; const w = +(r.weight ?? 0)
-      if (r.roll_type === 'good') { rec.fg_kg = (rec.fg_kg ?? 0) + w; rec.fg_rolls = (rec.fg_rolls ?? 0) + 1 }
+      if (r.roll_type === 'good') { rec.fg_kg = (rec.fg_kg ?? 0) + w; rec.fg_rolls = (rec.fg_rolls ?? 0) + 1; if ((r.section ?? '') === 'rewind') rec.rework_fg_kg = (rec.rework_fg_kg ?? 0) + w }
       else if (r.roll_type === 'bad') { rec.rework_kg = (rec.rework_kg ?? 0) + w; rec.rework_rolls = (rec.rework_rolls ?? 0) + 1; if (r.remark && !rec.symptom) rec.symptom = String(r.remark) }
       else if (String(r.roll_type).startsWith('scrap')) { rec.scrap_kg = (rec.scrap_kg ?? 0) + w; if (r.remark && !rec.symptom) rec.symptom = String(r.remark) }
     }

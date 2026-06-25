@@ -44,16 +44,18 @@ export function applyFilter(data: ProductionRecord[], f: FilterState): Productio
 }
 
 export function kpiCalc(data: ProductionRecord[]): KpiData {
-  let fg = 0, rolls = 0, sc = 0, rw = 0, pl = 0
+  let fg = 0, rolls = 0, sc = 0, rw = 0, pl = 0, rwFg = 0
   data.forEach(r => {
     fg    += r.fg_kg     ?? 0
     rolls += r.fg_rolls  ?? 0
     sc    += r.scrap_kg  ?? 0
     rw    += r.rework_kg ?? 0
     pl    += r.planned_kg ?? 0
+    rwFg  += r.rework_fg_kg ?? 0
   })
-  const t = fg + sc
-  return { fg, rolls, sc, rw, pl, t, fgP: t > 0 ? fg/t*100 : 0, lossP: t > 0 ? sc/t*100 : 0, scP: fg > 0 ? sc/fg*100 : 0, rwP: fg > 0 ? rw/fg*100 : 0 }
+  // Total = ทุกอย่าง (FG + เศษ + กรอ) — โหมด A · "กรอคืนได้" (rwFg) อยู่ใน fg แล้ว โชว์แยกในวงเล็บ
+  const t = fg + sc + rw
+  return { fg, rolls, sc, rw, pl, t, rwFg, fgP: t > 0 ? fg/t*100 : 0, lossP: t > 0 ? (sc+rw)/t*100 : 0, scP: fg > 0 ? sc/fg*100 : 0, rwP: fg > 0 ? rw/fg*100 : 0 }
 }
 
 export function machineAgg(data: ProductionRecord[]) {

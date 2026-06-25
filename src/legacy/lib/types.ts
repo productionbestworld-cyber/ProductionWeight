@@ -22,6 +22,7 @@ export interface ProductionRecord {
   action?: string
   rework_kg?: number
   rework_rolls?: number
+  rework_fg_kg?: number   // ม้วนดีที่ได้จากแผนกกรอ (กรอคืนกลับมาเป็น FG) — รวมอยู่ใน fg_kg แล้ว
 }
 
 export interface KpiData {
@@ -31,6 +32,7 @@ export interface KpiData {
   rw: number
   pl: number
   t: number
+  rwFg: number   // กรอคืนได้ (ม้วนดีจากแผนกกรอ) — โชว์ในวงเล็บ
   fgP: number
   lossP: number
   scP: number

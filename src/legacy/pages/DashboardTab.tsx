@@ -56,14 +56,13 @@ export default function DashboardTab({ data, kpi }: Props) {
       {/* KPI Cards */}
       <div className="grid grid-cols-4 gap-4">
         <KpiCard
-          label="FG" value={fmt(kpi.fg, 1)} unit="kg"
-          sub={`${kpi.rolls.toLocaleString('th-TH')} ม้วน`}
+          label="FG (ม้วนดี รวมกรอคืน)" value={fmt(kpi.fg, 1)} unit="kg"
+          sub={`${kpi.rolls.toLocaleString('th-TH')} ม้วน${kpi.rwFg > 0 ? ` · กรอคืนได้ ${fmt(kpi.rwFg, 1)} kg` : ''}`}
           color="#6366f1" />
         <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-violet-400">
-          <p className="text-xs text-gray-400 font-medium mb-1">Total Output <span className="text-gray-300">(FG + เศษ + กรอ)</span></p>
+          <p className="text-xs text-gray-400 font-medium mb-1">Total Output <span className="text-gray-300">(ออกจากเครื่อง)</span></p>
           <span className="text-3xl font-bold text-gray-800">{fmt(kpi.t, 1)}</span>
           <span className="text-sm text-gray-400 ml-1">kg</span>
-          {kpi.rwFg > 0 && <span className="text-xs text-emerald-600 font-bold ml-1.5">(กรอคืนได้ {fmt(kpi.rwFg, 1)} kg)</span>}
           <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden my-2.5">
             <div className="h-full rounded-full" style={{ width: `${kpi.fgP}%`, background: 'linear-gradient(to right, #6366f1, #818cf8)' }} />
           </div>

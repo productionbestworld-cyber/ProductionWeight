@@ -7,17 +7,17 @@ import { fmt, pct, machineAgg, customerAgg, MACHINE_COLORS, PALETTE } from '../l
 
 interface Props { data: ProductionRecord[]; kpi: KpiData }
 
-function KpiCard({ label, value, unit, sub, color }: {
-  label: string; value: string; unit: string; sub?: string; color: string
+function KpiCard({ label, value, unit, sub, color, small }: {
+  label: string; value: string; unit: string; sub?: string; color: string; small?: boolean
 }) {
   return (
-    <div className={`bg-white rounded-xl shadow-sm p-5 border-l-4`} style={{ borderLeftColor: color }}>
-      <p className="text-xs text-gray-400 font-medium mb-1">{label}</p>
+    <div className={`bg-white rounded-xl shadow-sm border-l-4 ${small ? 'p-3.5' : 'p-5'}`} style={{ borderLeftColor: color }}>
+      <p className={`text-gray-400 font-medium mb-1 ${small ? 'text-[10px]' : 'text-xs'}`}>{label}</p>
       <div>
-        <span className="text-3xl font-bold text-gray-800">{value}</span>
-        <span className="text-sm text-gray-400 ml-1">{unit}</span>
+        <span className={`font-bold text-gray-800 ${small ? 'text-2xl' : 'text-3xl'}`}>{value}</span>
+        <span className={`text-gray-400 ml-1 ${small ? 'text-xs' : 'text-sm'}`}>{unit}</span>
       </div>
-      {sub && <p className="text-xs mt-1.5" style={{ color }}>{sub}</p>}
+      {sub && <p className={`mt-1 ${small ? 'text-[10px]' : 'text-xs'}`} style={{ color }}>{sub}</p>}
     </div>
   )
 }
@@ -73,11 +73,11 @@ export default function DashboardTab({ data, kpi }: Props) {
           {/* ── KPI ชุดที่ 2 — ผลของการกรอ ── */}
           <div>
             <p className="text-xs font-bold text-gray-500 mb-2">🔧 ผลของการกรอ (รับเข้ากรอ {fmt(kpi.rw, 1)} kg → ออกมาเป็น...)</p>
-            <div className="grid grid-cols-4 gap-4">
-              <KpiCard label="📥 รับเข้ากรอ" value={fmt(kpi.rw, 1)} unit="kg" sub="ม้วนเสียที่ส่งไปกรอ" color="#f59e0b" />
-              <KpiCard label="✅ กรอคืนเป็น FG" value={fmt(kpi.rwFg, 1)} unit="kg" sub={`${pOf(kpi.rwFg, kpi.rw)} ของรับเข้า · ไปรวม FG`} color="#10b981" />
-              <KpiCard label="🗑 กรอออกมาเป็นเศษ" value={fmt(kpi.rwScrap, 1)} unit="kg" sub={`${pOf(kpi.rwScrap, kpi.rw)} ของรับเข้า`} color="#ef4444" />
-              <KpiCard label="⏳ เหลือรอกรอ" value={fmt(remain, 1)} unit="kg" sub={`${pOf(remain, kpi.rw)} ของรับเข้า`} color="#94a3b8" />
+            <div className="grid grid-cols-4 gap-3">
+              <KpiCard small label="📥 รับเข้ากรอ" value={fmt(kpi.rw, 1)} unit="kg" sub="ม้วนเสียที่ส่งไปกรอ" color="#f59e0b" />
+              <KpiCard small label="✅ กรอคืนเป็น FG" value={fmt(kpi.rwFg, 1)} unit="kg" sub={`${pOf(kpi.rwFg, kpi.rw)} ของรับเข้า · ไปรวม FG`} color="#10b981" />
+              <KpiCard small label="🗑 กรอออกมาเป็นเศษ (ส่วนต่าง นน.)" value={fmt(kpi.rwScrap, 1)} unit="kg" sub={`${pOf(kpi.rwScrap, kpi.rw)} ของรับเข้า`} color="#ef4444" />
+              <KpiCard small label="⏳ เหลือรอกรอ" value={fmt(remain, 1)} unit="kg" sub={`${pOf(remain, kpi.rw)} ของรับเข้า`} color="#94a3b8" />
             </div>
           </div>
         </div>

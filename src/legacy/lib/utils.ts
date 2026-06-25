@@ -44,20 +44,22 @@ export function applyFilter(data: ProductionRecord[], f: FilterState): Productio
 }
 
 export function kpiCalc(data: ProductionRecord[]): KpiData {
-  let fg = 0, rolls = 0, sc = 0, rw = 0, pl = 0, rwFg = 0
+  let fg = 0, rolls = 0, sc = 0, rw = 0, pl = 0, rwFg = 0, rwScrap = 0
   data.forEach(r => {
-    fg    += r.fg_kg     ?? 0
-    rolls += r.fg_rolls  ?? 0
-    sc    += r.scrap_kg  ?? 0
-    rw    += r.rework_kg ?? 0
-    pl    += r.planned_kg ?? 0
-    rwFg  += r.rework_fg_kg ?? 0
+    fg      += r.fg_kg     ?? 0
+    rolls   += r.fg_rolls  ?? 0
+    sc      += r.scrap_kg  ?? 0
+    rw      += r.rework_kg ?? 0
+    pl      += r.planned_kg ?? 0
+    rwFg    += r.rework_fg_kg ?? 0
+    rwScrap += r.rework_scrap_kg ?? 0
   })
-  // Total = "ออกจากเครื่อง" = FG ที่ผลิตจากเครื่อง (ไม่รวมกรอคืน) + กรอ(เสีย) + เศษ
-  //   ⚠ กรอคืน (rwFg) อยู่ใน fg แล้ว แต่ไม่นับใน total (กันนับซ้ำ) — มันโชว์ที่การ์ด FG แทน
-  const fgFirst = Math.max(0, fg - rwFg)   // FG ที่ผลิตจากเครื่องครั้งแรก
-  const t = fgFirst + rw + sc
-  return { fg, rolls, sc, rw, pl, t, rwFg, fgP: t > 0 ? fgFirst/t*100 : 0, lossP: t > 0 ? (sc+rw)/t*100 : 0, scP: fg > 0 ? sc/fg*100 : 0, rwP: fg > 0 ? rw/fg*100 : 0 }
+  // Total = "ออกจากเครื่อง (ผลิต)" = FG ผลิตได้ + กรอ(เสีย) + เศษจากผลิต
+  //   กรอคืน (rwFg) + เศษจากกรอ (rwScrap) เป็นผลของ "การกรอ" (downstream) → ไม่นับใน total
+  const fgFirst   = Math.max(0, fg - rwFg)      // FG ที่ผลิตจากเครื่องครั้งแรก
+  const prodScrap = Math.max(0, sc - rwScrap)   // เศษจากผลิต (ไม่รวมเศษจากกรอ)
+  const t = fgFirst + rw + prodScrap
+  return { fg, rolls, sc, rw, pl, t, rwFg, rwScrap, fgP: t > 0 ? fgFirst/t*100 : 0, lossP: t > 0 ? (rw+prodScrap)/t*100 : 0, scP: fg > 0 ? sc/fg*100 : 0, rwP: fg > 0 ? rw/fg*100 : 0 }
 }
 
 export function machineAgg(data: ProductionRecord[]) {

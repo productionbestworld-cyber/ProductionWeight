@@ -86,7 +86,7 @@ export default function CombinedDashboard() {
       const rec = m.get(k)!; const w = +(r.weight ?? 0)
       if (r.roll_type === 'good') { rec.fg_kg = (rec.fg_kg ?? 0) + w; rec.fg_rolls = (rec.fg_rolls ?? 0) + 1; if ((r.section ?? '') === 'rewind') rec.rework_fg_kg = (rec.rework_fg_kg ?? 0) + w }
       else if (r.roll_type === 'bad') { rec.rework_kg = (rec.rework_kg ?? 0) + w; rec.rework_rolls = (rec.rework_rolls ?? 0) + 1; if (r.remark && !rec.symptom) rec.symptom = String(r.remark) }
-      else if (String(r.roll_type).startsWith('scrap')) { rec.scrap_kg = (rec.scrap_kg ?? 0) + w; if (r.remark && !rec.symptom) rec.symptom = String(r.remark) }
+      else if (String(r.roll_type).startsWith('scrap')) { rec.scrap_kg = (rec.scrap_kg ?? 0) + w; if ((r.section ?? '') === 'rewind') rec.rework_scrap_kg = (rec.rework_scrap_kg ?? 0) + w; if (r.remark && !rec.symptom) rec.symptom = String(r.remark) }
     }
     return [...m.values()]
   }, [newRows])

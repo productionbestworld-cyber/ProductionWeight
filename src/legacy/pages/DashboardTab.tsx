@@ -53,33 +53,40 @@ export default function DashboardTab({ data, kpi }: Props) {
 
   return (
     <div className="space-y-5">
-      {/* ── KPI ชุดที่ 1 — ผลิต (ออกจากเครื่อง) ── */}
+      {/* ── KPI — 4 ช่อง: FG กับ กรอ มี breakdown ในตัว ── */}
       {(() => {
         const fgFirst   = Math.max(0, kpi.fg - kpi.rwFg)
         const prodScrap = Math.max(0, kpi.sc - kpi.rwScrap)
         const remain    = Math.max(0, kpi.rw - kpi.rwFg - kpi.rwScrap)
         const pOf = (v: number, base: number) => base > 0 ? pct(v/base*100) : '0%'
         return (
-        <div className="space-y-3">
-          <div>
-            <p className="text-xs font-bold text-gray-500 mb-2">🏭 ผลิต (ออกจากเครื่อง)</p>
-            <div className="grid grid-cols-4 gap-4">
-              <KpiCard label="📦 ผลิตออกมาทั้งหมด" value={fmt(kpi.t, 1)} unit="kg" sub="FG ผลิตได้ + กรอ + เศษ" color="#8b5cf6" />
-              <KpiCard label="✅ FG ผลิตได้เลย" value={fmt(fgFirst, 1)} unit="kg" sub={`${kpi.rolls.toLocaleString('th-TH')} ม้วน · ${pOf(fgFirst, kpi.t)} ของผลิต`} color="#6366f1" />
-              <KpiCard label="🔄 กรอ (ม้วนเสีย)" value={fmt(kpi.rw, 1)} unit="kg" sub={`${pOf(kpi.rw, kpi.t)} ของผลิต`} color="#f97316" />
-              <KpiCard label="🗑 เศษ (จากผลิต)" value={fmt(prodScrap, 1)} unit="kg" sub={`${pOf(prodScrap, kpi.t)} ของผลิต`} color="#ef4444" />
+        <div className="grid grid-cols-4 gap-4">
+          {/* ผลิตออกมาทั้งหมด */}
+          <KpiCard label="📦 ผลิตออกมาทั้งหมด" value={fmt(kpi.t, 1)} unit="kg" sub="FG ผลิตได้ + กรอ + เศษ" color="#8b5cf6" />
+
+          {/* FG (รวม) + แยก ผลิตได้ / กรอคืน */}
+          <div className="bg-white rounded-xl shadow-sm p-5 border-l-4" style={{ borderLeftColor: '#6366f1' }}>
+            <p className="text-xs text-gray-400 font-medium mb-1">✅ FG ม้วนดี (รวม)</p>
+            <div><span className="text-3xl font-bold text-gray-800">{fmt(kpi.fg, 1)}</span><span className="text-sm text-gray-400 ml-1">kg</span></div>
+            <div className="mt-2 pt-2 border-t border-gray-100 space-y-1 text-[11px]">
+              <p className="flex justify-between"><span className="text-gray-500">fg ที่ผลิตได้</span><span className="font-bold text-gray-700">{fmt(fgFirst, 1)} kg</span></p>
+              <p className="flex justify-between"><span className="text-emerald-600">fg กรอ (คืน)</span><span className="font-bold text-emerald-700">{fmt(kpi.rwFg, 1)} kg</span></p>
             </div>
           </div>
-          {/* ── KPI ชุดที่ 2 — ผลของการกรอ ── */}
-          <div>
-            <p className="text-xs font-bold text-gray-500 mb-2">🔧 ผลของการกรอ (รับเข้ากรอ {fmt(kpi.rw, 1)} kg → ออกมาเป็น...)</p>
-            <div className="grid grid-cols-4 gap-3">
-              <KpiCard small label="📥 รับเข้ากรอ" value={fmt(kpi.rw, 1)} unit="kg" sub="ม้วนเสียที่ส่งไปกรอ" color="#f59e0b" />
-              <KpiCard small label="✅ กรอคืนเป็น FG" value={fmt(kpi.rwFg, 1)} unit="kg" sub={`${pOf(kpi.rwFg, kpi.rw)} ของรับเข้า · ไปรวม FG`} color="#10b981" />
-              <KpiCard small label="🗑 กรอออกมาเป็นเศษ (ส่วนต่าง นน.)" value={fmt(kpi.rwScrap, 1)} unit="kg" sub={`${pOf(kpi.rwScrap, kpi.rw)} ของรับเข้า`} color="#ef4444" />
-              <KpiCard small label="⏳ เหลือรอกรอ" value={fmt(remain, 1)} unit="kg" sub={`${pOf(remain, kpi.rw)} ของรับเข้า`} color="#94a3b8" />
+
+          {/* กรอ (ม้วนเสีย) + แยก คืน / เศษ / เหลือ */}
+          <div className="bg-white rounded-xl shadow-sm p-5 border-l-4" style={{ borderLeftColor: '#f97316' }}>
+            <p className="text-xs text-gray-400 font-medium mb-1">🔄 กรอ (ม้วนเสีย)</p>
+            <div><span className="text-3xl font-bold text-gray-800">{fmt(kpi.rw, 1)}</span><span className="text-sm text-gray-400 ml-1">kg</span></div>
+            <div className="mt-2 pt-2 border-t border-gray-100 space-y-1 text-[11px]">
+              <p className="flex justify-between"><span className="text-emerald-600">✅ คืนเป็น FG</span><span className="font-bold text-emerald-700">{fmt(kpi.rwFg, 1)} · {pOf(kpi.rwFg, kpi.rw)}</span></p>
+              <p className="flex justify-between"><span className="text-red-500">🗑 เป็นเศษ (ส่วนต่าง)</span><span className="font-bold text-red-600">{fmt(kpi.rwScrap, 1)}</span></p>
+              <p className="flex justify-between"><span className="text-gray-500">⏳ เหลือรอกรอ</span><span className="font-bold text-gray-700">{fmt(remain, 1)}</span></p>
             </div>
           </div>
+
+          {/* เศษ (จากผลิต) */}
+          <KpiCard label="🗑 เศษ (จากผลิต)" value={fmt(prodScrap, 1)} unit="kg" sub={`${pOf(prodScrap, kpi.t)} ของผลิต`} color="#ef4444" />
         </div>
         )
       })()}

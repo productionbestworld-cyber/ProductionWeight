@@ -85,8 +85,15 @@ export default function DashboardTab({ data, kpi }: Props) {
             </div>
           </div>
 
-          {/* เศษ (จากผลิต) */}
-          <KpiCard label="🗑 เศษ (จากผลิต)" value={fmt(prodScrap, 1)} unit="kg" sub={`${pOf(prodScrap, kpi.t)} ของผลิต`} color="#ef4444" />
+          {/* เศษ (รวม) — แยก จากผลิต / จากกรอ */}
+          <div className="bg-white rounded-xl shadow-sm p-5 border-l-4" style={{ borderLeftColor: '#ef4444' }}>
+            <p className="text-xs text-gray-400 font-medium mb-1">🗑 เศษ (รวม)</p>
+            <div><span className="text-3xl font-bold text-gray-800">{fmt(prodScrap + kpi.rwScrap, 1)}</span><span className="text-sm text-gray-400 ml-1">kg</span></div>
+            <div className="mt-2 pt-2 border-t border-gray-100 space-y-1 text-[11px]">
+              <p className="flex justify-between"><span className="text-red-500">เศษจากผลิต</span><span className="font-bold text-red-600">{fmt(prodScrap, 1)} · {pOf(prodScrap, kpi.t)}</span></p>
+              <p className="flex justify-between"><span className="text-orange-500">เศษจากกรอ</span><span className="font-bold text-orange-600">{fmt(kpi.rwScrap, 1)} · {pOf(kpi.rwScrap, kpi.t)}</span></p>
+            </div>
+          </div>
         </div>
         )
       })()}

@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '2.0.2'
-export const APP_BUILD_DATE = '2026-06-25'
+export const APP_VERSION = '2.0.3'
+export const APP_BUILD_DATE = '2026-06-26'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '2.0.3', date: '2026-06-26',
+    items: [
+      'รีปริ้นใบปะหน้า: MFG (วันผลิต) ใช้ "วันที่ชั่งจริงของม้วน" (created_at) ไม่ใช่วันที่กดรีปริ้น · EXP ลูกค้า 08 = วันชั่งจริง + 6 เดือน · ตอนชั่งครั้งแรกยังใช้วันนี้เหมือนเดิม',
+    ],
+  },
   {
     version: '2.0.2', date: '2026-06-25',
     items: [

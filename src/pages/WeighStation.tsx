@@ -15,9 +15,10 @@ function fmt(n: number | null | undefined, d: 1|2 = 2) {
   if (n === null || n === undefined || isNaN(n as number)) return (0).toFixed(d)
   return (n as number).toLocaleString('th-TH', { minimumFractionDigits: d, maximumFractionDigits: d })
 }
-function thaiDate() {
+function thaiDate(d: Date = new Date()) {
   // วันที่ตามเวลาไทย (ไม่ขึ้นกับ timezone ของเครื่อง) — กัน MFG เพี้ยนช่วงข้ามเที่ยงคืน
-  const p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', day: '2-digit', month: '2-digit', year: 'numeric' }).formatToParts(new Date())
+  // รับวันที่ได้ → รีปริ้นใช้ "วันที่ผลิตจริง" ไม่ใช่วันที่รีปริ้น
+  const p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', day: '2-digit', month: '2-digit', year: 'numeric' }).formatToParts(d)
   const g = (t: string) => p.find(x => x.type === t)?.value ?? ''
   return `${g('day')}/${g('month')}/${parseInt(g('year')) + 543}`
 }
@@ -52,17 +53,20 @@ export async function reprintRollLabel(roll: any, size: 'long' | 'short' = 'long
     soNo:        roll.sale_order   ?? '',
     woNo:        roll.work_order   ?? '',
   }
-  await printLabel(p as MachineProfile, roll.roll_no ?? 0, roll.gross_weight ?? 0, roll.weight ?? 0, size, roll.roll_type ?? 'good', roll.remark ?? '', roll.id)
+  // รีปริ้น: ใช้ "วันที่ชั่งจริง" (created_at ของม้วน) เป็น MFG ไม่ใช่วันที่รีปริ้น
+  await printLabel(p as MachineProfile, roll.roll_no ?? 0, roll.gross_weight ?? 0, roll.weight ?? 0, size, roll.roll_type ?? 'good', roll.remark ?? '', roll.id, roll.created_at ?? null)
 }
 
-async function printLabel(p: MachineProfile, rollNo: number, gross: number, net: number, size: 'long'|'short' = 'long', rollType: string = 'good', reason = '', rollId?: string) {
+async function printLabel(p: MachineProfile, rollNo: number, gross: number, net: number, size: 'long'|'short' = 'long', rollType: string = 'good', reason = '', rollId?: string, prodDate?: string | Date | null) {
   const dec     = p.decimal
-  const mfgDate = thaiDate()
-  // EXP date — เฉพาะลูกค้าหาดทิพย์ (cust_code 08): MFG + 6 เดือน
+  // วันผลิต = วันที่ชั่งจริง (รีปริ้นใช้ created_at) · ถ้าไม่ส่งมา = วันนี้ (ตอนชั่ง)
+  const baseDate = prodDate ? new Date(prodDate) : new Date()
+  const mfgDate = thaiDate(baseDate)
+  // EXP date — เฉพาะลูกค้าหาดทิพย์ (cust_code 08): วันผลิต + 6 เดือน
   const showExp = (p.custCode ?? '').trim() === '08'
   const expDate = (() => {
-    const d = new Date(); d.setMonth(d.getMonth() + 6)
-    return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()+543}`
+    const d = new Date(baseDate); d.setMonth(d.getMonth() + 6)
+    return thaiDate(d)
   })()
   const core    = parseFloat(p.coreWeight) || 0
   // QR encode แค่ roll ID → URL สั้น → generate เป็น data URL ฝังใน HTML ทันที

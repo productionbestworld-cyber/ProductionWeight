@@ -530,17 +530,22 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
       ['ลูกค้า :', selItemGroup?.customer ?? '', '', 'เป้าจัดส่ง :', `${delTarget || '—'} kg`, '', 'ผู้จัดส่ง :', delStaff || ''],
       ['จำนวน :', `${rolls.length} ม้วน`, '', 'น้ำหนักรวม (สุทธิ) :', `${delPickedKg.toFixed(2)} kg`, '', 'วันที่ :', new Date().toLocaleDateString('th-TH')],
       [],
-      ['ลำดับ', 'ม้วนที่', 'WO', 'Lot', 'นน.สุทธิ (kg)', 'นน.เต็ม (kg)', 'ผู้ตรวจ', 'วันผลิต'],
+      ['ลำดับที่', 'นน.เต็ม (kg)', 'นน.แกน (kg)', 'นน.สุทธิ (kg)', 'ม้วนที่', 'WO', 'Lot', 'ผู้ตรวจ', 'วันผลิต'],
     ]
+    const sumNet   = rolls.reduce((s, r) => s + (r.weight ?? 0), 0)
+    const sumCore  = rolls.reduce((s, r) => s + (r.core_weight ?? 0), 0)
+    const sumGross = sumNet + sumCore
     const dataRows = rolls.map((r, i) => [
-      i + 1, r.roll_no, (r as any).work_order ?? '', r.lot_no ?? '',
-      Number((r.weight ?? 0).toFixed(2)), Number(((r.weight ?? 0) + (r.core_weight ?? 0)).toFixed(2)),
-      r.inspector ?? '', fmtDT(r.created_at),
+      i + 1,
+      Number(((r.weight ?? 0) + (r.core_weight ?? 0)).toFixed(2)),  // เต็ม
+      Number((r.core_weight ?? 0).toFixed(2)),                       // แกน
+      Number((r.weight ?? 0).toFixed(2)),                            // สุทธิ
+      r.roll_no, (r as any).work_order ?? '', r.lot_no ?? '', r.inspector ?? '', fmtDT(r.created_at),
     ])
-    dataRows.push(['', `รวม ${rolls.length} ม้วน`, '', '', Number(delPickedKg.toFixed(2)), '', '', ''])
+    dataRows.push(['รวม', Number(sumGross.toFixed(2)), Number(sumCore.toFixed(2)), Number(sumNet.toFixed(2)), `${rolls.length} ม้วน`, '', '', '', ''])
     const ws = XLSX.utils.aoa_to_sheet([...header, ...dataRows])
-    ws['!cols'] = [{ wch: 6 }, { wch: 8 }, { wch: 12 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 18 }]
-    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 7 } }]
+    ws['!cols'] = [{ wch: 8 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 8 }, { wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 18 }]
+    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 8 } }]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'จัดส่ง')
     XLSX.writeFile(wb, `ใบกำกับน้ำหนัก_${(selItemGroup?.item_code ?? 'item')}_${dateStr}.xlsx`)

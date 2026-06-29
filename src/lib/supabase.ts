@@ -21,14 +21,30 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 // Supabase บังคับ server max-rows = 1000 ต่อ query — .limit(8000) หรือ select เปล่า
 // จะถูก cap เหลือ 1000 เงียบ ๆ ทำให้ยอดรวม/สต็อกขาด พอข้อมูลเกิน 1000 แถว
 // makeQuery: คืน query ใหม่ทุกครั้ง (ใส่ .select/.eq/.order ได้ตามต้องการ แต่ "อย่า" ใส่ .range)
-export async function fetchAll<T = any>(makeQuery: () => any): Promise<T[]> {
+// ⚡ ดึงหลายหน้า "พร้อมกัน" (parallel) ทีละชุด — ได้ข้อมูลชุดเดิมเป๊ะ (เรียงตาม .order ที่ส่งมา)
+//    แต่เร็วขึ้นมากเมื่อข้อมูลเยอะ (เช่น 17 หน้า: เดิมยิงเรียงกัน 17 รอบ → ตอนนี้ ~3 รอบ)
+export async function fetchAll<T = any>(
+  makeQuery: () => any,
+  opts?: { pageSize?: number; concurrency?: number },
+): Promise<T[]> {
+  const PAGE = opts?.pageSize ?? 1000
+  const CONC = opts?.concurrency ?? 6
   const all: T[] = []
-  const PAGE = 1000
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await makeQuery().range(from, from + PAGE - 1)
-    if (error || !data) break
-    all.push(...(data as T[]))
-    if (data.length < PAGE) break
+  let from = 0
+  for (;;) {
+    // ยิงพร้อมกัน CONC หน้า (range ต่อเนื่องกัน) — Promise.all รักษาลำดับผลลัพธ์
+    const batch = await Promise.all(
+      Array.from({ length: CONC }, (_, i) =>
+        makeQuery().range(from + i * PAGE, from + i * PAGE + PAGE - 1)),
+    )
+    let done = false
+    for (const { data, error } of batch) {
+      if (error || !data) { done = true; break }
+      all.push(...(data as T[]))
+      if (data.length < PAGE) done = true   // เจอหน้าที่ไม่เต็ม = ถึงท้ายแล้ว
+    }
+    if (done) break
+    from += CONC * PAGE
   }
   return all
 }

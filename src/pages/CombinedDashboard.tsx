@@ -51,14 +51,7 @@ export default function CombinedDashboard() {
     (async () => {
       setLoading(true)
       const [oldData, newData] = await Promise.all([
-        (async () => {
-          const all: any[] = []
-          for (let f = 0; ; f += 1000) {
-            const { data, error } = await legacySupabase.from('production_records').select('*').order('production_date').range(f, f + 999)
-            if (error || !data) break; all.push(...data); if (data.length < 1000) break
-          }
-          return all
-        })(),
+        fetchAll(() => legacySupabase.from('production_records').select('*').order('production_date')),
         fetchAll(() => supabase.from('production_rolls')
           .select('created_at, roll_type, weight, machine_no, customer, product_name, product_code, width_cm, width_unit, thick_mc, work_order, sale_order, remark, section, rework_source_weight')
           .order('created_at', { ascending: true })),

@@ -191,7 +191,7 @@ export default function Planning({ dept }: { dept?: string }) {
                 { header:'SO', value:'sale_order' },
                 { header:'Lot', value:'lot_no', width:16 },
                 { header:'เริ่มผลิต', value:(j:Job)=>dt(j.start), width:14 },
-                { header:'จบงาน', value:(j:Job)=>j.active?'':dt(j.closedAt||j.end), width:14 },
+                { header:'จบงาน', value:(j:Job)=>j.active?'':dt(j.end||j.closedAt), width:14 },
                 { header:'เป้า (kg)', value:'target' },
                 { header:'ผลิตได้ (kg)', value:(j:Job)=>+j.goodKg.toFixed(1) },
                 { header:'ม้วนดี', value:'goodRolls' },
@@ -290,7 +290,7 @@ export default function Planning({ dept }: { dept?: string }) {
                         </div>
                       </td>
                       <td className="px-3 py-2 text-slate-300 text-xs whitespace-nowrap">{dt(j.start)}</td>
-                      <td className="px-3 py-2 text-slate-300 text-xs whitespace-nowrap">{j.active ? '—' : dt(j.closedAt || j.end)}</td>
+                      <td className="px-3 py-2 text-slate-300 text-xs whitespace-nowrap">{j.active ? '—' : dt(j.end || j.closedAt)}</td>
                       <td className="px-3 py-2 text-right text-slate-300 whitespace-nowrap">{j.target ? fmt(j.target,0) : '—'}</td>
                       <td className="px-3 py-2 text-right whitespace-nowrap"><b className="text-green-400">{fmt(j.goodKg)}</b><span className="text-slate-600 text-[10px]"> · {j.goodRolls}ม้วน</span></td>
                       <td className="px-3 py-2 text-right whitespace-nowrap"><b className="text-emerald-300">{fmt(j.goodKg+j.badKg)}</b><span className="text-slate-600 text-[10px]"> · {j.goodRolls+j.badRolls}ม้วน</span></td>

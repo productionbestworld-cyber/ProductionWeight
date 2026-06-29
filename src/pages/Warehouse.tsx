@@ -516,6 +516,36 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
     setDelOpenWO(new Set(delItemWOs.filter(g => g.rolls.some(r => sel.has(r.id))).map(g => g.wo)))
   }
 
+  // Export ใบกำกับน้ำหนัก (ม้วนที่เลือกจะส่ง) เป็น Excel — ไปกำกับที่ลูกค้า
+  function exportDelivery() {
+    if (delPicked.length === 0) { alert('เลือกม้วนก่อน'); return }
+    const rolls = [...delPicked].sort((a, b) =>
+      String((a as any).work_order ?? '').localeCompare(String((b as any).work_order ?? '')) || (a.roll_no ?? 0) - (b.roll_no ?? 0))
+    const dateStr = new Date().toISOString().slice(0, 10)
+    const header: any[][] = [
+      ['บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด'],
+      ['ใบกำกับน้ำหนัก (จัดส่ง)'],
+      [],
+      ['สินค้า :', selItemGroup?.product_name ?? '', '', 'Item :', selItemGroup?.item_code ?? '', '', 'ขนาด :', selItemGroup?.size ?? ''],
+      ['ลูกค้า :', selItemGroup?.customer ?? '', '', 'เป้าจัดส่ง :', `${delTarget || '—'} kg`, '', 'ผู้จัดส่ง :', delStaff || ''],
+      ['จำนวน :', `${rolls.length} ม้วน`, '', 'น้ำหนักรวม (สุทธิ) :', `${delPickedKg.toFixed(2)} kg`, '', 'วันที่ :', new Date().toLocaleDateString('th-TH')],
+      [],
+      ['ลำดับ', 'ม้วนที่', 'WO', 'Lot', 'นน.สุทธิ (kg)', 'นน.เต็ม (kg)', 'ผู้ตรวจ', 'วันผลิต'],
+    ]
+    const dataRows = rolls.map((r, i) => [
+      i + 1, r.roll_no, (r as any).work_order ?? '', r.lot_no ?? '',
+      Number((r.weight ?? 0).toFixed(2)), Number(((r.weight ?? 0) + (r.core_weight ?? 0)).toFixed(2)),
+      r.inspector ?? '', fmtDT(r.created_at),
+    ])
+    dataRows.push(['', `รวม ${rolls.length} ม้วน`, '', '', Number(delPickedKg.toFixed(2)), '', '', ''])
+    const ws = XLSX.utils.aoa_to_sheet([...header, ...dataRows])
+    ws['!cols'] = [{ wch: 6 }, { wch: 8 }, { wch: 12 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 18 }]
+    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 7 } }]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'จัดส่ง')
+    XLSX.writeFile(wb, `ใบกำกับน้ำหนัก_${(selItemGroup?.item_code ?? 'item')}_${dateStr}.xlsx`)
+  }
+
   async function handleShipDelivery() {
     if (!delStaff.trim()) { alert('กรุณากรอกชื่อผู้จัดส่ง'); return }
     if (delSel.size === 0) { alert('เลือกม้วนที่จะส่งก่อน'); return }
@@ -931,6 +961,10 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                   ))}
                 </div>
                 <div className="p-3 border-t border-slate-800 space-y-2">
+                  <button onClick={exportDelivery} disabled={delSel.size === 0}
+                    className="w-full flex items-center justify-center gap-2 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white text-sm px-4 py-2 rounded-xl font-bold">
+                    <Download size={14}/> Export Excel (ใบกำกับน้ำหนัก)
+                  </button>
                   <input value={delStaff} onChange={e => setDelStaff(e.target.value)} placeholder="ชื่อผู้จัดส่ง *"
                     className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-brand-500"/>
                   <button onClick={handleShipDelivery} disabled={delShipping || delSel.size === 0 || !delStaff.trim()}

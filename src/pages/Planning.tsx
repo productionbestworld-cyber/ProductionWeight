@@ -123,17 +123,21 @@ export default function Planning({ dept }: { dept?: string }) {
       }
     }
 
-    // เริ่มผลิต = เริ่มของ "รอบล่าสุด" — ถ้า WO ถูกเดินซ้ำคนละรอบ (ห่างกัน >24 ชม.)
-    //   ให้ยึดรอบหลังสุด ไม่ให้เวลาเริ่มคร่อมรอบเก่า (จบยังเป็นม้วนสุดท้ายเหมือนเดิม)
+    // เวลาเริ่ม/จบ = เวลา "ผลิตจริง" เท่านั้น — ตัดม้วนแผนกกรอ (section='rewind') ออก
+    //   (กรอ WO นั้นทำทีหลัง คนละกิจกรรม → ไม่นับเวลากรอ · งานกรอล้วนจะไม่มีเวลาผลิต)
+    // เริ่ม = เริ่มของ "รอบล่าสุด" — ถ้า WO เดินซ้ำคนละรอบ (ห่าง >24 ชม.) ยึดรอบหลังสุด ไม่คร่อมรอบเก่า
     const RUN_GAP = 24 * 3600 * 1000
-    for (const [k, j] of map) {
-      const ts = (byKey[k] ?? []).map(r => r.created_at).filter(Boolean).sort()
-      if (!ts.length) continue
+    for (const [, j] of map) {
+      const ts = (byKey[j.key] ?? [])
+        .filter(r => (r.section ?? '') !== 'rewind')
+        .map(r => r.created_at).filter(Boolean).sort()
+      if (!ts.length) { j.start = undefined; j.end = undefined; continue }
       let segStart = ts[0]
       for (let i = 1; i < ts.length; i++) {
         if (new Date(ts[i]).getTime() - new Date(ts[i - 1]).getTime() > RUN_GAP) segStart = ts[i]
       }
       j.start = segStart
+      j.end   = ts[ts.length - 1]
     }
 
     let list = [...map.values()]

@@ -14,7 +14,7 @@ function thaiDate(d = new Date()) {
   return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()+543}`
 }
 
-type Tab = 'stock' | 'so' | 'ship' | 'scrap'
+type Tab = 'stock' | 'so' | 'ship' | 'scrap' | 'delivery'
 const SCRAP_LABEL: Record<string,string> = {
   scrap_clear: 'เศษใส', scrap_color: 'เศษสี', scrap_lump: 'เศษก้อน/ตะกอน',
 }
@@ -213,6 +213,15 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   const [expandedRoll, setExpandedRoll] = useState<string | null>(null)
   const [shipStaff, setShipStaff] = useState('')
   const [shipping, setShipping] = useState(false)
+
+  // ── จัดส่งตาม Item (แท็บใหม่) ──────────────────────────────────────────────
+  const [delItem,   setDelItem]   = useState<string | null>(null)   // item_code ที่เลือก
+  const [delSel,    setDelSel]    = useState<Set<string>>(new Set()) // roll id ที่ติ๊กส่ง
+  const [delTarget, setDelTarget] = useState('')                     // เป้า kg (พิมพ์เอง)
+  const [delStaff,  setDelStaff]  = useState('')
+  const [delShipping, setDelShipping] = useState(false)
+  const [delSearch, setDelSearch] = useState('')
+  const [delOpenWO, setDelOpenWO] = useState<Set<string>>(new Set())  // WO ที่กางดูม้วน
 
   async function loadAll() {
     setLoading(true)
@@ -452,6 +461,82 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   }
   const statusLabel = (s: string) => s === 'shipped' ? 'ส่งครบ' : s === 'partial' ? 'ส่งบางส่วน' : 'รอส่ง'
 
+  // ── จัดส่งตาม Item ─────────────────────────────────────────────────────────
+  // สต็อกพร้อมจัด = ม้วนดีในคลังที่ยังไม่ส่ง + ยังไม่ผูก SO อื่น
+  const delAvailable = useMemo(() => stock.filter(r => !r.so_id), [stock])
+
+  // จัดกลุ่มเป็นราย item (1 กรอบ = 1 สินค้า)
+  const itemGroups = useMemo(() => {
+    const m = new Map<string, { item_code: string; product_name: string; customer: string; size: string; rolls: Roll[]; wos: Set<string> }>()
+    for (const r of delAvailable) {
+      const ic = ((r as any).item_code ?? '').trim() || (r.product_name ?? '?')
+      if (!m.has(ic)) m.set(ic, { item_code: ic, product_name: r.product_name ?? '?', customer: r.customer ?? '', size: sizeLabel(r), rolls: [], wos: new Set() })
+      const g = m.get(ic)!
+      g.rolls.push(r); g.wos.add(((r as any).work_order ?? '').trim())
+    }
+    let list = Array.from(m.values())
+    if (delSearch.trim()) {
+      const q = delSearch.toLowerCase()
+      list = list.filter(g => [g.item_code, g.product_name, g.customer].some(x => String(x).toLowerCase().includes(q)))
+    }
+    return list.sort((a, b) => a.product_name.localeCompare(b.product_name))
+  }, [delAvailable, delSearch])
+
+  const selItemGroup = useMemo(() => itemGroups.find(g => g.item_code === delItem) ?? null, [itemGroups, delItem])
+
+  // ม้วนของ item ที่เลือก เรียง FIFO (เก่า→ใหม่) + จัดกลุ่มตาม WO ไว้แสดง
+  const delItemWOs = useMemo(() => {
+    if (!selItemGroup) return [] as { wo: string; rolls: Roll[]; kg: number; start: string }[]
+    const m = new Map<string, Roll[]>()
+    for (const r of selItemGroup.rolls) {
+      const wo = ((r as any).work_order ?? '').trim() || '(ไม่ระบุ WO)'
+      ;(m.get(wo) ?? m.set(wo, []).get(wo)!).push(r)
+    }
+    return Array.from(m.entries()).map(([wo, rolls]) => {
+      const sorted = [...rolls].sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''))
+      return { wo, rolls: sorted, kg: sorted.reduce((s, r) => s + (r.weight ?? 0), 0), start: sorted[0]?.created_at ?? '' }
+    }).sort((a, b) => a.start.localeCompare(b.start)) // WO เก่าก่อน (FIFO)
+  }, [selItemGroup])
+
+  const delPicked   = useMemo(() => (selItemGroup?.rolls ?? []).filter(r => delSel.has(r.id)), [selItemGroup, delSel])
+  const delPickedKg = useMemo(() => delPicked.reduce((s, r) => s + (r.weight ?? 0), 0), [delPicked])
+
+  function toggleDelRoll(id: string) {
+    setDelSel(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+  // จัดอัตโนมัติ: หยิบม้วนเรียง FIFO (WO เก่าก่อน) จนถึง/เกินเป้าเล็กน้อย
+  function delAutoFill() {
+    const target = parseFloat(delTarget) || 0
+    if (target <= 0) { alert('ใส่เป้าจัดส่ง (kg) ก่อน'); return }
+    const flat = delItemWOs.flatMap(g => g.rolls) // เรียง WO เก่า→ใหม่ แล้วในแต่ละ WO เก่า→ใหม่
+    const sel = new Set<string>(); let sum = 0
+    for (const r of flat) { if (sum >= target) break; sel.add(r.id); sum += r.weight ?? 0 }
+    setDelSel(sel)
+    // กาง WO ที่ถูกหยิบ ให้เห็น/ปรับได้
+    setDelOpenWO(new Set(delItemWOs.filter(g => g.rolls.some(r => sel.has(r.id))).map(g => g.wo)))
+  }
+
+  async function handleShipDelivery() {
+    if (!delStaff.trim()) { alert('กรุณากรอกชื่อผู้จัดส่ง'); return }
+    if (delSel.size === 0) { alert('เลือกม้วนที่จะส่งก่อน'); return }
+    if (!confirm(`ยืนยันจัดส่ง ${delSel.size} ม้วน · ${fmt(delPickedKg)} Kgs. ?\nสินค้า: ${selItemGroup?.product_name ?? ''}`)) return
+    setDelShipping(true)
+    try {
+      const now = new Date().toISOString()
+      const docNo = `DN-${Date.now().toString().slice(-8)}`
+      const { error } = await supabase.from('production_rolls').update({
+        shipped: true, shipped_at: now, shipped_by: delStaff.trim(),
+      }).in('id', Array.from(delSel))
+      if (error) throw error
+      const so = { id: '', so_no: `ดีล ${delTarget || fmt(delPickedKg, 0)} kg`, customer: selItemGroup?.customer ?? '',
+        product_name: selItemGroup?.product_name ?? '', target_kg: parseFloat(delTarget) || 0, status: '', created_at: now, note: '' } as SO
+      printDelivery(delPicked, so, delStaff.trim(), docNo)
+      setDelSel(new Set())
+      await loadAll()
+    } catch (e: any) { alert('จัดส่งไม่สำเร็จ: ' + (e?.message ?? e)) }
+    finally { setDelShipping(false) }
+  }
+
   return (
     <div className="min-h-[calc(100vh-48px)] bg-[#0a0f1e] p-5">
       <div className="max-w-7xl mx-auto space-y-4">
@@ -475,8 +560,9 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
         <div className="flex gap-1 bg-slate-900 border border-slate-800 rounded-xl p-1 w-fit">
           {([
             { key:'stock', label:'สต็อกคงเหลือ', icon: BarChart3 },
+            { key:'delivery', label:'จัดส่งตาม Item', icon: Truck },
             { key:'so',    label:`Sales Orders (${sos.length})`, icon: Package },
-            { key:'ship',  label:'จัดส่ง', icon: Truck },
+            { key:'ship',  label:'จัดส่ง (ตาม SO)', icon: Truck },
             { key:'scrap', label:`เศษ (${scrapRolls.length})`, icon: Trash2 },
           ] as const).map(t => (
             <button key={t.key} onClick={() => setTab(t.key)}
@@ -722,6 +808,140 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
             })}
           </div>
         </>)}
+
+        {/* ══════════ TAB: จัดส่งตาม ITEM ═══════════════════════════════════ */}
+        {tab === 'delivery' && (
+          <div className="flex gap-4 items-start">
+
+            {/* ── ซ้าย: รายการ item ── */}
+            <div className="w-72 flex-shrink-0 bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-800">
+                <p className="text-white font-semibold text-sm">📦 เลือกสินค้า (Item)</p>
+                <div className="relative mt-2">
+                  <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500"/>
+                  <input value={delSearch} onChange={e => setDelSearch(e.target.value)} placeholder="ค้นหาสินค้า/ลูกค้า..."
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-7 pr-3 py-1.5 text-xs text-white outline-none focus:border-brand-500"/>
+                </div>
+              </div>
+              <div className="max-h-[72vh] overflow-y-auto divide-y divide-slate-800/50">
+                {itemGroups.length === 0 ? <p className="text-slate-600 text-sm py-10 text-center">ไม่มีสต็อก</p>
+                : itemGroups.map(g => {
+                  const kg = g.rolls.reduce((s, r) => s + (r.weight ?? 0), 0)
+                  const isSel = delItem === g.item_code
+                  return (
+                    <button key={g.item_code} onClick={() => { setDelItem(g.item_code); setDelSel(new Set()); setDelOpenWO(new Set()) }}
+                      className={`w-full text-left px-4 py-3 transition-colors ${isSel ? 'bg-brand-600/20 border-l-4 border-brand-500' : 'hover:bg-slate-800/50 border-l-4 border-transparent'}`}>
+                      <p className="text-white text-sm font-semibold leading-tight flex items-center gap-1.5 flex-wrap">
+                        {g.product_name}
+                        {g.size && <span className="text-[9px] font-black bg-brand-500/20 text-brand-200 px-1 py-0.5 rounded">{g.size}</span>}
+                      </p>
+                      <p className="text-slate-500 text-[10px] mt-0.5">{g.item_code} · {g.customer}</p>
+                      <p className="text-[11px] mt-1"><span className="text-brand-300 font-black">{fmt(kg,1)}</span> <span className="text-slate-500">kg · {g.rolls.length} ม้วน · {g.wos.size} WO</span></p>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* ── กลาง: WO + ม้วน (ติ๊กเลือก) ── */}
+            <div className="flex-1 min-w-0 space-y-3">
+              {!selItemGroup ? (
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl py-20 text-center text-slate-500">เลือกสินค้าทางซ้ายก่อน</div>
+              ) : (<>
+                {/* แถบเป้า + auto */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-end gap-3 flex-wrap">
+                  <div>
+                    <label className="block text-[10px] text-slate-500 mb-1">เป้าจัดส่ง (kg)</label>
+                    <input value={delTarget} onChange={e => setDelTarget(e.target.value)} placeholder="เช่น 2000" inputMode="decimal"
+                      className="w-32 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-brand-500"/>
+                  </div>
+                  <button onClick={delAutoFill} className="bg-brand-600 hover:bg-brand-500 text-white text-sm font-bold px-4 py-2 rounded-lg">⚡ จัดอัตโนมัติ (FIFO)</button>
+                  <button onClick={() => setDelSel(new Set())} className="text-slate-400 hover:text-white text-sm px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700">ล้าง</button>
+                  <p className="text-[11px] text-slate-500 ml-auto">หยิบ WO เก่าก่อน · ถึง/เกินเป้าเล็กน้อยแล้วหยุด</p>
+                </div>
+
+                {/* WO list */}
+                <div className="space-y-2 max-h-[64vh] overflow-y-auto pr-1">
+                  {delItemWOs.map(g => {
+                    const allSel = g.rolls.every(r => delSel.has(r.id))
+                    const selN = g.rolls.filter(r => delSel.has(r.id)).length
+                    const open = delOpenWO.has(g.wo)
+                    return (
+                      <div key={g.wo} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-2 bg-slate-800/30 border-b border-slate-800">
+                          <button onClick={() => setDelOpenWO(p => { const n = new Set(p); n.has(g.wo) ? n.delete(g.wo) : n.add(g.wo); return n })}
+                            className="flex items-center gap-2 text-left hover:opacity-80">
+                            <span className="text-slate-500 text-xs">{open ? '▼' : '▶'}</span>
+                            <span className="text-[11px] font-bold bg-amber-500/15 text-amber-300 px-2 py-0.5 rounded">WO {g.wo}</span>
+                            <span className="text-slate-400 text-xs">{g.rolls.length} ม้วน · {fmt(g.kg,1)} kg</span>
+                            {selN > 0 && <span className="text-[10px] font-bold bg-brand-500/20 text-brand-300 px-1.5 py-0.5 rounded">เลือก {selN}</span>}
+                          </button>
+                          <button onClick={() => setDelSel(p => { const n = new Set(p); g.rolls.forEach(r => allSel ? n.delete(r.id) : n.add(r.id)); return n })}
+                            className="text-[11px] text-brand-300 hover:text-white">{allSel ? 'เอาออกทั้ง WO' : 'เลือกทั้ง WO'}</button>
+                        </div>
+                        {open && (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 p-2">
+                          {g.rolls.map(r => {
+                            const on = delSel.has(r.id)
+                            return (
+                              <button key={r.id} onClick={() => toggleDelRoll(r.id)}
+                                className={`flex items-center justify-between px-2.5 py-2 rounded-lg border text-xs transition-colors ${on ? 'bg-brand-500/20 border-brand-500/50' : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'}`}>
+                                <span className="flex items-center gap-1.5">
+                                  <span className={`w-4 h-4 rounded border flex items-center justify-center ${on ? 'bg-brand-500 border-brand-500' : 'border-slate-600'}`}>{on && <span className="text-white text-[9px] font-black">✓</span>}</span>
+                                  <span className="text-slate-300 font-mono">#{r.roll_no}</span>
+                                </span>
+                                <span className={`font-black ${on ? 'text-brand-200' : 'text-slate-300'}`}>{fmt(r.weight,1)}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </>)}
+            </div>
+
+            {/* ── ขวา: ที่เลือกไว้ + ยืนยัน ── */}
+            {selItemGroup && (
+              <div className="w-72 flex-shrink-0 bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden sticky top-4">
+                <div className="px-4 py-3 border-b border-slate-800 bg-brand-600/10">
+                  <p className="text-white font-semibold text-sm">🚚 ม้วนที่จะส่ง</p>
+                  <p className="text-[11px] mt-1">
+                    <span className="text-brand-300 font-black text-lg">{fmt(delPickedKg,1)}</span>
+                    <span className="text-slate-500"> / {delTarget || '—'} kg · {delSel.size} ม้วน</span>
+                  </p>
+                  {parseFloat(delTarget) > 0 && (
+                    <p className={`text-[10px] ${delPickedKg >= parseFloat(delTarget) ? 'text-green-400' : 'text-amber-400'}`}>
+                      {delPickedKg >= parseFloat(delTarget) ? `✓ ถึงเป้าแล้ว (เกิน ${fmt(delPickedKg - parseFloat(delTarget),1)} kg)` : `ขาดอีก ${fmt(parseFloat(delTarget) - delPickedKg,1)} kg`}
+                    </p>
+                  )}
+                </div>
+                <div className="max-h-[48vh] overflow-y-auto divide-y divide-slate-800/50">
+                  {delPicked.length === 0 ? <p className="text-slate-600 text-xs py-8 text-center">ยังไม่ได้เลือกม้วน</p>
+                  : delPicked.map(r => (
+                    <div key={r.id} className="flex items-center justify-between px-4 py-1.5 text-xs">
+                      <span className="text-slate-400">#{r.roll_no} <span className="text-slate-600">· WO {(r as any).work_order || '—'}</span></span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-300 font-bold">{fmt(r.weight,1)}</span>
+                        <button onClick={() => toggleDelRoll(r.id)} className="text-slate-600 hover:text-red-400">✕</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="p-3 border-t border-slate-800 space-y-2">
+                  <input value={delStaff} onChange={e => setDelStaff(e.target.value)} placeholder="ชื่อผู้จัดส่ง *"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-brand-500"/>
+                  <button onClick={handleShipDelivery} disabled={delShipping || delSel.size === 0 || !delStaff.trim()}
+                    className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-40 text-white text-sm px-4 py-2.5 rounded-xl font-bold">
+                    <Truck size={15}/> {delShipping ? 'กำลังส่ง...' : 'ยืนยันจัดส่ง + พิมพ์ใบ'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ══════════ TAB: SO ═════════════════════════════════════════════ */}
         {tab === 'so' && (<>

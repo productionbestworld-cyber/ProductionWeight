@@ -214,27 +214,13 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   const [shipStaff, setShipStaff] = useState('')
   const [shipping, setShipping] = useState(false)
 
-  // ดึงม้วนที่โอนแล้วทีละหน้า (page ละ 1000) จนครบ — Supabase บังคับ max-rows = 1000 ต่อ query
-  // (ถ้าไม่ paginate พอม้วนโอนแล้วเกิน 1000 สต็อก/ยอดในคลังจะขาด)
-  async function fetchAllTransferred(): Promise<any[]> {
-    const all: any[] = []
-    const PAGE = 1000
-    for (let from = 0; ; from += PAGE) {
-      const { data, error } = await supabase.from('production_rolls').select('*')
-        .eq('transferred', true)
-        .order('created_at', { ascending: false }).order('id', { ascending: false })
-        .range(from, from + PAGE - 1)
-      if (error || !data) break
-      all.push(...data)
-      if (data.length < PAGE) break
-    }
-    return all
-  }
-
   async function loadAll() {
     setLoading(true)
     const [r, { data: s }, sc, nc] = await Promise.all([
-      fetchAllTransferred(),
+      // ม้วนที่โอนแล้วทั้งหมด — ดึงหลายหน้าพร้อมกัน (parallel) กันเกิน 1000 แถว + เร็ว
+      fetchAll(() => supabase.from('production_rolls').select('*')
+        .eq('transferred', true)
+        .order('created_at', { ascending: false }).order('id', { ascending: false })),
       supabase.from('sales_orders').select('*').order('created_at', { ascending: false }),
       // เศษ — ดึงทีละหน้าจนครบ (กันเกิน 1000 แถว)
       fetchAll(() => supabase.from('production_rolls').select('*')

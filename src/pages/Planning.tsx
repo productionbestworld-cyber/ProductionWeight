@@ -64,12 +64,13 @@ export default function Planning({ dept }: { dept?: string }) {
       supabase.from('job_summaries').select('machine_no, lot_no, work_order, planned_qty, closed_at').limit(2000),
     ])
 
-    // งานปัจจุบันต่อเครื่อง (key = machine|lot|wo)
+    // งานปัจจุบันต่อเครื่อง (key = machine|wo) — ยึด WO เป็นหลัก ไม่แยกตาม lot
+    //   1 WO = 1 งาน · WO ที่ใช้หลาย lot จะรวมเป็นแถวเดียว (ยอดผลิต/เป้าถูกต้อง ไม่ถูกหาร)
     const activeKey = new Set<string>()
     const targetByKey: Record<string, number> = {}
     for (const p of profs ?? []) {
       if (!p.machine_no) continue
-      const k = `${p.machine_no}|${p.lot_no ?? ''}|${p.work_order ?? ''}`
+      const k = `${p.machine_no}|${p.work_order ?? ''}`
       activeKey.add(k)
       const t = parseFloat(p.planned_qty ?? '') || 0
       if (t) targetByKey[k] = t
@@ -77,17 +78,17 @@ export default function Planning({ dept }: { dept?: string }) {
     // เป้า + closed จาก job_summaries
     const closedByKey: Record<string, string> = {}
     for (const s of sums ?? []) {
-      const k = `${s.machine_no}|${s.lot_no ?? ''}|${s.work_order ?? ''}`
+      const k = `${s.machine_no}|${s.work_order ?? ''}`
       const t = parseFloat(s.planned_qty ?? '') || 0
       if (t && !targetByKey[k]) targetByKey[k] = t
-      if (s.closed_at) closedByKey[k] = s.closed_at
+      if (s.closed_at && s.closed_at > (closedByKey[k] ?? '')) closedByKey[k] = s.closed_at
     }
 
     const map = new Map<string, Job>()
     const byKey: Record<string, any[]> = {}
     for (const r of rolls ?? []) {
       if (!r.machine_no) continue
-      const k = `${r.machine_no}|${r.lot_no ?? ''}|${r.work_order ?? ''}`
+      const k = `${r.machine_no}|${r.work_order ?? ''}`
       ;(byKey[k] = byKey[k] ?? []).push(r)
       let j = map.get(k)
       if (!j) {
@@ -110,7 +111,7 @@ export default function Planning({ dept }: { dept?: string }) {
     // เครื่องที่ตั้งงานแล้วแต่ยังไม่ได้ชั่ง (ไม่มี roll) — โชว์เป็น active ด้วย
     for (const p of profs ?? []) {
       if (!p.machine_no || !p.lot_no) continue
-      const k = `${p.machine_no}|${p.lot_no}|${p.work_order ?? ''}`
+      const k = `${p.machine_no}|${p.work_order ?? ''}`
       if (!map.has(k)) {
         map.set(k, {
           key: k, machine_no: p.machine_no, lot_no: p.lot_no, work_order: p.work_order ?? '',
@@ -120,6 +121,19 @@ export default function Planning({ dept }: { dept?: string }) {
           goodKg: 0, goodRolls: 0, badKg: 0, badRolls: 0, scrapKg: 0,
         })
       }
+    }
+
+    // เริ่มผลิต = เริ่มของ "รอบล่าสุด" — ถ้า WO ถูกเดินซ้ำคนละรอบ (ห่างกัน >24 ชม.)
+    //   ให้ยึดรอบหลังสุด ไม่ให้เวลาเริ่มคร่อมรอบเก่า (จบยังเป็นม้วนสุดท้ายเหมือนเดิม)
+    const RUN_GAP = 24 * 3600 * 1000
+    for (const [k, j] of map) {
+      const ts = (byKey[k] ?? []).map(r => r.created_at).filter(Boolean).sort()
+      if (!ts.length) continue
+      let segStart = ts[0]
+      for (let i = 1; i < ts.length; i++) {
+        if (new Date(ts[i]).getTime() - new Date(ts[i - 1]).getTime() > RUN_GAP) segStart = ts[i]
+      }
+      j.start = segStart
     }
 
     let list = [...map.values()]

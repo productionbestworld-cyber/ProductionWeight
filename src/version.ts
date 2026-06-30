@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '2.1.2'
-export const APP_BUILD_DATE = '2026-06-26'
+export const APP_VERSION = '2.2.0'
+export const APP_BUILD_DATE = '2026-06-30'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '2.2.0', date: '2026-06-30',
+    items: [
+      'เมนูใหม่ "ค้นหาม้วน" 🔎 — พิมพ์รวมๆ ได้เลย (เครื่อง/ขนาด/น้ำหนัก/ม้วนที่/Lot/WO/สินค้า/เลขใบโอน) ระบบแยกคำให้เอง แล้วบอกว่าม้วนอยู่ใบโอนไหน · เปิดได้ที่ /rollsearch',
+    ],
+  },
   {
     version: '2.1.2', date: '2026-06-29',
     items: [

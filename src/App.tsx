@@ -15,9 +15,10 @@ import Planning from './pages/Planning'
 import CombinedDashboard from './pages/CombinedDashboard'
 import OwnerDashboard from './pages/OwnerDashboard'
 import WeighLog from './pages/WeighLog'
+import RollSearch from './pages/RollSearch'
 import { APP_VERSION, APP_BUILD_DATE, CHANGELOG } from './version'
 
-type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings' | 'admin' | 'review' | 'nc' | 'products' | 'planning' | 'combined' | 'weighlog'
+type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings' | 'admin' | 'review' | 'nc' | 'products' | 'planning' | 'combined' | 'weighlog' | 'rollsearch'
 type Dept = 'blow' | 'print' | 'rewind'
 
 const DEPT_KEY = 'bwp_dept'
@@ -132,6 +133,16 @@ export default function App() {
       || window.location.hash.replace('#', '').toLowerCase() === 'weighlog'
       || path === '/weighlog'
     if (isWeighLog) return <WeighLog />
+  }
+
+  // ── ลิงก์แยก: ค้นหาม้วน — ...?rollsearch=1 หรือ /rollsearch ──
+  {
+    const sp = new URLSearchParams(window.location.search)
+    const path = window.location.pathname.replace(/\/+$/, '').toLowerCase()
+    const isRollSearch = sp.get('rollsearch') !== null
+      || window.location.hash.replace('#', '').toLowerCase() === 'rollsearch'
+      || path === '/rollsearch'
+    if (isRollSearch) return <RollSearch />
   }
 
   // dept persist ใน localStorage
@@ -252,6 +263,7 @@ export default function App() {
 
   const NAV = ([
     { key: 'weigh',         label: 'ชั่งน้ำหนัก', icon: Scale,           depts: ['blow','print','rewind'] },
+    { key: 'rollsearch', label: 'ค้นหาม้วน',     icon: Search,          depts: ['blow','print','rewind'] },
     { key: 'transfer',  label: 'โอนเข้าคลัง',   icon: Package,         depts: ['blow','print','rewind'] },
     { key: 'warehouse', label: 'คลังสินค้า',    icon: WarehouseIcon,   depts: ['blow','print','rewind'] },
     { key: 'dashboard', label: 'Dashboard',      icon: LayoutDashboard, depts: ['blow','print','rewind'] },
@@ -431,6 +443,7 @@ export default function App() {
 
       <main className="flex-1 overflow-auto">
         {page === 'weigh'     && <WeighStation key={weighKey} dept={dept} />}
+        {page === 'rollsearch'&& <RollSearch />}
         {page === 'transfer'  && <Transfer dept={dept} />}
         {page === 'warehouse' && <Warehouse dept={dept} />}
         {page === 'dashboard' && (

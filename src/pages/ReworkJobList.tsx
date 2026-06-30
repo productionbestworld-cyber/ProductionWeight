@@ -198,6 +198,9 @@ function JobListView({ onPickJob, refreshSignal }: { onPickJob: (profile: Machin
   const [mergeSelMode, setMergeSelMode] = useState(false)                 // โหมดเลือกม้วนไปกรอต่อ
   const [mergeSel, setMergeSel]     = useState<Set<string>>(new Set())     // job id ที่เลือกกรอต่อ
   const [pendingMergeIds, setPendingMergeIds] = useState<string[] | null>(null)  // source roll ids ส่งเข้าจอชั่ง
+  const [returnSelMode, setReturnSelMode] = useState(false)               // โหมดเลือกม้วนเพื่อโยนคืนกลับคิว
+  const [returnSel, setReturnSel]   = useState<Set<string>>(new Set())     // job id ที่เลือกโยนคืน
+  const [returning, setReturning]   = useState(false)
 
   async function load() {
     setLoading(true)
@@ -429,8 +432,8 @@ function JobListView({ onPickJob, refreshSignal }: { onPickJob: (profile: Machin
       setClosing(false)
     }
   }
-  async function deleteJob(job: ReworkJob) {
-    if (!confirm(`ยกเลิกงาน "${job.product_name}" (Lot ${job.lot_no})?\n\n→ ม้วนต้นทางที่ยังไม่ได้ชั่งกรอจะถูก "คืนกลับคิว รับจากผลิต" (โยนกลับที่เก่า)\n→ ม้วนที่กรอไปแล้วยังอยู่ในระบบตามเดิม`)) return
+  // คืนม้วนต้นทางกลับคิว + ลบงานกรอ (ไม่ confirm/ไม่ reload) — ใช้ซ้ำทั้งลบเดี่ยวและโยนคืนหลายม้วน
+  async function returnJobCore(job: ReworkJob) {
     try {
       if ((job as any).new_system) {
         // ชุดระบบใหม่: คืนม้วนต้นทางที่ "ยังไม่ได้กรอ" กลับคิว · ม้วนที่กรอแล้ว = reworked
@@ -463,7 +466,29 @@ function JobListView({ onPickJob, refreshSignal }: { onPickJob: (profile: Machin
       console.warn('คืนม้วนต้นทางไม่สำเร็จ (non-fatal):', e?.message ?? e)
     }
     await supabase.from('rework_jobs').delete().eq('id', job.id)
+  }
+
+  async function deleteJob(job: ReworkJob) {
+    if (!confirm(`ยกเลิกงาน "${job.product_name}" (Lot ${job.lot_no})?\n\n→ ม้วนต้นทางที่ยังไม่ได้ชั่งกรอจะถูก "คืนกลับคิว รับจากผลิต" (โยนกลับที่เก่า)\n→ ม้วนที่กรอไปแล้วยังอยู่ในระบบตามเดิม`)) return
+    await returnJobCore(job)
     load()
+  }
+
+  // โยนคืนหลายม้วนทีเดียว — คืนกลับคิว "รับจากผลิต"
+  async function bulkReturn() {
+    const sel = jobs.filter(j => returnSel.has(j.id!))
+    if (!sel.length) return
+    if (!confirm(`โยนคืน ${sel.length} ม้วนกลับคิว "รับจากผลิต"?\n\n→ ม้วนที่ยังไม่ได้ชั่งกรอจะกลับไปที่เดิม (กรอใหม่ทีหลังได้)\n→ ม้วนที่กรอไปแล้วยังอยู่ในระบบตามเดิม`)) return
+    setReturning(true)
+    try {
+      for (const j of sel) await returnJobCore(j)
+    } catch (e: any) {
+      alert('โยนคืนบางม้วนไม่สำเร็จ: ' + (e?.message ?? e))
+    } finally {
+      setReturning(false)
+      setReturnSelMode(false); setReturnSel(new Set())
+      await load()
+    }
   }
 
   return (
@@ -546,9 +571,15 @@ function JobListView({ onPickJob, refreshSignal }: { onPickJob: (profile: Machin
           ))}
         </div>
         {jobStatus === 'active' && (
-          <button onClick={() => { setMergeSelMode(v => !v); setMergeSel(new Set()) }}
+          <button onClick={() => { setMergeSelMode(v => !v); setMergeSel(new Set()); setReturnSelMode(false); setReturnSel(new Set()) }}
             className={`text-xs font-bold px-3 py-2 rounded-lg border transition-colors ${mergeSelMode ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-slate-900 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/15'}`}>
             {mergeSelMode ? '✕ ยกเลิกเลือกกรอต่อ' : '🔁 กรอต่อ (เลือกหลายม้วน)'}
+          </button>
+        )}
+        {jobStatus === 'active' && (
+          <button onClick={() => { setReturnSelMode(v => !v); setReturnSel(new Set()); setMergeSelMode(false); setMergeSel(new Set()) }}
+            className={`text-xs font-bold px-3 py-2 rounded-lg border transition-colors ${returnSelMode ? 'bg-red-600 text-white border-red-500' : 'bg-slate-900 text-red-300 border-red-500/40 hover:bg-red-500/15'}`}>
+            {returnSelMode ? '✕ ยกเลิกโยนคืน' : '↩ โยนคืนหลายม้วน'}
           </button>
         )}
       </div>
@@ -560,6 +591,19 @@ function JobListView({ onPickJob, refreshSignal }: { onPickJob: (profile: Machin
           <button onClick={startMerge} disabled={mergeSel.size < 2}
             className="ml-auto bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-sm font-black px-5 py-2 rounded-lg">
             ⚖️ ชั่งกรอต่อ ({mergeSel.size} → 1) →
+          </button>
+        </div>
+      )}
+
+      {/* แถบยืนยันโยนคืน */}
+      {returnSelMode && (
+        <div className="flex items-center gap-3 mb-3 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-2.5">
+          <span className="text-red-300 text-sm font-bold">↩ ติ๊กม้วนที่จะโยนคืนกลับคิว "รับจากผลิต" — เลือกแล้ว {returnSel.size} ม้วน</span>
+          <button onClick={() => setReturnSel(new Set(filtered.map(j => j.id!)))}
+            className="text-xs font-bold text-red-200 border border-red-500/40 hover:bg-red-500/15 px-2.5 py-1.5 rounded-lg">เลือกทั้งหมด</button>
+          <button onClick={bulkReturn} disabled={returnSel.size < 1 || returning}
+            className="ml-auto bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white text-sm font-black px-5 py-2 rounded-lg">
+            {returning ? 'กำลังโยนคืน…' : `↩ โยนคืนที่เดิม (${returnSel.size})`}
           </button>
         </div>
       )}
@@ -604,15 +648,18 @@ function JobListView({ onPickJob, refreshSignal }: { onPickJob: (profile: Machin
                 const sos = o?.sos?.length ? o.sos : (j.sale_order ? [j.sale_order] : [])
                 const rolls = o?.rolls ?? []
                 const mSel = mergeSel.has(j.id!)
+                const rSel = returnSel.has(j.id!)
+                const selMode = mergeSelMode || returnSelMode
                 return (
-                  <tr key={j.id} className={`${jobStatus!=='active' ? 'hover:bg-slate-800/30' : mSel ? 'bg-emerald-500/15' : 'hover:bg-brand-600/10 cursor-pointer'}`}
+                  <tr key={j.id} className={`${jobStatus!=='active' ? 'hover:bg-slate-800/30' : mSel ? 'bg-emerald-500/15' : rSel ? 'bg-red-500/15' : 'hover:bg-brand-600/10 cursor-pointer'}`}
                     onClick={() => {
                       if (jobStatus !== 'active') return
-                      if (mergeSelMode) setMergeSel(prev => { const n = new Set(prev); n.has(j.id!) ? n.delete(j.id!) : n.add(j.id!); return n })
+                      if (returnSelMode) setReturnSel(prev => { const n = new Set(prev); n.has(j.id!) ? n.delete(j.id!) : n.add(j.id!); return n })
+                      else if (mergeSelMode) setMergeSel(prev => { const n = new Set(prev); n.has(j.id!) ? n.delete(j.id!) : n.add(j.id!); return n })
                       else openJob(j)
                     }}>
                     <td className="px-3 py-2 max-w-[200px]">
-                      {mergeSelMode && <span className="mr-2">{mSel ? '☑' : '☐'}</span>}
+                      {selMode && <span className="mr-2">{(returnSelMode ? rSel : mSel) ? '☑' : '☐'}</span>}
                       <p className="text-white font-bold text-xs truncate">{j.product_name || '—'}</p>
                       <p className="text-slate-500 text-[10px] truncate">{j.cust_name || ''}</p>
                     </td>

@@ -13,6 +13,7 @@
 // ════════════════════════════════════════════════════════════════════════
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { reprintRollLabel } from './WeighStation'
 
 const TZ = 'Asia/Bangkok'
 const nf = (n: number, d = 2) => (n ?? 0).toLocaleString('th-TH', { minimumFractionDigits: d, maximumFractionDigits: d })
@@ -98,6 +99,28 @@ export default function RollSearch() {
   const [loading, setLoading] = useState(false)
   const [searched, setSearched] = useState(false)
   const [err, setErr] = useState('')
+  // ── modal ดูข้อมูล + รีปริ้น ──
+  const [detail, setDetail] = useState<any | null>(null)
+  const [detailDoc, setDetailDoc] = useState<{ no: string; cust: string | null } | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [printing, setPrinting] = useState(false)
+
+  async function openDetail(id: string) {
+    setDetailLoading(true); setDetail({}); setDetailDoc(null)
+    const { data } = await supabase.from('production_rolls').select('*').eq('id', id).single()
+    if (data?.transfer_doc_id) {
+      const { data: d } = await supabase.from('transfer_documents').select('doc_no,customer').eq('id', data.transfer_doc_id).single()
+      if (d) setDetailDoc({ no: d.doc_no, cust: d.customer })
+    }
+    setDetail(data ?? null); setDetailLoading(false)
+  }
+  async function doReprint(size: 'long' | 'short') {
+    if (!detail) return
+    setPrinting(true)
+    try { await reprintRollLabel(detail, size) }
+    catch (e: any) { alert('รีปริ้นไม่สำเร็จ: ' + (e?.message ?? e)) }
+    finally { setPrinting(false) }
+  }
 
   // ── ตัวค้นจริง (AI ก็เรียกตรงนี้ได้ในอนาคต) ─────────────────────────
   async function runSearch(f: Filters) {
@@ -239,8 +262,10 @@ export default function RollSearch() {
                       </td>
                       <td className="px-2.5 py-1.5 text-slate-400 whitespace-nowrap">{fmtTime(r.created_at)}</td>
                       <td className="px-2.5 py-1.5">
-                        <a href={`/?roll=${r.id}`} target="_blank" rel="noopener noreferrer"
-                          className="text-brand-400 hover:text-brand-200 text-[11px] underline">เปิด</a>
+                        <button onClick={() => openDetail(r.id)}
+                          className="text-brand-300 hover:text-white text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-md px-2 py-1">
+                          ดู / รีปริ้น
+                        </button>
                       </td>
                     </tr>
                   )
@@ -251,6 +276,74 @@ export default function RollSearch() {
           </div>
         )}
       </div>
+
+      {/* ── Modal: ดูข้อมูลม้วน + รีปริ้น ── */}
+      {detail !== null && (
+        <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4" onClick={() => setDetail(null)}>
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md max-h-[88vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🧾</span>
+                <div>
+                  <p className="text-white font-bold text-sm">ข้อมูลม้วน</p>
+                  <p className="text-slate-500 text-[11px]">{detail.machine_no} · {String(detail.roll_type ?? '').startsWith('scrap') ? 'เศษ' : `ม้วนที่ ${detail.roll_no}`}</p>
+                </div>
+              </div>
+              <button onClick={() => setDetail(null)} className="text-slate-400 hover:text-white text-xl leading-none">×</button>
+            </div>
+
+            {detailLoading ? (
+              <div className="flex items-center justify-center py-16 text-slate-500">
+                <div className="w-8 h-8 border-4 border-brand-500/30 border-t-brand-500 rounded-full animate-spin" />
+              </div>
+            ) : (
+              <div className="px-5 py-4 overflow-y-auto text-sm space-y-1.5">
+                {([
+                  ['ชนิด', typeOf(detail.roll_type).label],
+                  ['เครื่อง', detail.machine_no],
+                  ['ม้วนที่', String(detail.roll_type ?? '').startsWith('scrap') ? '—' : `#${detail.roll_no}`],
+                  ['ขนาด', detail.width_cm ? `${detail.width_cm} ${detail.width_unit ?? 'cm'} x ${detail.thick_mc} mc` : '—'],
+                  ['นน. เต็ม', `${nf(detail.gross_weight ?? 0)} kg`],
+                  ['นน. แกน', `${nf(detail.core_weight ?? 0)} kg`],
+                  ['นน. สุทธิ', `${nf(detail.weight ?? 0)} kg`],
+                  ['สินค้า', detail.product_name],
+                  ['item / product', `${detail.item_code ?? '—'} / ${detail.product_code ?? '—'}`],
+                  ['mat code', detail.mat_code],
+                  ['Lot', detail.lot_no],
+                  ['WO / SO', `${detail.work_order ?? '—'} / ${detail.sale_order ?? '—'}`],
+                  ['ลูกค้า', `${detail.customer ?? '—'}${detail.cust_branch ? ' · ' + detail.cust_branch : ''}`],
+                  ['ผู้ตรวจ', detail.inspector],
+                  ['ผลิตเมื่อ', fmtTime(detail.created_at)],
+                  ['หมายเหตุ', detail.remark],
+                ] as [string, any][]).map(([k, v]) => (
+                  <div key={k} className="flex gap-3">
+                    <span className="text-slate-500 w-28 shrink-0">{k}</span>
+                    <span className="text-slate-200 flex-1 break-words">{v || '—'}</span>
+                  </div>
+                ))}
+                <div className="flex gap-3 pt-1 mt-1 border-t border-slate-800">
+                  <span className="text-slate-500 w-28 shrink-0">สถานะโอน</span>
+                  <span className="flex-1">
+                    {detailDoc
+                      ? <span className="text-green-300 font-semibold">โอนแล้ว · ใบ {detailDoc.no}{detailDoc.cust ? ` (${detailDoc.cust})` : ''}</span>
+                      : detail.transferred ? <span className="text-slate-400">โอนแล้ว</span> : <span className="text-amber-300">ยังไม่โอน</span>}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div className="px-5 py-3 border-t border-slate-800 flex flex-wrap items-center gap-2">
+              <span className="text-[11px] text-slate-500">รีปริ้นใบปะหน้า (วันผลิต = วันชั่งจริง):</span>
+              <button onClick={() => doReprint('long')} disabled={printing || detailLoading}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-600 hover:bg-brand-500 text-white disabled:opacity-50">🖨 ใบยาว</button>
+              <button onClick={() => doReprint('short')} disabled={printing || detailLoading}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-700 hover:bg-slate-600 text-white disabled:opacity-50">🖨 ใบสั้น</button>
+              <a href={`/?roll=${detail.id}`} target="_blank" rel="noopener noreferrer"
+                className="ml-auto text-[11px] text-brand-400 hover:text-brand-200 underline">เปิดหน้าเต็ม ↗</a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

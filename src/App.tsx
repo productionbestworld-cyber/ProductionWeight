@@ -201,7 +201,7 @@ export default function App() {
   }, [dept])
   useEffect(() => {
     loadBadges()
-    const t = setInterval(loadBadges, 20_000)
+    const t = setInterval(loadBadges, 60_000)
     return () => clearInterval(t)
   }, [loadBadges, page])
   const badges: Record<string, number> = { review: reviewBadge, nc: ncBadge }
@@ -223,7 +223,7 @@ export default function App() {
 
   useEffect(() => {
     checkConn()
-    const interval = setInterval(checkConn, 30_000)
+    const interval = setInterval(checkConn, 90_000)
     window.addEventListener('online',  checkConn)
     window.addEventListener('offline', checkConn)
     return () => {

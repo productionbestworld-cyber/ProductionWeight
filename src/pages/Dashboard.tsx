@@ -11,9 +11,9 @@ import ExportButton from '../components/ExportButton'
 // นับถอยหลังแยกเป็น component ของตัวเอง — re-render แค่ตัวเลขนี้ทุกวินาที
 // (ไม่ทำให้ทั้ง Dashboard re-render → ตารางไม่กระตุก/เลื่อนไม่เด้ง)
 function RefreshCountdown() {
-  const [c, setC] = useState(30)
+  const [c, setC] = useState(120)
   useEffect(() => {
-    const t = setInterval(() => setC(p => p <= 1 ? 30 : p - 1), 1_000)
+    const t = setInterval(() => setC(p => p <= 1 ? 120 : p - 1), 1_000)
     return () => clearInterval(t)
   }, [])
   return <span>อีก <b className="text-gray-600">{c}</b> วิ</span>
@@ -172,7 +172,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
       // ม้วนหลัก (ฐานคำนวณ KPI) — ดึงทีละหน้าจนครบ กันเพดาน 1000 แถวตัดข้อมูล
       fetchAll<Roll>(() => supabase
         .from('production_rolls')
-        .select('*')
+        .select('id,roll_type,weight,gross_weight,core_weight,length,pcs,machine_no,lot_no,product_name,product_code,item_code,customer,cust_code,width_cm,width_unit,thick_mc,inspector,work_order,sale_order,created_at,roll_no,section,remark,review_status,review_action,review_action_reason,review_decision_by,rework_status,rework_remark,transferred,transferred_at,inbound_type')
         .gte('created_at', from.toISOString())
         .lte('created_at', to.toISOString())
         .order('created_at', { ascending: true })),
@@ -249,7 +249,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
         .then(({ data }) => { if (data) setReworkRolls(data) })
       supabase.from('rework_jobs').select('*').order('created_at', { ascending: false })
         .then(({ data }) => { if (data) setReworkJobs(data) })
-    }, 30_000)
+    }, 120_000)   // poll ทุก 2 นาที (ลด egress — เดิม 30 วิ)
     return () => { clearInterval(interval) }
   }, [dateFrom, dateTo])
 

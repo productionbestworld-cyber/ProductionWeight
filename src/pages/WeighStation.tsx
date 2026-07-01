@@ -1829,6 +1829,18 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
   useEffect(() => {
     fetchFlag('enable_test_random').then(setTestRandomEnabled)
   }, [])
+
+  // ── ล็อกหยุดชั่งทั้งระบบ (weigh_locked ใน app_settings) — เช็คทุก 20 วิ + ตอนโหลด/โฟกัส ──
+  const [weighLocked, setWeighLocked] = useState(false)
+  useEffect(() => {
+    let alive = true
+    const chk = () => fetchFlag('weigh_locked').then(v => { if (alive) setWeighLocked(v) }).catch(() => {})
+    chk()
+    const iv = setInterval(chk, 20_000)
+    const onFocus = () => chk()
+    window.addEventListener('focus', onFocus)
+    return () => { alive = false; clearInterval(iv); window.removeEventListener('focus', onFocus) }
+  }, [])
   // ── Scale Bridge (WebSocket) ─────────────────────────────────────────
   const [serialConnected, setSerialConnected] = useState(false)
   const [serialStable,    setSerialStable]    = useState(false)
@@ -2529,6 +2541,11 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
   const saveWeight = isScrap ? gross : net
 
   async function handleSave() {
+    // ล็อกหยุดชั่งทั้งระบบ (ผู้ดูแลสั่งหยุดชั่วคราว เช่น ตอนแก้ข้อมูล/ข้ามเดือน)
+    if (weighLocked) {
+      alert('⛔ ระบบหยุดชั่งชั่วคราว (ผู้ดูแลกำลังแก้ไขข้อมูล)\n\nกรุณารอจนกว่าจะเปิดให้ชั่งอีกครั้ง')
+      return
+    }
     if (saveWeight <= 0 || !stable) return
     // กันชั่งเบิ้ล: ถ้ายังไม่ยกของออกจากเครื่องชั่ง ห้ามบันทึกซ้ำ
     if (awaitingClearRef.current) {
@@ -2904,6 +2921,18 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
 
   return (
     <div className={`${asModal ? 'h-full' : 'h-[calc(100vh-48px)]'} bg-[#0a0f1e] flex flex-col`}>
+
+      {/* ── หยุดชั่งทั้งระบบ — overlay ทับทั้งจอ กันชั่งจนกว่าผู้ดูแลจะปลดล็อก ── */}
+      {weighLocked && (
+        <div className="fixed inset-0 z-[80] bg-black/85 flex items-center justify-center p-6">
+          <div className="bg-slate-900 border-2 border-red-500/60 rounded-2xl max-w-md w-full text-center px-8 py-10 shadow-2xl">
+            <div className="text-6xl mb-4">⛔</div>
+            <h2 className="text-white text-2xl font-black mb-2">ระบบหยุดชั่งชั่วคราว</h2>
+            <p className="text-slate-300 text-sm leading-relaxed">ผู้ดูแลกำลังแก้ไขข้อมูล<br/>กรุณา<b className="text-red-300">หยุดชั่งทุกเครื่อง</b> แล้วรอจนกว่าจะเปิดให้ชั่งอีกครั้ง</p>
+            <p className="text-slate-500 text-xs mt-5">จอจะปลดล็อกเองอัตโนมัติเมื่อผู้ดูแลเปิดระบบ (ภายใน ~20 วินาที)</p>
+          </div>
+        </div>
+      )}
 
       {/* ── Popup "ม้วนที่จะชั่ง" — เด้งตอนเข้าจอกรอ พร้อมรายละเอียด แล้วกดชั่งเลย (ไม่ต้องโชว์ถ้าเป็น modal อยู่แล้ว) ── */}
       {reworkIntro && !asModal && (

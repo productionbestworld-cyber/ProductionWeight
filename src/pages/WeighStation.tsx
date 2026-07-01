@@ -2302,14 +2302,20 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
 
   // โหลดม้วนทั้งหมดของ machine+lot นี้ — merge กับ offline queue เพื่อไม่ให้เลขม้วนชน
   async function loadRollsForMachine() {
-    // ── กันข้ามเดือน (เป่า/พิมพ์): ถ้า lot เป็น auto-pattern ของเดือนเก่า → เลื่อนเป็นเดือนปัจจุบัน ──
-    //    lot ใหม่ยังไม่มีม้วน → เลขม้วนรีเซ็ต #1 อัตโนมัติ · ป้องกันปัญหางานข้ามเที่ยงคืนวันที่ 1
-    if (!isRework) {
+    // ── กันข้ามเดือน: ถ้า lot เป็น auto-pattern ของเดือนเก่า → เลื่อนเป็นเดือนปัจจุบัน (ม้วนใหม่ปริ้น lot เดือนใหม่) ──
+    //    เป่า/พิมพ์: lot ใหม่ยังไม่มีม้วน → เลขรีเซ็ต #1 · กรอ: เลขยังยึด item (ไม่รีเซ็ต) แต่ lot เปลี่ยนตามเดือน
+    {
       const effLot = rolloverLotNo(profile.lotNo ?? '', profile.machine_no ?? '')
       if (effLot && effLot !== (profile.lotNo ?? '')) {
         setProfile(prev => ({ ...prev, lotNo: effLot }))
-        // บันทึกลง machine_profiles ด้วย → หน้าโอน/แดชบอร์ดเห็น lot ปัจจุบันตรงกัน (สถานะ "เดิน/จบ" ถูก)
-        void supabase.from('machine_profiles').update({ lot_no: effLot }).eq('machine_no', profile.machine_no ?? '')
+        if (!isRework) {
+          // เป่า/พิมพ์: บันทึกลง machine_profiles → หน้าโอน/แดชบอร์ดเห็น lot ถูก (สถานะ "เดิน/จบ")
+          void supabase.from('machine_profiles').update({ lot_no: effLot }).eq('machine_no', profile.machine_no ?? '')
+        } else {
+          // กรอ: อัปเดต lot ของงานกรอด้วย (เลขม้วนยังยึด item — ไม่รีเซ็ต)
+          const jid = (profile as any).reworkJobId
+          if (jid) void supabase.from('rework_jobs').update({ lot_no: effLot }).eq('id', jid)
+        }
         return   // setProfile → useEffect[profile.lotNo] จะเรียก loadRollsForMachine ใหม่ด้วย lot ใหม่
       }
     }

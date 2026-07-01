@@ -25,6 +25,19 @@ function thaiDate(d: Date = new Date()) {
 function barcodeUrl(text: string, h = 10) {
   return `https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(text||'0')}&scale=2&height=${h}&includetext`
 }
+// เลื่อน lot อัตโนมัติเป็น "เดือนปัจจุบัน" ถ้า lot เป็น auto-pattern ของเดือนเก่า
+//   รูปแบบ auto = yy + machine + custCode(4หลัก) + mm  (เช่น 69BL01003406)
+//   ใช้ตอนงานข้ามเดือน → คืน lot เดือนใหม่ (เลขม้วนจะรีเซ็ต #1 เพราะ lot ใหม่ยังไม่มีม้วน)
+//   ถ้า lot กรอกเอง (ไม่ตรง pattern) → คืนค่าเดิม ไม่แตะ
+function rolloverLotNo(lot: string, machine: string): string {
+  if (!lot || !machine) return lot
+  const mc = machine.toUpperCase()
+  const m = lot.match(new RegExp(`^(\\d{2})${mc}(\\d{4})(\\d{2})$`))
+  if (!m) return lot
+  const yy = String((new Date().getFullYear() + 543) % 100).padStart(2, '0')
+  const mm = String(new Date().getMonth() + 1).padStart(2, '0')
+  return `${yy}${mc}${m[2]}${mm}`
+}
 
 // ── Print Label ───────────────────────────────────────────────────────────────
 // รีปริ้นใบปะหน้าจาก record ม้วนที่บันทึกไว้แล้ว (สร้าง profile จากข้อมูลม้วน) — ใช้จากหน้าอื่นได้
@@ -2274,6 +2287,15 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
 
   // โหลดม้วนทั้งหมดของ machine+lot นี้ — merge กับ offline queue เพื่อไม่ให้เลขม้วนชน
   async function loadRollsForMachine() {
+    // ── กันข้ามเดือน (เป่า/พิมพ์): ถ้า lot เป็น auto-pattern ของเดือนเก่า → เลื่อนเป็นเดือนปัจจุบัน ──
+    //    lot ใหม่ยังไม่มีม้วน → เลขม้วนรีเซ็ต #1 อัตโนมัติ · ป้องกันปัญหางานข้ามเที่ยงคืนวันที่ 1
+    if (!isRework) {
+      const effLot = rolloverLotNo(profile.lotNo ?? '', profile.machine_no ?? '')
+      if (effLot && effLot !== (profile.lotNo ?? '')) {
+        setProfile(prev => ({ ...prev, lotNo: effLot }))
+        return   // setProfile → useEffect[profile.lotNo] จะเรียก loadRollsForMachine ใหม่ด้วย lot ใหม่
+      }
+    }
     // freshStart (งานผลิตดึงกลับ): นับเฉพาะม้วนของ WO นี้
     // ⚠ งานกรอ: ห้ามกรองตาม WO — เพราะงานรวมข้ามไซส์มีหลาย WO ใน Lot เดียว
     //   เลขม้วนต้อง unique ทั้ง Lot ไม่งั้นแจกเลขซ้ำ (เช่น #12 ชนกัน)

@@ -2308,6 +2308,8 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
       const effLot = rolloverLotNo(profile.lotNo ?? '', profile.machine_no ?? '')
       if (effLot && effLot !== (profile.lotNo ?? '')) {
         setProfile(prev => ({ ...prev, lotNo: effLot }))
+        // บันทึกลง machine_profiles ด้วย → หน้าโอน/แดชบอร์ดเห็น lot ปัจจุบันตรงกัน (สถานะ "เดิน/จบ" ถูก)
+        void supabase.from('machine_profiles').update({ lot_no: effLot }).eq('machine_no', profile.machine_no ?? '')
         return   // setProfile → useEffect[profile.lotNo] จะเรียก loadRollsForMachine ใหม่ด้วย lot ใหม่
       }
     }

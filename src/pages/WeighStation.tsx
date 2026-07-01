@@ -69,8 +69,22 @@ function rollToProfile(roll: any, size: 'long' | 'short' = 'long'): any {
   }
 }
 
+// ทศนิยมของใบตามที่ตั้งต่อเครื่อง (machine_profiles.decimal_places) — cache กัน query ซ้ำ
+const _decCache: Record<string, number> = {}
+async function machineDecimal(machineNo: string): Promise<number> {
+  if (!machineNo) return 2
+  if (machineNo in _decCache) return _decCache[machineNo]
+  try {
+    const { data } = await supabase.from('machine_profiles').select('decimal_places').eq('machine_no', machineNo).maybeSingle()
+    const d = Number.isFinite((data as any)?.decimal_places) ? (data as any).decimal_places : 2
+    _decCache[machineNo] = d
+    return d
+  } catch { return 2 }
+}
+
 export async function reprintRollLabel(roll: any, size: 'long' | 'short' = 'long') {
   const p = rollToProfile(roll, size)
+  p.decimal = await machineDecimal(roll.machine_no ?? '')   // ทศนิยมตามเครื่อง (BL02/BL04 = 1)
   // รีปริ้น: ใช้ "วันที่ชั่งจริง" (created_at ของม้วน) เป็น MFG ไม่ใช่วันที่รีปริ้น
   await printLabel(p as MachineProfile, roll.roll_no ?? 0, roll.gross_weight ?? 0, roll.weight ?? 0, size, roll.roll_type ?? 'good', roll.remark ?? '', roll.id, roll.created_at ?? null)
 }
@@ -592,6 +606,7 @@ export async function printRollsBatch(rolls: any[], size: 'long'|'short' = 'long
   const labels: { innerHtml: string; W: number; H: number }[] = []
   for (const roll of rolls) {
     const p = rollToProfile(roll)
+    p.decimal = await machineDecimal(roll.machine_no ?? '')   // ทศนิยมตามเครื่อง
     const rt = roll.roll_type ?? 'good'
     const built = await buildLabelHtml(p as MachineProfile, roll.roll_no ?? 0, roll.gross_weight ?? 0, roll.weight ?? 0, size, rt, roll.remark ?? '', roll.id, roll.created_at ?? null)
     labels.push(built)
@@ -2309,8 +2324,13 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
       let q = supabase.from('production_rolls')
         .select('*')
         .eq('machine_no', profile.machine_no)
-        .eq('lot_no', profile.lotNo)
-      if (useFreshWO) q = q.eq('work_order', profile.woNo ?? '')
+      if (useFreshWO) {
+        // เป่า/พิมพ์: ดึง "ทั้ง WO" ทุก lot/เดือน → ยอดน้ำหนักผลิตรวมทั้งงาน ไม่หายตอนข้ามเดือน
+        //   (เลขม้วนถัดไปจะนับเฉพาะ lot ปัจจุบันด้านล่าง → ข้ามเดือนได้ #1 ใหม่)
+        q = q.eq('work_order', profile.woNo ?? '')
+      } else {
+        q = q.eq('lot_no', profile.lotNo)   // กรอ: ตาม lot เดิม
+      }
       return q.order('created_at', { ascending: true }).order('id', { ascending: true })
     })
     // ── รวมม้วนที่ค้างใน offline queue (ของ machine+lot นี้เท่านั้น) ──
@@ -2347,13 +2367,17 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
     // กรอ: ตั้งรอบปัจจุบัน = รอบล่าสุดที่มีในข้อมูล (ม้วนใหม่ต่อในรอบนั้น จนกว่าจะกดเริ่มรอบใหม่)
     if (isRework) setReworkRound(Math.max(1, ...merged.map((r:any)=>r.rework_batch ?? 1)))
     const badRolls = merged.filter((r: any) => r.roll_type === 'bad')
-    // เป่า: เลขต่อเนื่อง (max+1 — โอนแล้วชั่งต่อไม่ถอยกลับ) · กรอ: เติมเลขที่หาย (gap-fill)
+    // เป่า: เลขต่อเนื่อง (max+1) เฉพาะ "lot ปัจจุบัน" → ข้ามเดือนเริ่ม #1 ใหม่ (ยอดน้ำหนักด้านบนยังรวมทั้ง WO)
+    //   กรอ: นับตามเดิม (ยึด item / ทั้งชุด)
+    const curLot = profile.lotNo ?? ''
+    const goodCurLot = isRework ? goodRolls : goodRolls.filter((r: any) => (r.lot_no ?? '') === curLot)
+    const badCurLot  = isRework ? badRolls  : badRolls.filter((r: any) => (r.lot_no ?? '') === curLot)
     if (isRework && (profile as any).newSystem) {
       setRollNo(await nsNextRollNo())
     } else {
-      setRollNo(nextRollNo(goodRolls, isRework))
+      setRollNo(nextRollNo(goodCurLot, isRework))
     }
-    setBadRollNo(nextRollNo(badRolls, isRework))
+    setBadRollNo(nextRollNo(badCurLot, isRework))
   }
 
   useEffect(() => {

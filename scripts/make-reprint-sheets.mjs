@@ -61,7 +61,7 @@ function makeRenderer(dataMap, qr) {
 }
 
 async function labelDiv(roll, mp, size) {
-  const dec = 2
+  const dec = Number.isFinite(mp?.decimal_places) ? mp.decimal_places : 2   // ทศนิยมตามที่ตั้งต่อเครื่อง (BL02/BL04 = 1)
   const base = new Date(roll.created_at)
   const mfgDate = thaiDate(base)
   const custCode = (roll.cust_code ?? '').trim()

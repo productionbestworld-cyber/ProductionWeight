@@ -2324,13 +2324,8 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
       let q = supabase.from('production_rolls')
         .select('*')
         .eq('machine_no', profile.machine_no)
-      if (useFreshWO) {
-        // เป่า/พิมพ์: ดึง "ทั้ง WO" ทุก lot/เดือน → ยอดน้ำหนักผลิตรวมทั้งงาน ไม่หายตอนข้ามเดือน
-        //   (เลขม้วนถัดไปจะนับเฉพาะ lot ปัจจุบันด้านล่าง → ข้ามเดือนได้ #1 ใหม่)
-        q = q.eq('work_order', profile.woNo ?? '')
-      } else {
-        q = q.eq('lot_no', profile.lotNo)   // กรอ: ตาม lot เดิม
-      }
+        .eq('lot_no', profile.lotNo)
+      if (useFreshWO) q = q.eq('work_order', profile.woNo ?? '')
       return q.order('created_at', { ascending: true }).order('id', { ascending: true })
     })
     // ── รวมม้วนที่ค้างใน offline queue (ของ machine+lot นี้เท่านั้น) ──
@@ -2367,17 +2362,13 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
     // กรอ: ตั้งรอบปัจจุบัน = รอบล่าสุดที่มีในข้อมูล (ม้วนใหม่ต่อในรอบนั้น จนกว่าจะกดเริ่มรอบใหม่)
     if (isRework) setReworkRound(Math.max(1, ...merged.map((r:any)=>r.rework_batch ?? 1)))
     const badRolls = merged.filter((r: any) => r.roll_type === 'bad')
-    // เป่า: เลขต่อเนื่อง (max+1) เฉพาะ "lot ปัจจุบัน" → ข้ามเดือนเริ่ม #1 ใหม่ (ยอดน้ำหนักด้านบนยังรวมทั้ง WO)
-    //   กรอ: นับตามเดิม (ยึด item / ทั้งชุด)
-    const curLot = profile.lotNo ?? ''
-    const goodCurLot = isRework ? goodRolls : goodRolls.filter((r: any) => (r.lot_no ?? '') === curLot)
-    const badCurLot  = isRework ? badRolls  : badRolls.filter((r: any) => (r.lot_no ?? '') === curLot)
+    // เป่า: เลขต่อเนื่อง (max+1 — โอนแล้วชั่งต่อไม่ถอยกลับ) · กรอ: เติมเลขที่หาย (gap-fill)
     if (isRework && (profile as any).newSystem) {
       setRollNo(await nsNextRollNo())
     } else {
-      setRollNo(nextRollNo(goodCurLot, isRework))
+      setRollNo(nextRollNo(goodRolls, isRework))
     }
-    setBadRollNo(nextRollNo(badCurLot, isRework))
+    setBadRollNo(nextRollNo(badRolls, isRework))
   }
 
   useEffect(() => {

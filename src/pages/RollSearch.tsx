@@ -13,7 +13,7 @@
 // ════════════════════════════════════════════════════════════════════════
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { reprintRollLabel } from './WeighStation'
+import { reprintRollLabel, printRollsBatch } from './WeighStation'
 
 const TZ = 'Asia/Bangkok'
 const nf = (n: number, d = 2) => (n ?? 0).toLocaleString('th-TH', { minimumFractionDigits: d, maximumFractionDigits: d })
@@ -122,6 +122,28 @@ export default function RollSearch() {
     finally { setPrinting(false) }
   }
 
+  // ── รีปริ้นทั้งหมดตามผลค้นหา (ใบครบในเอกสารเดียว ปริ้นครั้งเดียว) ──
+  const [batchSize, setBatchSize] = useState<'long' | 'short'>('long')
+  const [batchPrinting, setBatchPrinting] = useState(false)
+  async function reprintAll() {
+    if (!rolls.length) return
+    // เลี่ยงปริ้นเยอะเกิน (แนะนำกรองทีละเครื่อง)
+    const ids = rolls.map(r => r.id)
+    if (ids.length > 120 && !confirm(`จะปริ้น ${ids.length} ใบในครั้งเดียว (เยอะมาก) — แนะนำกรองทีละเครื่องก่อน\n\nยืนยันปริ้นทั้งหมด?`)) return
+    setBatchPrinting(true)
+    try {
+      // ดึงข้อมูลเต็มทุกคอลัมน์ (ผลค้นหามีไม่ครบ เช่น mat_code/core_weight) แล้วปริ้นรวม
+      const full: any[] = []
+      for (let i = 0; i < ids.length; i += 200) {
+        const { data } = await supabase.from('production_rolls').select('*').in('id', ids.slice(i, i + 200))
+        full.push(...(data ?? []))
+      }
+      full.sort((a, b) => String(a.machine_no).localeCompare(String(b.machine_no)) || (a.roll_no ?? 0) - (b.roll_no ?? 0))
+      await printRollsBatch(full, batchSize)
+    } catch (e: any) { alert('รีปริ้นรวมไม่สำเร็จ: ' + (e?.message ?? e)) }
+    finally { setBatchPrinting(false) }
+  }
+
   // ── ตัวค้นจริง (AI ก็เรียกตรงนี้ได้ในอนาคต) ─────────────────────────
   async function runSearch(f: Filters) {
     setLoading(true); setErr('')
@@ -227,6 +249,24 @@ export default function RollSearch() {
         )}
         {searched && !loading && !rolls.length && !err && (
           <p className="text-center text-slate-500 py-16">ไม่เจอม้วนที่ตรงเงื่อนไข — ลองตัดคำให้น้อยลง</p>
+        )}
+        {rolls.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 mb-2 bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2">
+            <span className="text-xs text-slate-400">รีปริ้นรวมตามผลค้นหา ({nf(rolls.length, 0)} ใบ):</span>
+            <div className="flex bg-slate-800 rounded-md p-0.5 border border-slate-700">
+              {(['long', 'short'] as const).map(s => (
+                <button key={s} onClick={() => setBatchSize(s)}
+                  className={`px-2.5 py-1 rounded text-[11px] font-bold ${batchSize === s ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+                  {s === 'long' ? 'ใบยาว' : 'ใบสั้น'}
+                </button>
+              ))}
+            </div>
+            <button onClick={reprintAll} disabled={batchPrinting}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-green-600 hover:bg-green-500 text-white disabled:opacity-50">
+              {batchPrinting ? 'กำลังเตรียม…' : `🖨 รีปริ้นทั้งหมด (${nf(rolls.length, 0)} ใบ)`}
+            </button>
+            <span className="text-[11px] text-slate-500">· ปริ้นครั้งเดียวได้ครบ — แนะนำกรองทีละเครื่อง</span>
+          </div>
         )}
         {rolls.length > 0 && (
           <div className="overflow-x-auto rounded-xl border border-slate-800">

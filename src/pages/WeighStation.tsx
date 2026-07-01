@@ -28,8 +28,9 @@ function barcodeUrl(text: string, h = 10) {
 
 // ── Print Label ───────────────────────────────────────────────────────────────
 // รีปริ้นใบปะหน้าจาก record ม้วนที่บันทึกไว้แล้ว (สร้าง profile จากข้อมูลม้วน) — ใช้จากหน้าอื่นได้
-export async function reprintRollLabel(roll: any, size: 'long' | 'short' = 'long') {
-  const p: any = {
+// แปลงแถว production_rolls → MachineProfile สำหรับปริ้นใบ (ใช้ร่วมทั้งรีปริ้นเดี่ยว/รวม)
+function rollToProfile(roll: any, size: 'long' | 'short' = 'long'): any {
+  return {
     machine_no:  roll.machine_no   ?? '',
     custCode:    roll.cust_code    ?? '',
     custName:    roll.customer     ?? roll.cust_name ?? '',
@@ -53,11 +54,15 @@ export async function reprintRollLabel(roll: any, size: 'long' | 'short' = 'long
     soNo:        roll.sale_order   ?? '',
     woNo:        roll.work_order   ?? '',
   }
+}
+
+export async function reprintRollLabel(roll: any, size: 'long' | 'short' = 'long') {
+  const p = rollToProfile(roll, size)
   // รีปริ้น: ใช้ "วันที่ชั่งจริง" (created_at ของม้วน) เป็น MFG ไม่ใช่วันที่รีปริ้น
   await printLabel(p as MachineProfile, roll.roll_no ?? 0, roll.gross_weight ?? 0, roll.weight ?? 0, size, roll.roll_type ?? 'good', roll.remark ?? '', roll.id, roll.created_at ?? null)
 }
 
-async function printLabel(p: MachineProfile, rollNo: number, gross: number, net: number, size: 'long'|'short' = 'long', rollType: string = 'good', reason = '', rollId?: string, prodDate?: string | Date | null) {
+async function buildLabelHtml(p: MachineProfile, rollNo: number, gross: number, net: number, size: 'long'|'short' = 'long', rollType: string = 'good', reason = '', rollId?: string, prodDate?: string | Date | null): Promise<{ innerHtml: string; W: number; H: number }> {
   const dec     = p.decimal
   // วันผลิต = วันที่ชั่งจริง (รีปริ้นใช้ created_at) · ถ้าไม่ส่งมา = วันนี้ (ตอนชั่ง)
   const baseDate = prodDate ? new Date(prodDate) : new Date()
@@ -537,16 +542,21 @@ ${wasteLayout.fields.map(renderWasteField).join('\n')}
 
   const W = isScrapRoll ? wasteLayout.labelW : size === 'long' ? savedLayout.labelW : shortLayout.labelW
   const H = isScrapRoll ? wasteLayout.labelH : size === 'long' ? savedLayout.labelH : shortLayout.labelH
+  const innerHtml = isScrapRoll ? wasteHtmlFromLayout : size === 'long' ? longHtmlFromLayout : shortHtmlFromLayout
+  return { innerHtml, W, H }
+}
+
+// ปริ้นใบเดียว — เปิดหน้าต่างแล้วสั่งพิมพ์
+async function printLabel(p: MachineProfile, rollNo: number, gross: number, net: number, size: 'long'|'short' = 'long', rollType: string = 'good', reason = '', rollId?: string, prodDate?: string | Date | null) {
+  const { innerHtml, W, H } = await buildLabelHtml(p, rollNo, gross, net, size, rollType, reason, rollId, prodDate)
   const win = window.open('', '_blank', `width=${Math.round(W*3.78)},height=${Math.round(H*3.78)},menubar=no,toolbar=no`)
   if (!win) {
-    // popup ถูก browser block — แจ้งผู้ใช้ + แนะนำให้ allow popup
     console.warn('printLabel: popup blocked')
     alert('⚠ Browser block popup — กรุณาอนุญาต popup ของเว็บนี้\n(ไอคอนล็อค/ขวาบนช่อง URL)\n\nม้วนถูกบันทึกแล้ว สามารถพิมพ์ใหม่ได้จากหน้า History')
     return
   }
-
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
-  ${isScrapRoll ? wasteHtmlFromLayout : size === 'long' ? longHtmlFromLayout : shortHtmlFromLayout}
+  ${innerHtml}
   </head><body><script>
     var imgs=document.images,n=0
     function doPrint(){
@@ -559,6 +569,33 @@ ${wasteLayout.fields.map(renderWasteField).join('\n')}
     function ok(){n++;if(n>=imgs.length)doPrint()}
     if(!imgs.length){doPrint()}
     else{for(var i=0;i<imgs.length;i++){if(imgs[i].complete)ok();else{imgs[i].onload=ok;imgs[i].onerror=ok}}}
+  <\/script></body></html>`)
+  win.document.close()
+}
+
+// ปริ้นรวมหลายใบในเอกสารเดียว — ปริ้นครั้งเดียวได้ครบ (แต่ละใบ = 1 หน้า)
+export async function printRollsBatch(rolls: any[], size: 'long'|'short' = 'long') {
+  if (!rolls.length) return
+  const labels: { innerHtml: string; W: number; H: number }[] = []
+  for (const roll of rolls) {
+    const p = rollToProfile(roll)
+    const rt = roll.roll_type ?? 'good'
+    const built = await buildLabelHtml(p as MachineProfile, roll.roll_no ?? 0, roll.gross_weight ?? 0, roll.weight ?? 0, size, rt, roll.remark ?? '', roll.id, roll.created_at ?? null)
+    labels.push(built)
+  }
+  const { W, H } = labels[0]
+  const win = window.open('', '_blank', 'width=1000,height=760,menubar=no,toolbar=no')
+  if (!win) { alert('⚠ Browser block popup — กรุณาอนุญาต popup ของเว็บนี้แล้วลองใหม่'); return }
+  const body = labels.map(l =>
+    `<div style="page-break-after:always;width:${l.W}mm;height:${l.H}mm;overflow:hidden">${l.innerHtml}</div>`
+  ).join('\n')
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
+  <style>@page{size:${W}mm ${H}mm;margin:0}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}body{margin:0}</style>
+  </head><body>${body}<script>
+    var imgs=document.images,n=0
+    function doPrint(){ if(document.fonts&&document.fonts.ready){document.fonts.ready.then(function(){setTimeout(function(){window.print()},400)})}else{setTimeout(function(){window.print()},700)} }
+    function ok(){n++;if(n>=imgs.length)doPrint()}
+    if(!imgs.length){doPrint()} else {for(var i=0;i<imgs.length;i++){if(imgs[i].complete)ok();else{imgs[i].onload=ok;imgs[i].onerror=ok}}}
   <\/script></body></html>`)
   win.document.close()
 }

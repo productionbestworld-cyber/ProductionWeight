@@ -205,6 +205,7 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   const [fSize, setFSize] = useState('')
   const [search, setSearch] = useState('')
   const [expandedLots, setExpandedLots] = useState<Set<string>>(new Set())
+  const [stockCollapsedDays, setStockCollapsedDays] = useState<Set<string>>(new Set())   // วันโอนเข้าที่ยุบในสต็อก
 
   // shipment state
   const [selectedSO, setSelectedSO] = useState<SO | null>(null)
@@ -284,17 +285,18 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   // group stock by lot + WO (กัน 2 งานปน Lot เดียว) + เก็บ SO / วันเริ่ม-จบ
   // ม้วนกรอจะถูกจับเข้ากลุ่ม Lot เป่าเดิม (rework_source_lot) ให้อยู่กับม้วนดีของ WO นั้น
   const stockByLot = useMemo(() => {
-    const map = new Map<string, { lot: string; product: string; customer: string; size: string; wo: string; so: string; start: string; end: string; rolls: Roll[]; goodN: number; reworkN: number }>()
+    const map = new Map<string, { lot: string; product: string; customer: string; size: string; wo: string; so: string; start: string; end: string; xfer: string; rolls: Roll[]; goodN: number; reworkN: number }>()
     filteredStock.forEach(r => {
       const rew = isReworkRoll(r)
       const groupLot = (rew && ((r as any).rework_source_lot ?? '').trim()) ? ((r as any).rework_source_lot as string).trim() : (r.lot_no ?? '?')
       const wo = ((r as any).work_order ?? '').trim()
       const so = ((r as any).sale_order ?? '').trim()
       const k = `${groupLot}__${r.product_name ?? '?'}__${wo}`
-      if (!map.has(k)) map.set(k, { lot: groupLot, product: r.product_name ?? '?', customer: r.customer ?? '?', size: sizeLabel(r), wo, so, start: r.created_at, end: r.created_at, rolls: [], goodN: 0, reworkN: 0 })
+      if (!map.has(k)) map.set(k, { lot: groupLot, product: r.product_name ?? '?', customer: r.customer ?? '?', size: sizeLabel(r), wo, so, start: r.created_at, end: r.created_at, xfer: r.transferred_at ?? '', rolls: [], goodN: 0, reworkN: 0 })
       const g = map.get(k)!
       if (r.created_at && (!g.start || r.created_at < g.start)) g.start = r.created_at
       if (r.created_at && (!g.end   || r.created_at > g.end))   g.end   = r.created_at
+      if (r.transferred_at && (!g.xfer || r.transferred_at > g.xfer)) g.xfer = r.transferred_at   // วันโอนเข้าคลังล่าสุดของกลุ่ม
       if (!g.so && so) g.so = so
       g.rolls.push(r)
       rew ? g.reworkN++ : g.goodN++
@@ -309,6 +311,21 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
     }
     return Array.from(map.values()).sort((a, b) => a.lot.localeCompare(b.lot) || a.wo.localeCompare(b.wo))
   }, [filteredStock])
+
+  // จัดกลุ่มสต็อกตาม "วันโอนเข้าคลัง" (ใหม่→เก่า) — สำหรับหัวข้อวันในหน้าคลัง
+  const stockByDay = useMemo(() => {
+    const dayKeyOf = (g: any) => g.xfer
+      ? new Date(g.xfer).toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok', weekday:'short', day:'2-digit', month:'short', year:'2-digit' })
+      : '— ไม่ระบุวันโอน'
+    const sorted = [...stockByLot].sort((a, b) => (b.xfer || '').localeCompare(a.xfer || ''))
+    const out: { day: string; items: typeof stockByLot }[] = []
+    for (const g of sorted) {
+      const day = dayKeyOf(g)
+      const last = out[out.length - 1]
+      if (last && last.day === day) last.items.push(g); else out.push({ day, items: [g] })
+    }
+    return out
+  }, [stockByLot])
 
   // ── เศษ (scrap) — เชื่อมจากงานผลิต/กรอ จัดกลุ่มตาม Lot/งาน ──
   const scrapByLot = useMemo(() => {
@@ -699,7 +716,19 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
           <div className="space-y-2">
             {loading ? <div className="text-slate-500 text-sm py-8 text-center">กำลังโหลด...</div>
             : stockByLot.length === 0 ? <div className="bg-slate-900 border border-slate-800 rounded-2xl py-16 text-center text-slate-500">ไม่มีสต็อกคงเหลือ</div>
-            : stockByLot.map(group => {
+            : stockByDay.map(dg => {
+              const dayCollapsed = stockCollapsedDays.has(dg.day)
+              const dayKg = dg.items.reduce((s,g)=>s+g.rolls.reduce((ss,r)=>ss+(r.weight??0),0),0)
+              const dayRolls = dg.items.reduce((s,g)=>s+g.rolls.length,0)
+              return (
+              <div key={dg.day} className="space-y-3">
+                {/* หัวข้อวันโอนเข้า — กดยุบ/ขยาย + ยอดต่อวัน */}
+                <button onClick={()=>setStockCollapsedDays(p=>{const n=new Set(p);n.has(dg.day)?n.delete(dg.day):n.add(dg.day);return n})}
+                  className="sticky top-0 z-10 w-full bg-slate-800/95 backdrop-blur px-4 py-2 border-y border-slate-700 flex items-center justify-between hover:bg-slate-700/95 rounded-lg">
+                  <span className="text-xs font-black text-slate-200 flex items-center gap-1.5"><span className={`text-[9px] text-slate-400 inline-block transition-transform ${dayCollapsed?'':'rotate-90'}`}>▶</span>📅 โอนเข้า {dg.day}</span>
+                  <span className="text-[10px] text-slate-500">{dg.items.length} งาน · {dayRolls} ม้วน · {fmt(dayKg,1)} Kg</span>
+                </button>
+                {!dayCollapsed && dg.items.map(group => {
               const key = `${group.lot}__${group.product}__${group.wo}`
               const isOpen = expandedLots.has(key)
               const totalKg = group.rolls.reduce((s,r) => s+(r.weight??0), 0)
@@ -841,6 +870,9 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                     </div>
                   )}
                 </div>
+              )
+                })}
+              </div>
               )
             })}
           </div>

@@ -1302,6 +1302,31 @@ function RollDetailModal({ roll: r, onClose, doReprint, printing, onChanged }: {
     alert(`✓ แก้น้ำหนักม้วน #${r.roll_no} เป็น ${fmt(nw,2)} Kg แล้ว — อย่าลืมรีปริ้นใบใหม่`)
     onChanged?.()
   }
+  // ── ลบม้วน (ชั่งผิด/งานผิด) — RPC ปลอดภัย + คืนม้วนต้นทางกรอ ──
+  const [delMode, setDelMode] = useState(false)
+  const [delReason, setDelReason] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  async function doDelete() {
+    if (!by.trim()) { alert('กรอกชื่อผู้ลบ'); return }
+    if (!delReason.trim()) { alert('กรอกเหตุผล'); return }
+    setDeleting(true)
+    try {
+      const { error } = await supabase.rpc('delete_roll_atomic', {
+        p_roll_id: r.id, p_deleted_by: by.trim(), p_reason: delReason.trim(),
+        p_work_order: r.work_order ?? null, p_sale_order: r.sale_order ?? null,
+      })
+      if (error) throw error
+      if (r.rework_source_roll_id) {
+        await supabase.from('production_rolls').update({
+          rework_status: 'reworking',
+          rework_remark: `คืนสถานะ (ลบม้วนกรอ #${r.roll_no}: ${delReason.trim()})`,
+        }).eq('id', r.rework_source_roll_id)
+      }
+      alert('✅ ลบม้วนแล้ว' + (r.rework_source_roll_id ? ' · คืนม้วนต้นทางกลับคิวแล้ว' : ''))
+      onChanged?.()
+    } catch (e: any) { alert('ลบไม่สำเร็จ: ' + (e?.message ?? e)) }
+    finally { setDeleting(false) }
+  }
   const rows: [string, any][] = [
     ['ม้วนที่', `#${r.roll_no}`],
     ['น้ำหนักสุทธิ', `${fmt(r.weight,2)} Kg`],
@@ -1371,6 +1396,33 @@ function RollDetailModal({ roll: r, onClose, doReprint, printing, onChanged }: {
             className="flex-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white py-2.5 rounded-xl font-bold text-sm">
             {printing === r.id+'short' ? 'กำลังพิมพ์...' : '🖨 รีปริ้นใบสั้น'}</button>
         </div>
+        {/* ── ลบม้วน (ชั่งผิด/งานผิด) ── */}
+        {!r.transferred && (
+          <div className="px-4 pb-3">
+            {!delMode ? (
+              <button onClick={() => setDelMode(true)}
+                className="w-full text-red-300 hover:text-white text-xs font-bold bg-red-500/10 hover:bg-red-600 border border-red-500/40 rounded-lg py-2">
+                🗑 ลบม้วนนี้ (ชั่งผิด / งานผิด)
+              </button>
+            ) : (
+              <div className="space-y-2 border border-red-500/40 rounded-lg p-2.5 bg-red-500/5">
+                <p className="text-red-300 text-xs font-bold">ยืนยันลบ #{r.roll_no}{r.rework_source_roll_id ? ' · จะคืนม้วนต้นทางกลับคิว' : ''}</p>
+                <input value={by} onChange={e => setBy(e.target.value)} placeholder="ชื่อผู้ลบ *"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none focus:border-red-500" />
+                <input value={delReason} onChange={e => setDelReason(e.target.value)} placeholder="เหตุผล * เช่น ชั่งผิดงาน"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none focus:border-red-500" />
+                <div className="flex gap-2">
+                  <button onClick={doDelete} disabled={deleting}
+                    className="flex-1 bg-red-600 hover:bg-red-500 text-white text-xs font-black rounded-lg py-2 disabled:opacity-50">
+                    {deleting ? 'กำลังลบ…' : '✓ ยืนยันลบถาวร'}
+                  </button>
+                  <button onClick={() => { setDelMode(false); setDelReason('') }}
+                    className="px-4 py-2 text-xs text-slate-400 hover:text-white bg-slate-800 rounded-lg">ยกเลิก</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

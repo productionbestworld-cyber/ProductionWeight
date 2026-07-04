@@ -3325,8 +3325,9 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
               {/* ➕ ม้วนนอกระบบ — เอามาจากงานอื่น/ที่อื่น */}
               {!manualMode ? (
                 <button onClick={() => { setManualMode(true); setSelSrc(null) }}
-                  className="w-full text-left rounded-lg px-2.5 py-1.5 border border-dashed border-amber-500/50 bg-amber-500/5 hover:bg-amber-500/10 text-amber-300 text-xs font-bold">
-                  ➕ ม้วนนอกระบบ — เอามาจากที่อื่นมาชั่งรวม (กรอกที่มาเอง)
+                  className="w-full text-left rounded-xl px-3 py-2.5 border-2 border-dashed border-amber-500/60 bg-amber-500/10 hover:bg-amber-500/20 transition-colors">
+                  <p className="text-amber-200 text-sm font-black">➕ ม้วนนอกระบบ / งานเก่าก่อนมีระบบ</p>
+                  <p className="text-amber-300/80 text-[10px] mt-0.5">เอาวัสดุจากที่อื่นมากรอ (กรอกที่มาเอง) — <b className="text-amber-200">ชั่งได้หลายม้วนต่อเนื่อง จอไม่เด้งออก</b></p>
                 </button>
               ) : (
                 <div className="rounded-lg px-2.5 py-2 border border-amber-500/50 bg-amber-500/10 space-y-1.5">
@@ -3359,7 +3360,8 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
               )}
               {manualMode && manualSrcText.trim() && (
                 <p className="text-[10px] text-amber-200 bg-amber-500/10 rounded px-2 py-1">
-                  ม้วนถัดไปจะออกใน Lot นี้ + หมายเหตุ: กรอแทนจาก "{manualSrcText.trim()}"{manualSrcKg ? ` · หยิบมา ${manualSrcKg} · เศษอัตโนมัติ` : ''}
+                  ✅ โหมดม้วนนอกระบบ — <b>ชั่งได้หลายม้วนต่อเนื่อง (จอไม่เด้งออก)</b> ครบแล้วค่อยกด "จบงาน" เอง<br/>
+                  ม้วนถัดไปออกใน Lot นี้ · หมายเหตุ: กรอแทนจาก "{manualSrcText.trim()}"{manualSrcKg ? ` · หยิบมา ${manualSrcKg} · เศษอัตโนมัติ` : ''}
                 </p>
               )}
             </div>

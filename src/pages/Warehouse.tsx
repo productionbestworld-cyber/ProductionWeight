@@ -228,10 +228,10 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
     setLoading(true)
     // เลือกเฉพาะคอลัมน์ที่หน้านี้ใช้จริง (ลด Egress — เดิมดึง * ทุกคอลัมน์)
     const RCOLS = 'id,roll_no,roll_type,weight,gross_weight,core_weight,machine_no,lot_no,product_name,product_code,item_code,mat_code,customer,cust_code,cust_branch,inspector,created_at,transferred_at,transferred,shipped,shipped_at,shipped_by,ship_doc_no,so_id,sale_order,work_order,section,width_cm,thick_mc,width_unit,length,pcs,inbound_type,remark,rework_source_lot,rework_source_roll_id,review_status'
-    const [r, { data: s }, sc, nc] = await Promise.all([
-      // ม้วนที่โอนแล้วทั้งหมด — ดึงหลายหน้าพร้อมกัน (parallel) กันเกิน 1000 แถว + เร็ว
+    const [r, { data: s }, sc, nc, rShip] = await Promise.all([
+      // ⚡ สต็อกคงเหลือ = โอนแล้ว & "ยังไม่ขาย (not shipped)" — เดิมดึงม้วนโอนทั้งหมด(รวมที่ขายไปแล้ว หมื่นแถว) → ช้ามาก
       fetchAll(() => supabase.from('production_rolls').select(RCOLS)
-        .eq('transferred', true)
+        .eq('transferred', true).not('shipped', 'is', true)
         .order('created_at', { ascending: false }).order('id', { ascending: false })),
       supabase.from('sales_orders').select('*').order('created_at', { ascending: false }),
       // เศษ — ดึงทีละหน้าจนครบ (กันเกิน 1000 แถว)
@@ -244,8 +244,12 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
         .eq('review_status', 'pending_review')
         .in('inbound_type', ['qc_reject','warehouse_damage'])
         .order('created_at', { ascending: false })),
+      // ม้วนที่ "ขายแล้ว" เฉพาะที่ผูก SO — ใช้คิดยอดส่งต่อ SO เท่านั้น (ไม่ต้องโหลดที่ขาย/ส่งแบบไม่มี SO ทั้งหมด)
+      fetchAll(() => supabase.from('production_rolls').select(RCOLS)
+        .eq('transferred', true).eq('shipped', true).not('so_id', 'is', null)
+        .order('created_at', { ascending: false })),
     ])
-    setRolls((r ?? []) as Roll[])
+    setRolls([...(r ?? []), ...(rShip ?? [])] as Roll[])
     setSOs((s ?? []) as SO[])
     setScrapRolls(sc ?? [])
     setNcRolls(nc ?? [])

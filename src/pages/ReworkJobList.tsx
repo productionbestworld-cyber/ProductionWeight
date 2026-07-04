@@ -1465,7 +1465,7 @@ function ReworkHistory() {
     setLoading(true)
     // ม้วนดีที่กรอออกมา (ชุดระบบใหม่ + อ้างอิงม้วนต้นทาง)
     const data = await fetchAll(() => supabase.from('production_rolls')
-      .select('id, roll_no, weight, length, item_code, product_name, customer, lot_no, machine_no, work_order, sale_order, transferred, new_system, rework_source_lot, rework_source_weight, created_at')
+      .select('id, roll_no, weight, length, item_code, product_name, customer, lot_no, machine_no, work_order, sale_order, transferred, new_system, rework_source_lot, rework_source_weight, remark, created_at')
       .eq('roll_type', 'good').eq('new_system', true)      .order('created_at', { ascending: false }))
     setRows(data ?? [])
     setLoading(false)
@@ -1509,6 +1509,7 @@ function ReworkHistory() {
               { header:'WO', value: (r:any) => r.work_order ?? '' },
               { header:'SO', value: (r:any) => r.sale_order ?? '' },
               { header:'มาจาก Lot', value: (r:any) => r.rework_source_lot ?? '' },
+              { header:'หมายเหตุ', value: (r:any) => r.remark ?? '', width:30 },
               { header:'โอนแล้ว', value: (r:any) => r.transferred ? 'โอนแล้ว' : 'ยังไม่โอน' },
               { header:'ชั่งเมื่อ', value: (r:any) => r.created_at ? new Date(r.created_at).toLocaleString('th-TH', { timeZone:'Asia/Bangkok' }) : '', width:18 },
             ]}
@@ -1587,6 +1588,7 @@ function ReworkHistory() {
                         <th className="px-2 py-1.5 text-left">SO</th>
                         <th className="px-2 py-1.5 text-left">มาจาก Lot</th>
                         <th className="px-2 py-1.5 text-left">ชั่งเมื่อ</th>
+                        <th className="px-2 py-1.5 text-left">หมายเหตุ</th>
                         <th className="px-2 py-1.5 text-center">สถานะ</th>
                       </tr></thead>
                       <tbody>
@@ -1601,6 +1603,7 @@ function ReworkHistory() {
                             <td className="px-2 py-1.5 text-amber-300">{r.sale_order || '—'}</td>
                             <td className="px-2 py-1.5 font-mono text-slate-400">{r.rework_source_lot || '—'}</td>
                             <td className="px-2 py-1.5 text-slate-400 whitespace-nowrap">{r.created_at ? new Date(r.created_at).toLocaleString('th-TH', { timeZone:'Asia/Bangkok', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—'}</td>
+                            <td className="px-2 py-1.5 text-slate-400 max-w-[240px] truncate" title={r.remark || ''}>{r.remark || '—'}</td>
                             <td className="px-2 py-1.5 text-center">
                               {r.transferred
                                 ? <span className="text-[10px] text-slate-400">โอนแล้ว</span>

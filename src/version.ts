@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '2.11.2'
+export const APP_VERSION = '2.11.3'
 export const APP_BUILD_DATE = '2026-07-04'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '2.11.3', date: '2026-07-04',
+    items: [
+      'ประวัติการกรอ (ตาม item): เพิ่มคอลัมน์ "หมายเหตุ" (แสดง remark ของม้วน เช่น กรอแทนจาก.../หยิบมา.../เศษ) ทั้งในตารางและไฟล์ Export Excel',
+    ],
+  },
   {
     version: '2.11.2', date: '2026-07-04',
     items: [

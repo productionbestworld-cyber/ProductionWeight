@@ -316,6 +316,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   const [docRolls,    setDocRolls]    = useState<any[]>([])
   const [docLoading,  setDocLoading]  = useState(false)
   const [docRollSearch, setDocRollSearch] = useState('')   // ค้นหาม้วน "ภายในใบโอนที่เปิด" (คนละตัวกับ docSearch ที่ค้นรายการใบ)
+  const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set())   // วันที่ถูกยุบในประวัติการโอน
   const [machineProfiles, setMachineProfiles] = useState<Record<string,string>>({}) // machine_no → lot_no ปัจจุบัน
   const [typeFilter, setTypeFilter] = useState<'good'|'bad'|'scrap'>('good')
   const [pendingCounts, setPendingCounts] = useState<{ good: number; bad: number; scrap: number }>({ good: 0, bad: 0, scrap: 0 })
@@ -472,7 +473,17 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
     setSaving(true)
     try {
       const transferTime = new Date().toISOString()
-      const docNo        = `TR-${Date.now().toString().slice(-8)}`
+      // เลขใบโอน = ปีเดือนวัน(พ.ศ.2หลัก)-ลำดับใบของวันนั้น เช่น 690704-1
+      const _n = new Date()
+      const _yy = String((_n.getFullYear() + 543) % 100).padStart(2, '0')
+      const _mm = String(_n.getMonth() + 1).padStart(2, '0')
+      const _dd = String(_n.getDate()).padStart(2, '0')
+      const _datePart = `${_yy}${_mm}${_dd}`
+      const { data: _todayDocs } = await supabase.from('transfer_documents').select('doc_no').like('doc_no', `${_datePart}-%`)
+      const _maxSeq = (_todayDocs ?? []).reduce((m: number, d: any) => {
+        const n = parseInt(String(d.doc_no).split('-')[1] || '0'); return n > m ? n : m
+      }, 0)
+      const docNo = `${_datePart}-${_maxSeq + 1}`
 
       // รวบรวม machine_no / product_name / lot_no จากม้วนที่เลือก
       const machines    = [...new Set(selectedRolls.map(r => r.machine_no).filter(Boolean))]
@@ -729,16 +740,25 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                       </button>
                       )
                     }
-                    return groups.map(g => (
+                    const searching = !!docSearch.trim()
+                    return groups.map(g => {
+                      const collapsed = !searching && collapsedDays.has(g.day)   // ค้นหาอยู่ → เปิดทุกวันให้เห็นผล
+                      return (
                       <div key={g.day}>
-                        {/* หัวข้อวัน (sticky) + สรุปยอดวันนั้น */}
-                        <div className="sticky top-0 z-10 bg-slate-800/95 backdrop-blur px-4 py-1.5 border-y border-slate-700 flex items-center justify-between">
-                          <span className="text-[11px] font-black text-slate-200">📅 {g.day}</span>
+                        {/* หัวข้อวัน (sticky) — กดยุบ/ขยาย + สรุปยอดวันนั้น */}
+                        <button
+                          onClick={() => setCollapsedDays(prev => { const n = new Set(prev); n.has(g.day) ? n.delete(g.day) : n.add(g.day); return n })}
+                          className="sticky top-0 z-10 w-full bg-slate-800/95 backdrop-blur px-4 py-1.5 border-y border-slate-700 flex items-center justify-between hover:bg-slate-700/95 transition-colors">
+                          <span className="text-[11px] font-black text-slate-200 flex items-center gap-1.5">
+                            <span className={`text-[9px] text-slate-400 transition-transform ${collapsed ? '' : 'rotate-90'}`}>▶</span>
+                            📅 {g.day}
+                          </span>
                           <span className="text-[10px] text-slate-500">{g.items.length} ใบ · {fmt(g.items.reduce((s,x)=>s+(x.total_kg??0),0))} Kg</span>
-                        </div>
-                        <div className="divide-y divide-slate-800/50">{g.items.map(renderCard)}</div>
+                        </button>
+                        {!collapsed && <div className="divide-y divide-slate-800/50">{g.items.map(renderCard)}</div>}
                       </div>
-                    ))
+                      )
+                    })
                   })()}
                 </div>
               )}

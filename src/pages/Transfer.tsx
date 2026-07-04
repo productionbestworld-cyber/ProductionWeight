@@ -686,15 +686,27 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
               {fdocs.length === 0 ? (
                 <div className="py-16 text-center text-slate-600 text-sm">{(q||docType!=='all') ? 'ไม่พบใบโอนที่ตรงเงื่อนไข' : 'ยังไม่มีการโอน'}</div>
               ) : (
-                <div className="max-h-[70vh] overflow-y-auto divide-y divide-slate-800/50">
-                  {[...fdocs].sort((a,b)=>(b.transferred_at||'').localeCompare(a.transferred_at||'')).map(d => {
-                    const isSel = selectedDoc?.id === d.id
-                    const tt = d.transfer_type ?? 'good'
-                    const typeBadge = tt==='bad'?'bg-orange-500/20 text-orange-300':tt==='scrap'?'bg-red-500/20 text-red-300':'bg-blue-500/20 text-blue-300'
-                    const typeLbl = tt==='bad'?'🔄 กรอ':tt==='scrap'?'🗑 เศษ':'✅ FG'
-                    const unit = tt==='scrap'?'ถุง':'ม้วน'
-                    const dt = d.transferred_at ? new Date(d.transferred_at) : null
-                    return (
+                <div className="max-h-[70vh] overflow-y-auto">
+                  {(() => {
+                    const dayKeyOf = (x: any) => x.transferred_at
+                      ? new Date(x.transferred_at).toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok', weekday:'short', day:'2-digit', month:'short', year:'2-digit' })
+                      : '— ไม่ระบุวันที่'
+                    const sorted = [...fdocs].sort((a,b)=>(b.transferred_at||'').localeCompare(a.transferred_at||''))
+                    // จัดกลุ่มตามวัน (คงลำดับใหม่→เก่า)
+                    const groups: { day: string; items: any[] }[] = []
+                    for (const d of sorted) {
+                      const day = dayKeyOf(d)
+                      const g = groups[groups.length-1]
+                      if (g && g.day === day) g.items.push(d); else groups.push({ day, items:[d] })
+                    }
+                    const renderCard = (d: any) => {
+                      const isSel = selectedDoc?.id === d.id
+                      const tt = d.transfer_type ?? 'good'
+                      const typeBadge = tt==='bad'?'bg-orange-500/20 text-orange-300':tt==='scrap'?'bg-red-500/20 text-red-300':'bg-blue-500/20 text-blue-300'
+                      const typeLbl = tt==='bad'?'🔄 กรอ':tt==='scrap'?'🗑 เศษ':'✅ FG'
+                      const unit = tt==='scrap'?'ถุง':'ม้วน'
+                      const dt = d.transferred_at ? new Date(d.transferred_at) : null
+                      return (
                       <button key={d.id} onClick={()=>openDoc(d)}
                         className={`w-full text-left px-4 py-3 transition-colors border-l-4 ${isSel?'bg-brand-600/20 border-brand-500':'border-transparent hover:bg-slate-800/40'}`}>
                         {/* แถวบน: ขนาด (เด่นสุด) + ประเภท + น้ำหนัก */}
@@ -713,10 +725,21 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                           {d.sale_order && <span className="bg-blue-500/15 text-blue-300 px-1.5 py-0.5 rounded font-bold">SO {d.sale_order}</span>}
                           <span className="font-mono text-slate-500">Lot {d.lot_no}</span>
                         </div>
-                        <p className="text-slate-600 text-[10px] mt-1">📄 {d.doc_no} · 🕐 {dt?dt.toLocaleDateString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',year:'2-digit'})+' '+dt.toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'}):'—'} · โดย {d.transferred_by||'—'}</p>
+                        <p className="text-slate-600 text-[10px] mt-1">📄 {d.doc_no} · 🕐 {dt?dt.toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'}):'—'} · โดย {d.transferred_by||'—'}</p>
                       </button>
-                    )
-                  })}
+                      )
+                    }
+                    return groups.map(g => (
+                      <div key={g.day}>
+                        {/* หัวข้อวัน (sticky) + สรุปยอดวันนั้น */}
+                        <div className="sticky top-0 z-10 bg-slate-800/95 backdrop-blur px-4 py-1.5 border-y border-slate-700 flex items-center justify-between">
+                          <span className="text-[11px] font-black text-slate-200">📅 {g.day}</span>
+                          <span className="text-[10px] text-slate-500">{g.items.length} ใบ · {fmt(g.items.reduce((s,x)=>s+(x.total_kg??0),0))} Kg</span>
+                        </div>
+                        <div className="divide-y divide-slate-800/50">{g.items.map(renderCard)}</div>
+                      </div>
+                    ))
+                  })()}
                 </div>
               )}
                 </>)

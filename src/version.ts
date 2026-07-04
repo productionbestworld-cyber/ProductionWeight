@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '2.8.1'
-export const APP_BUILD_DATE = '2026-07-01'
+export const APP_VERSION = '2.9.0'
+export const APP_BUILD_DATE = '2026-07-04'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '2.9.0', date: '2026-07-04',
+    items: [
+      'ประวัติการโอน: แบ่งกลุ่มตามวัน — มีหัวข้อวันที่คั่น (📅) + สรุปยอดต่อวัน (จำนวนใบ · น้ำหนักรวม) เลื่อนดูง่ายขึ้น',
+    ],
+  },
   {
     version: '2.8.1', date: '2026-07-01',
     items: [

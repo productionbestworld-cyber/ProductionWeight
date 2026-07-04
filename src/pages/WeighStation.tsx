@@ -706,16 +706,19 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
 
     // ดึงทีละหน้า (page ละ 1000) จนครบ — กันเพดาน 1000 แถวของ Supabase ตัดข้อมูลเงียบ ๆ
     // (ก่อนหน้านี้ดึงครั้งเดียวไม่ใส่ limit/order → พอม้วนรวมเกิน 1000 ยอด "ดี" จะหายบางส่วน)
+    // ⚡ กรอง "lot ปัจจุบัน" ตั้งแต่ query → เดิมดึงม้วนทั้งหมดทุกประวัติ (หมื่นแถว) มากรอง client = ช้ามาก
+    //    ตอนนี้ดึงเฉพาะ lot ที่เครื่องกำลังเดิน (หลักร้อยแถว) — ผลเหมือนเดิม (โค้ดด้านล่างนับเฉพาะ lot ปัจจุบันอยู่แล้ว)
+    const curLots = Array.from(new Set(profiles.map(p => p.lotNo).filter(Boolean)))
     ;(async () => {
       const all: any[] = []
       const PAGE = 1000
       for (let from = 0; ; from += PAGE) {
-        const { data, error } = await supabase.from('production_rolls')
+        let q = supabase.from('production_rolls')
           .select('machine_no, lot_no, work_order, weight, roll_type')
           .in('roll_type', ['good', 'bad'])
           .in('machine_no', machineNos)
-          .order('id', { ascending: true })
-          .range(from, from + PAGE - 1)
+        if (curLots.length) q = q.in('lot_no', curLots)
+        const { data, error } = await q.order('id', { ascending: true }).range(from, from + PAGE - 1)
         if (error || !data) break
         all.push(...data)
         if (data.length < PAGE) break

@@ -185,6 +185,7 @@ function JobListView({ onPickJob, refreshSignal }: { onPickJob: (profile: Machin
   const [sysFilter, setSysFilter] = useState<'new'|'old'>('new')            // ✨ ชุดระบบใหม่ / งานเก่า
   const [reopening, setReopening] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
+  const [showScrap, setShowScrap]   = useState(false)   // modal ชั่งเศษเดี่ยว
   const [pickFor, setPickFor]       = useState<ReworkJob | null>(null)
   const [machines, setMachines]     = useState<{machine_no:string}[]>([])
   const [progress, setProgress]     = useState<Record<string,{rolls:number,kg:number}>>({})
@@ -582,7 +583,13 @@ function JobListView({ onPickJob, refreshSignal }: { onPickJob: (profile: Machin
             {returnSelMode ? '✕ ยกเลิกโยนคืน' : '↩ โยนคืนหลายม้วน'}
           </button>
         )}
+        {/* ชั่งเศษเดี่ยว — ไม่ผูกงาน */}
+        <button onClick={() => setShowScrap(true)}
+          className="text-xs font-bold px-3 py-2 rounded-lg border bg-amber-600/90 text-white border-amber-500 hover:bg-amber-500 transition-colors">
+          🗑 ชั่งเศษ
+        </button>
       </div>
+      {showScrap && <ScrapWeighModal onClose={() => setShowScrap(false)} />}
 
       {/* จอน้ำหนักสด — โชว์กิโลบนตาชั่งตอนนี้ (ดูก่อนเอาม้วนชั่งจริง) */}
       <LiveScale />
@@ -1224,6 +1231,125 @@ function LiveScale() {
           {showNum ? (val as number).toFixed(2) : '––.––'}
         </span>
         <span className="text-slate-500 text-base font-bold">Kg</span>
+      </div>
+    </div>
+  )
+}
+
+// ── ชั่งเศษเดี่ยว (ไม่ผูกงาน) — ชั่ง + ปริ้นสติ๊กเกอร์เศษ + ดูยอดที่ชั่งไป ──
+function ScrapWeighModal({ onClose }: { onClose: () => void }) {
+  const [val, setVal] = useState<number | null>(null)
+  const [stable, setStable] = useState(false)
+  const [wsOpen, setWsOpen] = useState(false)
+  const wsRef = useRef<WebSocket | null>(null)
+  const retryRef = useRef<any>(null)
+  const [manual, setManual] = useState('')                                  // พิมพ์น้ำหนักเอง (ถ้าไม่มีตาชั่ง)
+  const [scrapType, setScrapType] = useState<'scrap_clear'|'scrap_color'|'scrap_lump'>('scrap_clear')
+  const [inspector, setInspector] = useState('')
+  const [note, setNote] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [list, setList] = useState<any[]>([])
+
+  useEffect(() => {
+    let alive = true
+    const url = localStorage.getItem('bwp_bridge_url') ?? 'ws://localhost:8080'
+    function connect() {
+      if (!alive) return
+      try {
+        const ws = new WebSocket(url); wsRef.current = ws
+        ws.onopen = () => setWsOpen(true)
+        ws.onmessage = ev => { try { const d = JSON.parse(ev.data); if (d.type !== 'weight') return; if (typeof d.value === 'number') setVal(d.value); setStable(!!d.stable) } catch {} }
+        ws.onclose = () => { setWsOpen(false); if (alive) retryRef.current = setTimeout(connect, 3000) }
+        ws.onerror = () => { try { ws.close() } catch {} }
+      } catch { if (alive) retryRef.current = setTimeout(connect, 3000) }
+    }
+    connect()
+    return () => { alive = false; clearTimeout(retryRef.current); try { wsRef.current?.close() } catch {} }
+  }, [])
+
+  async function loadList() {
+    const { data } = await supabase.from('production_rolls')
+      .select('id, weight, roll_type, remark, inspector, created_at')
+      .eq('work_order', 'เศษกรอ').in('roll_type', ['scrap_clear','scrap_color','scrap_lump'])
+      .order('created_at', { ascending: false }).limit(300)
+    setList(data ?? [])
+  }
+  useEffect(() => { loadList() }, [])
+
+  const liveWt = wsOpen && val != null ? val : 0
+  const wt = wsOpen && val != null ? val : (parseFloat(manual) || 0)
+  const typeLabel = (t: string) => t === 'scrap_color' ? 'เศษสี' : t === 'scrap_lump' ? 'เศษก้อน' : 'เศษใส'
+
+  async function save() {
+    if (wt <= 0) { alert('ยังไม่มีน้ำหนัก (วางเศษบนตาชั่ง หรือพิมพ์น้ำหนักเอง)'); return }
+    if (!inspector.trim()) { alert('กรอกชื่อผู้ชั่งก่อน'); return }
+    setSaving(true)
+    try {
+      const { data, error } = await supabase.from('production_rolls').insert({
+        roll_no: 0, roll_type: scrapType, weight: wt, gross_weight: wt, core_weight: 0,
+        machine_no: 'กรอ', section: 'rewind', lot_no: 'เศษกรอ', work_order: 'เศษกรอ',
+        product_name: 'เศษจากการกรอ', inspector: inspector.trim(), remark: note.trim() || null,
+        created_at: new Date().toISOString(),
+      }).select().single()
+      if (error) throw error
+      try { await reprintRollLabel(data, 'short') } catch (e: any) { alert('บันทึกแล้ว แต่ปริ้นใบไม่สำเร็จ: ' + (e?.message ?? e)) }
+      setManual(''); setNote('')
+      await loadList()
+    } catch (e: any) { alert('บันทึกเศษไม่สำเร็จ: ' + (e?.message ?? e)) }
+    finally { setSaving(false) }
+  }
+
+  const total = list.reduce((s, r) => s + (r.weight ?? 0), 0)
+  return (
+    <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-800">
+          <p className="text-white font-black">🗑 ชั่งเศษ (ไม่ผูกงาน)</p>
+          <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={18}/></button>
+        </div>
+        <div className="px-5 py-4 overflow-y-auto space-y-3">
+          {/* น้ำหนักสด */}
+          <div className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 flex items-center justify-between">
+            <span className="text-slate-400 text-xs font-bold">⚖️ น้ำหนักบนตาชั่ง {wsOpen ? (stable ? '· นิ่ง' : '· กำลังชั่ง') : '· Bridge ไม่ต่อ (พิมพ์เอง)'}</span>
+            <span className={`font-black tabular-nums ${wsOpen ? 'text-green-300' : 'text-slate-600'}`} style={{ fontSize: '1.8rem' }}>{wsOpen && val != null ? liveWt.toFixed(2) : '––.––'}</span>
+          </div>
+          {!wsOpen && (
+            <input value={manual} onChange={e => setManual(e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal" placeholder="พิมพ์น้ำหนักเศษ (Kg)"
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-lg outline-none focus:border-amber-500" />
+          )}
+          {/* ชนิดเศษ */}
+          <div className="grid grid-cols-3 gap-2">
+            {(['scrap_clear','scrap_color','scrap_lump'] as const).map(t => (
+              <button key={t} onClick={() => setScrapType(t)}
+                className={`py-2 rounded-lg text-sm font-bold ${scrapType===t ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}>{typeLabel(t)}</button>
+            ))}
+          </div>
+          <input value={inspector} onChange={e => setInspector(e.target.value)} placeholder="ชื่อผู้ชั่ง *"
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-amber-500" />
+          <input value={note} onChange={e => setNote(e.target.value)} placeholder="หมายเหตุ (ถ้ามี)"
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-amber-500" />
+          <button onClick={save} disabled={saving || wt <= 0}
+            className="w-full bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white font-black py-3 rounded-xl">
+            {saving ? 'กำลังบันทึก…' : `🖨 บันทึกเศษ ${wt > 0 ? fmt(wt,2) : ''} Kg + ปริ้นใบ`}
+          </button>
+
+          {/* ── ช่องดูเศษที่ชั่งไป ── */}
+          <div className="pt-2 border-t border-slate-800">
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-slate-300 text-sm font-bold">📋 เศษที่ชั่งไปแล้ว</p>
+              <p className="text-amber-300 text-sm font-black">{list.length} รายการ · {fmt(total,2)} Kg</p>
+            </div>
+            <div className="max-h-52 overflow-y-auto border border-slate-800 rounded-lg divide-y divide-slate-800/60">
+              {list.length === 0 ? <p className="text-center py-6 text-slate-600 text-xs">ยังไม่มีเศษที่ชั่ง</p>
+              : list.map(r => (
+                <div key={r.id} className="flex items-center justify-between px-3 py-1.5 text-xs">
+                  <span className="text-slate-300">{typeLabel(r.roll_type)} <span className="text-slate-500">· {r.inspector || '—'}</span>{r.remark ? <span className="text-slate-600"> · {r.remark}</span> : ''}</span>
+                  <span className="text-slate-400 whitespace-nowrap">{fmt(r.weight,2)} Kg · {r.created_at ? new Date(r.created_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : ''}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   )

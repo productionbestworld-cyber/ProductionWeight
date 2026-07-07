@@ -3502,19 +3502,6 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                 </span>
               </div>
             )}
-            {/* กรอ: ปุ่มชั่งเศษด่วน ติดปุ่มบันทึก — แตะสลับโหมดเศษ (ใส่เหตุผลให้เลย) → กดบันทึกเศษ */}
-            {isRework && !isScrap && (
-              <button onClick={() => { if (!scrapReason.trim()) setScrapReason('เศษจากการกรอ'); setWeighType('scrap') }}
-                className="shrink-0 px-3.5 py-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-black text-sm flex items-center gap-1.5 active:scale-95">
-                🗑 ชั่งเศษ
-              </button>
-            )}
-            {isRework && isScrap && (
-              <button onClick={() => setWeighType('good')}
-                className="shrink-0 px-3 py-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-sm font-bold active:scale-95" title="กลับไปชั่งม้วนดี">
-                ↩ ดี
-              </button>
-            )}
             <button onClick={handleSave} disabled={saving || awaitingClear || saveWeight <= 0 || !stable || (isBad && !badReason.trim()) || (isScrap && !scrapReason.trim()) || (isGood && isRework && !reworkCause.trim())}
               className={`flex-1 py-3 rounded-xl text-white font-black flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-40 ${
                 awaitingClear ? 'bg-slate-700 cursor-not-allowed' :

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Plus, Trash2, RefreshCw, Search, X } from 'lucide-react'
 import { supabase, fetchAll } from '../lib/supabase'
 import { fetchProducts, backfillProductMatCore, type Product } from './Products'
@@ -583,6 +583,9 @@ function JobListView({ onPickJob, refreshSignal }: { onPickJob: (profile: Machin
           </button>
         )}
       </div>
+
+      {/* จอน้ำหนักสด — โชว์กิโลบนตาชั่งตอนนี้ (ดูก่อนเอาม้วนชั่งจริง) */}
+      <LiveScale />
 
       {/* แถบยืนยันกรอต่อ */}
       {mergeSelMode && (
@@ -1171,6 +1174,52 @@ function CreateJobModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
             {saving ? 'กำลังสร้าง...' : '+ สร้างงาน'}
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ── จอน้ำหนักสด (ต่อ Bridge เอง) — โชว์น้ำหนักบนตาชั่งตอนนี้ในหน้ารายการงานกรอ ──
+function LiveScale() {
+  const [val, setVal] = useState<number | null>(null)
+  const [stable, setStable] = useState(false)
+  const [connected, setConnected] = useState(false)
+  const wsRef = useRef<WebSocket | null>(null)
+  const retryRef = useRef<any>(null)
+  useEffect(() => {
+    let alive = true
+    const url = localStorage.getItem('bwp_bridge_url') ?? 'ws://localhost:8080'
+    function connect() {
+      if (!alive) return
+      try {
+        const ws = new WebSocket(url); wsRef.current = ws
+        ws.onmessage = ev => { try {
+          const d = JSON.parse(ev.data); if (d.type !== 'weight') return
+          if (d.connected !== undefined) setConnected(d.connected)
+          if (d.connected === false) return
+          if (typeof d.value === 'number') setVal(d.value)
+          setStable(!!d.stable)
+        } catch {} }
+        ws.onclose = () => { setConnected(false); if (alive) retryRef.current = setTimeout(connect, 3000) }
+        ws.onerror = () => { setConnected(false); try { ws.close() } catch {} }
+      } catch { if (alive) retryRef.current = setTimeout(connect, 3000) }
+    }
+    connect()
+    return () => { alive = false; clearTimeout(retryRef.current); try { wsRef.current?.close() } catch {} }
+  }, [])
+  return (
+    <div className="mb-3 bg-slate-950 border border-slate-800 rounded-xl px-5 py-2.5 flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <span className="text-slate-400 text-sm font-bold">⚖️ น้ำหนักบนตาชั่งตอนนี้</span>
+        {connected
+          ? <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${stable ? 'bg-green-500/20 text-green-300' : 'bg-amber-500/20 text-amber-300'}`}>{stable ? '● นิ่ง' : '◌ กำลังชั่ง'}</span>
+          : <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-red-500/20 text-red-300">⚠ ตาชั่งไม่ต่อ</span>}
+      </div>
+      <div className="flex items-baseline gap-1.5">
+        <span className={`font-black tabular-nums leading-none ${connected ? (stable ? 'text-green-300' : 'text-amber-300') : 'text-slate-600'}`} style={{ fontSize: '2.4rem' }}>
+          {connected && val != null ? val.toFixed(2) : '––.––'}
+        </span>
+        <span className="text-slate-500 text-base font-bold">Kg</span>
       </div>
     </div>
   )

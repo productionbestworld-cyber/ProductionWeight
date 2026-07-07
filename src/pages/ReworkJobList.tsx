@@ -1269,10 +1269,29 @@ function ScrapWeighModal({ onClose }: { onClose: () => void }) {
 
   async function loadList() {
     const { data } = await supabase.from('production_rolls')
-      .select('id, weight, roll_type, remark, inspector, created_at')
+      .select('id, roll_no, weight, gross_weight, core_weight, roll_type, remark, inspector, created_at, machine_no, section, lot_no, work_order, product_name, width_unit')
       .eq('work_order', 'เศษกรอ').in('roll_type', ['scrap_clear','scrap_color','scrap_lump'])
       .order('created_at', { ascending: false }).limit(300)
     setList(data ?? [])
+  }
+  const [mode, setMode] = useState<'weigh'|'view'>('weigh')
+  const [busy, setBusy] = useState<string | null>(null)
+  async function reprintScrap(r: any) {
+    setBusy(r.id + 'p')
+    try { await reprintRollLabel(r, 'short') } catch (e: any) { alert('รีปริ้นไม่สำเร็จ: ' + (e?.message ?? e)) }
+    finally { setBusy(null) }
+  }
+  async function deleteScrap(r: any) {
+    if (!confirm(`ลบเศษนี้? (${fmt(r.weight,2)} Kg)\n\nลบถาวร — ใช้กรณีชั่งผิด`)) return
+    setBusy(r.id + 'd')
+    try {
+      const { error } = await supabase.rpc('delete_roll_atomic', {
+        p_roll_id: r.id, p_deleted_by: r.inspector || 'ชั่งเศษ', p_reason: 'ชั่งเศษผิด', p_work_order: 'เศษกรอ', p_sale_order: null,
+      })
+      if (error) throw error
+      await loadList()
+    } catch (e: any) { alert('ลบไม่สำเร็จ: ' + (e?.message ?? e)) }
+    finally { setBusy(null) }
   }
   useEffect(() => { loadList() }, [])
 
@@ -1307,48 +1326,62 @@ function ScrapWeighModal({ onClose }: { onClose: () => void }) {
           <p className="text-white font-black">🗑 ชั่งเศษ (ไม่ผูกงาน)</p>
           <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={18}/></button>
         </div>
-        <div className="px-5 py-4 overflow-y-auto space-y-3">
-          {/* น้ำหนักสด */}
-          <div className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 flex items-center justify-between">
-            <span className="text-slate-400 text-xs font-bold">⚖️ น้ำหนักบนตาชั่ง {wsOpen ? (stable ? '· นิ่ง' : '· กำลังชั่ง') : '· Bridge ไม่ต่อ (พิมพ์เอง)'}</span>
-            <span className={`font-black tabular-nums ${wsOpen ? 'text-green-300' : 'text-slate-600'}`} style={{ fontSize: '1.8rem' }}>{wsOpen && val != null ? liveWt.toFixed(2) : '––.––'}</span>
-          </div>
-          {!wsOpen && (
-            <input value={manual} onChange={e => setManual(e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal" placeholder="พิมพ์น้ำหนักเศษ (Kg)"
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-lg outline-none focus:border-amber-500" />
-          )}
-          {/* ชนิดเศษ */}
-          <div className="grid grid-cols-3 gap-2">
-            {(['scrap_clear','scrap_color','scrap_lump'] as const).map(t => (
-              <button key={t} onClick={() => setScrapType(t)}
-                className={`py-2 rounded-lg text-sm font-bold ${scrapType===t ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}>{typeLabel(t)}</button>
-            ))}
-          </div>
-          <input value={inspector} onChange={e => setInspector(e.target.value)} placeholder="ชื่อผู้ชั่ง *"
-            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-amber-500" />
-          <input value={note} onChange={e => setNote(e.target.value)} placeholder="หมายเหตุ (ถ้ามี)"
-            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-amber-500" />
-          <button onClick={save} disabled={saving || wt <= 0}
-            className="w-full bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white font-black py-3 rounded-xl">
-            {saving ? 'กำลังบันทึก…' : `🖨 บันทึกเศษ ${wt > 0 ? fmt(wt,2) : ''} Kg + ปริ้นใบ`}
-          </button>
+        {/* แท็บ: ชั่งเศษ / ดูเศษที่ชั่งไป */}
+        <div className="flex gap-1 px-5 pt-3">
+          {([['weigh','🗑 ชั่งเศษ'],['view',`📋 เศษที่ชั่งไป (${list.length})`]] as const).map(([k,label]) => (
+            <button key={k} onClick={() => setMode(k as any)}
+              className={`text-sm font-bold px-4 py-2 rounded-lg ${mode===k ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}>{label}</button>
+          ))}
+        </div>
 
-          {/* ── ช่องดูเศษที่ชั่งไป ── */}
-          <div className="pt-2 border-t border-slate-800">
-            <div className="flex items-center justify-between mb-1.5">
-              <p className="text-slate-300 text-sm font-bold">📋 เศษที่ชั่งไปแล้ว</p>
-              <p className="text-amber-300 text-sm font-black">{list.length} รายการ · {fmt(total,2)} Kg</p>
+        <div className="px-5 py-4 overflow-y-auto space-y-3">
+          {mode === 'weigh' ? (<>
+            {/* น้ำหนักสด */}
+            <div className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 flex items-center justify-between">
+              <span className="text-slate-400 text-xs font-bold">⚖️ น้ำหนักบนตาชั่ง {wsOpen ? (stable ? '· นิ่ง' : '· กำลังชั่ง') : '· Bridge ไม่ต่อ (พิมพ์เอง)'}</span>
+              <span className={`font-black tabular-nums ${wsOpen ? 'text-green-300' : 'text-slate-600'}`} style={{ fontSize: '1.8rem' }}>{wsOpen && val != null ? liveWt.toFixed(2) : '––.––'}</span>
             </div>
-            <div className="max-h-52 overflow-y-auto border border-slate-800 rounded-lg divide-y divide-slate-800/60">
-              {list.length === 0 ? <p className="text-center py-6 text-slate-600 text-xs">ยังไม่มีเศษที่ชั่ง</p>
-              : list.map(r => (
-                <div key={r.id} className="flex items-center justify-between px-3 py-1.5 text-xs">
-                  <span className="text-slate-300">{typeLabel(r.roll_type)} <span className="text-slate-500">· {r.inspector || '—'}</span>{r.remark ? <span className="text-slate-600"> · {r.remark}</span> : ''}</span>
-                  <span className="text-slate-400 whitespace-nowrap">{fmt(r.weight,2)} Kg · {r.created_at ? new Date(r.created_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : ''}</span>
-                </div>
+            {!wsOpen && (
+              <input value={manual} onChange={e => setManual(e.target.value.replace(/[^\d.]/g, ''))} inputMode="decimal" placeholder="พิมพ์น้ำหนักเศษ (Kg)"
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-lg outline-none focus:border-amber-500" />
+            )}
+            <div className="grid grid-cols-3 gap-2">
+              {(['scrap_clear','scrap_color','scrap_lump'] as const).map(t => (
+                <button key={t} onClick={() => setScrapType(t)}
+                  className={`py-2 rounded-lg text-sm font-bold ${scrapType===t ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}>{typeLabel(t)}</button>
               ))}
             </div>
-          </div>
+            <input value={inspector} onChange={e => setInspector(e.target.value)} placeholder="ชื่อผู้ชั่ง *"
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-amber-500" />
+            <input value={note} onChange={e => setNote(e.target.value)} placeholder="หมายเหตุ (ถ้ามี)"
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-amber-500" />
+            <button onClick={save} disabled={saving || wt <= 0}
+              className="w-full bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white font-black py-3 rounded-xl">
+              {saving ? 'กำลังบันทึก…' : `🖨 บันทึกเศษ ${wt > 0 ? fmt(wt,2) : ''} Kg + ปริ้นใบ`}
+            </button>
+          </>) : (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-slate-300 text-sm font-bold">📋 เศษที่ชั่งไปแล้ว</p>
+                <p className="text-amber-300 text-sm font-black">{list.length} รายการ · {fmt(total,2)} Kg</p>
+              </div>
+              <div className="border border-slate-800 rounded-lg divide-y divide-slate-800/60">
+                {list.length === 0 ? <p className="text-center py-8 text-slate-600 text-xs">ยังไม่มีเศษที่ชั่ง</p>
+                : list.map(r => (
+                  <div key={r.id} className="flex items-center gap-2 px-3 py-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-slate-200 text-sm font-bold">{typeLabel(r.roll_type)} · {fmt(r.weight,2)} Kg</p>
+                      <p className="text-slate-500 text-[11px] truncate">{r.inspector || '—'}{r.remark ? ` · ${r.remark}` : ''} · {r.created_at ? new Date(r.created_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : ''}</p>
+                    </div>
+                    <button onClick={() => reprintScrap(r)} disabled={busy===r.id+'p'}
+                      className="shrink-0 text-[11px] font-bold bg-brand-600/80 hover:bg-brand-500 text-white px-2.5 py-1.5 rounded-lg disabled:opacity-50">🖨</button>
+                    <button onClick={() => deleteScrap(r)} disabled={busy===r.id+'d'}
+                      className="shrink-0 text-[11px] font-bold bg-red-600/80 hover:bg-red-500 text-white px-2.5 py-1.5 rounded-lg disabled:opacity-50">🗑</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

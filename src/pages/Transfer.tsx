@@ -262,6 +262,80 @@ function buildTransferSheet(
   return ws
 }
 
+// ── ชนิดเศษ ────────────────────────────────────────────────────────────────
+const SCRAP_KIND_LABEL: Record<string, string> = {
+  scrap_clear: 'เศษใส', scrap_color: 'เศษสี', scrap_lump: 'เศษก้อน',
+}
+function scrapKindLabel(t: any): string {
+  return SCRAP_KIND_LABEL[String(t)] ?? 'เศษอื่นๆ'
+}
+
+// ── Excel เศษ — แยกตามชนิด (ใส / สี / ก้อน) พร้อมสรุปยอดต่อชนิด + subtotal ─────
+function buildScrapSheet(
+  rollsIn: any[],
+  opts: { docNo: string; date: Date; staff: string }
+) {
+  const { docNo, date, staff } = opts
+  const KINDS = ['scrap_clear', 'scrap_color', 'scrap_lump'] as const
+  const order: Record<string, number> = { scrap_clear: 0, scrap_color: 1, scrap_lump: 2 }
+  const rolls = [...rollsIn].sort((a, b) =>
+    (order[a.roll_type] ?? 9) - (order[b.roll_type] ?? 9) ||
+    new Date(a.created_at ?? 0).getTime() - new Date(b.created_at ?? 0).getTime())
+
+  const dateStr = date.toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok', day:'2-digit', month:'2-digit', year:'numeric' })
+  const timeStr = date.toLocaleTimeString('th-TH', { timeZone:'Asia/Bangkok', hour:'2-digit', minute:'2-digit' })
+  const total   = rolls.reduce((s, r) => s + (r.weight ?? 0), 0)
+  const itemsOf = (k: string) => rolls.filter(r => r.roll_type === k)
+  const kgOf    = (k: string) => itemsOf(k).reduce((s, r) => s + (r.weight ?? 0), 0)
+  const COLS = 12
+
+  const header: any[][] = [
+    ['บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด'],
+    ['ใบโอนเศษเสียเข้าคลัง (BWP SCRAP TRANSFER NOTE)'],
+    ['⚠ แยกตามประเภทเศษ: ใส / สี / ก้อน'],
+    [],
+    ['เลขที่ใบโอน :', docNo, '', 'วันที่ :', dateStr, 'เวลา :', timeStr],
+    ['ผู้โอน :', staff, '', 'รวมทั้งสิ้น :', `${rolls.length} ถุง`, 'น้ำหนักรวม :', `${total.toFixed(2)} Kgs.`],
+    [],
+    ['สรุปตามประเภทเศษ'],
+    ['ประเภท', 'จำนวน (ถุง)', 'น้ำหนัก (Kgs.)'],
+    ...KINDS.filter(k => itemsOf(k).length).map(k => [scrapKindLabel(k), itemsOf(k).length, Number(kgOf(k).toFixed(2))]),
+    ['รวมทั้งสิ้น', rolls.length, Number(total.toFixed(2))],
+    [],
+    ['รายละเอียด (จัดกลุ่มตามชนิด)'],
+    ['ลำดับ', 'ประเภทเศษ', 'น้ำหนัก (Kgs.)', 'เครื่อง', 'WO', 'Lot', 'สินค้า', 'ลูกค้า', 'ผู้ตรวจสอบ', 'เหตุผล/หมายเหตุ', 'เวลาชั่ง', 'ผู้โอน'],
+  ]
+
+  const body: any[][] = []
+  let idx = 0
+  for (const k of KINDS) {
+    const items = itemsOf(k)
+    if (!items.length) continue
+    body.push([`▶ ${scrapKindLabel(k)} (${items.length} ถุง · ${kgOf(k).toFixed(2)} Kgs.)`])
+    for (const r of items) {
+      idx++
+      body.push([
+        idx, scrapKindLabel(k), Number((r.weight ?? 0).toFixed(2)),
+        r.machine_no ?? '', r.work_order ?? '', r.lot_no ?? '',
+        r.product_name ?? '', r.customer ?? '', r.inspector ?? '', r.remark ?? '',
+        new Date(r.created_at).toLocaleString('th-TH', { timeZone:'Asia/Bangkok' }),
+        r.transferred_by ?? staff,
+      ])
+    }
+    body.push(['', `รวม${scrapKindLabel(k)}`, Number(kgOf(k).toFixed(2)), '', '', '', '', '', '', '', '', ''])
+  }
+  body.push(['', 'รวมทั้งสิ้น', Number(total.toFixed(2)), '', '', '', '', '', '', '', '', ''])
+
+  const ws = XLSX.utils.aoa_to_sheet([...header, ...body])
+  ws['!cols'] = [{wch:6},{wch:12},{wch:14},{wch:8},{wch:14},{wch:16},{wch:24},{wch:20},{wch:14},{wch:24},{wch:22},{wch:12}]
+  ws['!merges'] = [
+    { s:{r:0,c:0}, e:{r:0,c:COLS-1} },
+    { s:{r:1,c:0}, e:{r:1,c:COLS-1} },
+    { s:{r:2,c:0}, e:{r:2,c:COLS-1} },
+  ]
+  return ws
+}
+
 function exportExcel(rolls: any[], staff: string) {
   if (!rolls.length) return
   const now     = new Date()
@@ -270,9 +344,13 @@ function exportExcel(rolls: any[], staff: string) {
 
   // ตั้งชื่อ sheet ตามประเภท
   const ft = rolls[0]?.roll_type ?? 'good'
-  const sheetName = String(ft).startsWith('scrap') ? 'Scrap' : ft === 'bad' ? 'Rework' : 'Transfer'
+  const isScrap = String(ft).startsWith('scrap')
+  const sheetName = isScrap ? 'Scrap' : ft === 'bad' ? 'Rework' : 'Transfer'
 
-  const ws = buildTransferSheet(rolls, { docNo, date: now, staff, sheetName })
+  // เศษ → sheet แยกชนิด (ใส/สี/ก้อน) · อื่นๆ → sheet ปกติ
+  const ws = isScrap
+    ? buildScrapSheet(rolls, { docNo, date: now, staff })
+    : buildTransferSheet(rolls, { docNo, date: now, staff, sheetName })
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, sheetName)
   const prefix = sheetName === 'Scrap' ? 'scrap' : sheetName === 'Rework' ? 'rework' : 'transfer'
@@ -309,6 +387,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   }
   const [docSearch,   setDocSearch]   = useState('')   // ค้นหาในประวัติการโอน
   const [docType,     setDocType]     = useState<'all'|'good'|'bad'|'scrap'>('all')  // กรองประเภทในประวัติ
+  const [docMonth,    setDocMonth]    = useState<string>('all')  // กรองเดือนในประวัติ (YYYY-MM หรือ 'all')
   const [loading,     setLoading]     = useState(true)
   const [saving,      setSaving]      = useState(false)
   const [selectedDoc, setSelectedDoc] = useState<any | null>(null)
@@ -319,6 +398,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set())   // วันที่ถูกยุบในประวัติการโอน
   const [machineProfiles, setMachineProfiles] = useState<Record<string,string>>({}) // machine_no → lot_no ปัจจุบัน
   const [typeFilter, setTypeFilter] = useState<'good'|'bad'|'scrap'>('good')
+  const [scrapKind,  setScrapKind]  = useState<'all'|'clear'|'color'|'lump'>('all')  // แยกชนิดเศษเมื่อ typeFilter='scrap'
   const [pendingCounts, setPendingCounts] = useState<{ good: number; bad: number; scrap: number }>({ good: 0, bad: 0, scrap: 0 })
 
   // โหลดจำนวนม้วนคงค้างทุกประเภท
@@ -379,9 +459,29 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
     })
   }, [])
 
+  // ── กรองชนิดเศษ (ใส/สี/ก้อน) — มีผลเฉพาะ tab เศษ ──
+  const scrapMatch = (r: any) =>
+    typeFilter !== 'scrap' || scrapKind === 'all' || r.roll_type === `scrap_${scrapKind}`
+  const scopedRolls = typeFilter === 'scrap' && scrapKind !== 'all' ? rolls.filter(scrapMatch) : rolls
+
+  // นับเศษแต่ละชนิด (เฉพาะที่ยังไม่โอน) — ใช้โชว์บนปุ่มกรองชนิดเศษ
+  const scrapKindCounts = (() => {
+    const c = { clear:{n:0,kg:0}, color:{n:0,kg:0}, lump:{n:0,kg:0}, all:{n:0,kg:0} }
+    if (typeFilter !== 'scrap') return c
+    for (const r of rolls) {
+      if (r.transferred) continue
+      const kg = r.weight ?? 0
+      const k = r.roll_type === 'scrap_clear' ? 'clear' : r.roll_type === 'scrap_color' ? 'color' : r.roll_type === 'scrap_lump' ? 'lump' : null
+      if (!k) continue
+      ;(c as any)[k].n += 1; (c as any)[k].kg += kg
+      c.all.n += 1; c.all.kg += kg
+    }
+    return c
+  })()
+
   // หา machine + lot ทั้งหมดที่มีในวันนี้
-  const machines = Array.from(new Set(rolls.map(r => r.machine_no).filter(Boolean))).sort()
-  const lots     = Array.from(new Set(rolls
+  const machines = Array.from(new Set(scopedRolls.map(r => r.machine_no).filter(Boolean))).sort()
+  const lots     = Array.from(new Set(scopedRolls
     .filter(r => !machine || r.machine_no === machine)
     .map(r => r.lot_no).filter(Boolean))).sort()
 
@@ -390,7 +490,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   //    (กัน 2 สินค้าคนละไซส์ที่ใช้ Lot กรอเดียวกัน มารวมใบโอนเดียว)
   //    งานปกติ: แยกตาม WO เหมือนเดิม (กัน 2 สินค้าปน Lot เดียว)
   const groupMap = new Map<string, any[]>()
-  for (const r of rolls) {
+  for (const r of scopedRolls) {
     if (!r.machine_no) continue
     const key = r.new_system
       ? `${r.machine_no}__${r.lot_no}__${r.item_code ?? ''}__${NS_WO}`
@@ -420,7 +520,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
       (a.customer || '').localeCompare(b.customer || '') ||
       (a.machine_no || '').localeCompare(b.machine_no || ''))
 
-  const filtered = rolls.filter(r => {
+  const filtered = scopedRolls.filter(r => {
     if (!showDone && r.transferred) return false
     if (machine && machine !== '__ALL__' && r.machine_no !== machine) return false
     if (lotNo && r.lot_no !== lotNo) return false
@@ -492,6 +592,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
       const wos         = [...new Set(selectedRolls.map(r => r.work_order).filter(Boolean))]
       const sos         = [...new Set(selectedRolls.map(r => r.sale_order).filter(Boolean))]
       const custs       = [...new Set(selectedRolls.map(r => r.customer).filter(Boolean))]
+      const itemCodes   = [...new Set(selectedRolls.map(r => r.item_code).filter(Boolean))]
       const sz          = (() => { const s = selectedRolls[0]; return s?.width_cm && s?.thick_mc ? `${s.width_cm}${s.width_unit ?? 'cm'}×${s.thick_mc}mc` : '' })()
 
       // 1. สร้าง transfer_document
@@ -507,6 +608,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
         work_order:     wos.join(', '),
         sale_order:     sos.join(', '),
         customer:       custs.join(', '),
+        item_code:      itemCodes.join(', '),
         size:           sz,
         transfer_type:  typeFilter, // good | bad | scrap
       }).select().single()
@@ -566,14 +668,17 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
     if (!rolls.length) return
     const docDate = new Date(doc.transferred_at)
     const dateStr = docDate.toISOString().slice(0,10).replace(/-/g,'')
-    const ws = buildTransferSheet(rolls, {
-      docNo: doc.doc_no,
-      date:  docDate,
-      staff: doc.transferred_by,
-      sheetName: doc.doc_no,
-    })
+    const isScrap = String(doc.transfer_type ?? rolls[0]?.roll_type ?? '').startsWith('scrap')
+    const ws = isScrap
+      ? buildScrapSheet(rolls, { docNo: doc.doc_no, date: docDate, staff: doc.transferred_by })
+      : buildTransferSheet(rolls, {
+          docNo: doc.doc_no,
+          date:  docDate,
+          staff: doc.transferred_by,
+          sheetName: doc.doc_no,
+        })
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, doc.doc_no)
+    XLSX.utils.book_append_sheet(wb, ws, String(doc.doc_no).slice(0, 31))
     XLSX.writeFile(wb, `${doc.doc_no}_${dateStr}.xlsx`)
   }
 
@@ -633,7 +738,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                 const n = pendingCounts[t.key]
                 const isActive = typeFilter === t.key
                 return (
-                  <button key={t.key} onClick={() => { setTypeFilter(t.key); setSelected(new Set()); setMachine(''); setLotNo(''); setWoFilter(''); setItemFilter('') }}
+                  <button key={t.key} onClick={() => { setTypeFilter(t.key); setScrapKind('all'); setSelected(new Set()); setMachine(''); setLotNo(''); setWoFilter(''); setItemFilter('') }}
                     className={`relative px-3.5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
                       isActive ? `${t.color} text-white` : 'text-slate-400 hover:text-white'
                     }`}>
@@ -652,6 +757,33 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
           )}
         </div>
 
+        {/* ── แยกชนิดเศษ (ใส / สี / ก้อน) — เฉพาะ tab เศษ ── */}
+        {tab === 'transfer' && typeFilter === 'scrap' && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">แยกชนิดเศษ:</span>
+            {([
+              { key:'all',   label:'ทั้งหมด', c:scrapKindCounts.all,   cls:'bg-slate-600' },
+              { key:'clear', label:'⚪ เศษใส', c:scrapKindCounts.clear, cls:'bg-slate-500' },
+              { key:'color', label:'🟣 เศษสี', c:scrapKindCounts.color, cls:'bg-purple-600' },
+              { key:'lump',  label:'🟤 เศษก้อน', c:scrapKindCounts.lump, cls:'bg-amber-700' },
+            ] as const).map(k => {
+              const isActive = scrapKind === k.key
+              return (
+                <button key={k.key} onClick={() => { setScrapKind(k.key); setSelected(new Set()); setMachine(''); setLotNo(''); setWoFilter(''); setItemFilter('') }}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${isActive ? `${k.cls} text-white` : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'}`}>
+                  <span>{k.label}</span>
+                  {k.c.n > 0 && (
+                    <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${isActive ? 'bg-white/25 text-white' : 'bg-slate-900 text-slate-300'}`}
+                      title={`${k.c.n} ถุง · ${fmt(k.c.kg)} Kgs. ที่ยังไม่โอน`}>
+                      {k.c.n} · {fmt(k.c.kg, 0)}kg
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
         {tab === 'history' ? (
           <div className="flex gap-4">
 
@@ -663,14 +795,40 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                   ? true
                   : docType === 'scrap' ? String(d.transfer_type ?? '').startsWith('scrap')
                   : (d.transfer_type ?? 'good') === docType
-                const fdocs = docs.filter(d => matchType(d) && (!q ||
-                  `${d.doc_no ?? ''} ${d.product_name ?? ''} ${d.customer ?? ''} ${d.size ?? ''} ${d.work_order ?? ''} ${d.sale_order ?? ''} ${d.lot_no ?? ''} ${d.machine_no ?? ''} ${d.transferred_by ?? ''} ${d.transfer_type ?? ''}`.toLowerCase().includes(q)))
+                // เดือนของใบ (ตามเวลาไทย) = YYYY-MM
+                const monthKeyOf = (d: any) => d.transferred_at
+                  ? new Date(new Date(d.transferred_at).getTime() + 7*3600*1000).toISOString().slice(0,7)
+                  : ''
+                const matchMonth = (d: any) => docMonth === 'all' || monthKeyOf(d) === docMonth
+                // รายการเดือนที่มีข้อมูล (ใหม่→เก่า) สำหรับ dropdown
+                const monthOptions = Array.from(new Set(docs.map(monthKeyOf).filter(Boolean))).sort().reverse()
+                const monthLabel = (m: string) => {
+                  const [y, mo] = m.split('-').map(Number)
+                  const th = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
+                  return `${th[mo-1]} ${(y+543)%100}`
+                }
+                const fdocs = docs.filter(d => matchType(d) && matchMonth(d) && (!q ||
+                  `${d.doc_no ?? ''} ${d.item_code ?? ''} ${d.product_name ?? ''} ${d.customer ?? ''} ${d.size ?? ''} ${d.work_order ?? ''} ${d.sale_order ?? ''} ${d.lot_no ?? ''} ${d.machine_no ?? ''} ${d.transferred_by ?? ''} ${d.transfer_type ?? ''}`.toLowerCase().includes(q)))
                 const cnt = (t: 'good'|'bad'|'scrap') => docs.filter(d => t==='scrap' ? String(d.transfer_type??'').startsWith('scrap') : (d.transfer_type??'good')===t).length
                 return (<>
               <div className="px-4 py-3 border-b border-slate-800 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <p className="text-white font-semibold text-sm">📦 ประวัติการโอน — จัดตามงาน</p>
-                  <p className="text-slate-500 text-[10px]">{fdocs.length}{(q||docType!=='all') && `/${docs.length}`} ใบ · {fmt(fdocs.reduce((s,d)=>s+(d.total_kg??0),0))} Kgs.</p>
+                  <p className="text-slate-500 text-[10px]">{fdocs.length}{(q||docType!=='all'||docMonth!=='all') && `/${docs.length}`} ใบ · {fmt(fdocs.reduce((s,d)=>s+(d.total_kg??0),0))} Kgs.</p>
+                </div>
+                {/* กรองเดือน */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] text-slate-500 font-bold">📅 เดือน:</span>
+                  <select value={docMonth} onChange={e => setDocMonth(e.target.value)}
+                    className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-[11px] font-bold text-white outline-none focus:border-brand-500 cursor-pointer">
+                    <option value="all">ทุกเดือน ({docs.length})</option>
+                    {monthOptions.map(m => (
+                      <option key={m} value={m}>{monthLabel(m)} ({docs.filter(d => monthKeyOf(d) === m).length})</option>
+                    ))}
+                  </select>
+                  {docMonth !== 'all' && (
+                    <button onClick={() => setDocMonth('all')} className="text-[10px] text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg px-2 py-1">✕ ล้างเดือน</button>
+                  )}
                 </div>
                 {/* กรองประเภท */}
                 <div className="flex items-center gap-1.5 flex-wrap">
@@ -689,13 +847,13 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                 <div className="relative">
                   <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500"/>
                   <input value={docSearch} onChange={e => setDocSearch(e.target.value)}
-                    placeholder="ค้นหา: เลขใบ / สินค้า / ลูกค้า / ขนาด / WO / SO / Lot / เครื่อง / ผู้โอน..."
+                    placeholder="ค้นหา: เลขใบ / รหัสสินค้า / สินค้า / ลูกค้า / ขนาด / WO / SO / Lot / เครื่อง / ผู้โอน..."
                     className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-8 pr-8 py-1.5 text-xs text-white outline-none focus:border-brand-500"/>
                   {docSearch && <button onClick={()=>setDocSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white text-xs">✕</button>}
                 </div>
               </div>
               {fdocs.length === 0 ? (
-                <div className="py-16 text-center text-slate-600 text-sm">{(q||docType!=='all') ? 'ไม่พบใบโอนที่ตรงเงื่อนไข' : 'ยังไม่มีการโอน'}</div>
+                <div className="py-16 text-center text-slate-600 text-sm">{(q||docType!=='all'||docMonth!=='all') ? 'ไม่พบใบโอนที่ตรงเงื่อนไข' : 'ยังไม่มีการโอน'}</div>
               ) : (
                 <div className="max-h-[70vh] overflow-y-auto">
                   {(() => {
@@ -731,6 +889,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                         {/* ลูกค้า (เด่นรอง) */}
                         {d.customer && <p className="text-white text-xs font-bold truncate">👥 {d.customer}</p>}
                         <p className="text-slate-400 text-[10px] mt-0.5 truncate">{d.product_name||'—'}</p>
+                        {d.item_code && <p className="text-emerald-300/80 text-[10px] font-mono mt-0.5 truncate">🏷 {d.item_code}</p>}
                         <div className="flex items-center gap-1.5 flex-wrap text-[10px] mt-1">
                           {d.work_order && <span className="bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded font-bold">WO {d.work_order}</span>}
                           {d.sale_order && <span className="bg-blue-500/15 text-blue-300 px-1.5 py-0.5 rounded font-bold">SO {d.sale_order}</span>}
@@ -1195,6 +1354,13 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className={`font-mono font-black text-base ${isDone ? 'text-slate-500' : 'text-white'}`}>{String(r.roll_type).startsWith('scrap') ? 'ถุงเศษ' : `ม้วน #${r.roll_no}`}</span>
+                            {String(r.roll_type).startsWith('scrap') && (
+                              <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                                r.roll_type==='scrap_color' ? 'bg-purple-500/20 text-purple-300' :
+                                r.roll_type==='scrap_lump'  ? 'bg-amber-500/20 text-amber-300' :
+                                                              'bg-slate-500/20 text-slate-300'
+                              }`}>{scrapKindLabel(r.roll_type)}</span>
+                            )}
                             {r.work_order && <span className="text-[10px] bg-amber-500/15 text-amber-300 px-2 py-0.5 rounded font-bold">WO {r.work_order}</span>}
                             {r.sale_order && <span className="text-[10px] bg-blue-500/15 text-blue-300 px-2 py-0.5 rounded font-bold">SO {r.sale_order}</span>}
                             {r.rework_source_lot && <span className="text-[10px] text-slate-500 font-mono">จาก {r.rework_source_lot}</span>}

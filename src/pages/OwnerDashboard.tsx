@@ -21,7 +21,8 @@ type Roll = {
   work_order: string | null; sale_order: string | null; lot_no: string | null
   created_at: string; inspector: string | null
   new_system: boolean | null; transferred: boolean | null
-  length: number | null; pcs: number | null
+  // ⚠️ length/pcs เป็น text ในฐานข้อมูล ไม่ใช่ number — ต้องแปลงก่อนบวกเสมอ (ใช้ num())
+  length: string | number | null; pcs: string | number | null
 }
 type Doc = {
   id: string; doc_no: string; transferred_at: string; transferred_by: string | null
@@ -32,11 +33,18 @@ type Doc = {
 
 // ── helper ────────────────────────────────────────────────────────────
 const TZ = 'Asia/Bangkok'
+// ม้วนแรกในระบบชั่งใหม่คือ 1 มิ.ย. 2026 — ก่อนหน้านั้นข้อมูลอยู่ในระบบเก่าเท่านั้น
+const DATA_START_LABEL = '1 มิ.ย. 2026'
 const nf = (n: number, d = 0) =>
   (n ?? 0).toLocaleString('th-TH', { minimumFractionDigits: d, maximumFractionDigits: d })
 const isGood  = (r: Roll) => r.roll_type === 'good'
 const isWaste = (r: Roll) => r.roll_type !== 'good'   // bad / scrap_clear / scrap*
 const wkg = (r: Roll) => r.weight ?? 0
+// คอลัมน์ text ที่เก็บตัวเลข — บวกตรงๆ จะได้สตริงต่อกัน ("1080"+"1400"="10801400")
+const num = (v: string | number | null | undefined) => {
+  const n = typeof v === 'number' ? v : parseFloat(String(v ?? ''))
+  return isFinite(n) ? n : 0
+}
 
 // คีย์วัน/เดือน เวลาไทย
 const dayKey = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: TZ }) // YYYY-MM-DD
@@ -62,7 +70,9 @@ function rangeStartISO(k: RangeKey): string | null {
   const now = new Date()
   const d = new Date(now)
   if (k === 'all') return null
-  if (k === 'today') { d.setHours(0, 0, 0, 0); return new Date(d.getTime() - 7 * 3600e3).toISOString() } // ~เริ่มวันไทย
+  // setHours(0,0,0,0) = เที่ยงคืนตามเวลาเครื่อง ซึ่งเป็นเวลาไทยอยู่แล้ว
+  // เดิมลบ 7 ชม. ซ้ำอีก ทำให้ "วันนี้" ลากข้อมูลตั้งแต่ 5 โมงเย็นของเมื่อวานมาด้วย
+  if (k === 'today') { d.setHours(0, 0, 0, 0); return d.toISOString() }
   if (k === '7d')  { d.setDate(d.getDate() - 7); return d.toISOString() }
   if (k === '30d') { d.setDate(d.getDate() - 30); return d.toISOString() }
   if (k === 'month') { return new Date(now.getFullYear(), now.getMonth(), 1).toISOString() }
@@ -109,10 +119,13 @@ export default function OwnerDashboard() {
     const goodKg = good.reduce((s, r) => s + wkg(r), 0)
     const wasteKg = waste.reduce((s, r) => s + wkg(r), 0)
     const total = goodKg + wasteKg
-    const lenM = good.reduce((s, r) => s + (r.length ?? 0), 0)
-    const pcs  = good.reduce((s, r) => s + (r.pcs ?? 0), 0)
+    const lenM = good.reduce((s, r) => s + num(r.length), 0)
+    const pcs  = good.reduce((s, r) => s + num(r.pcs), 0)
+    // แยก "เศษทิ้งจริง" (scrap_*) ออกจาก "ม้วนส่งกรอ" (bad) ซึ่งกู้กลับเป็น FG ได้
+    const scrapKg = R.filter(r => String(r.roll_type).startsWith('scrap')).reduce((s, r) => s + wkg(r), 0)
+    const badKg   = R.filter(r => r.roll_type === 'bad').reduce((s, r) => s + wkg(r), 0)
     return {
-      good, waste, goodKg, wasteKg, total,
+      good, waste, goodKg, wasteKg, total, scrapKg, badKg,
       yieldPct: total > 0 ? (goodKg / total) * 100 : 0,
       wastePct: total > 0 ? (wasteKg / total) * 100 : 0,
       lenM, pcs,
@@ -220,6 +233,13 @@ export default function OwnerDashboard() {
           </div>
         </div>
         {updated && <p className="text-slate-600 text-[10px] mt-1">อัปเดตล่าสุด {updated.toLocaleString('th-TH', { timeZone: TZ })} · {nf(R.length)} ม้วนในช่วงที่เลือก</p>}
+        {/* หน้านี้อ่านเฉพาะระบบชั่งใหม่ ข้อมูลก่อนหน้านั้นอยู่ในระบบเก่า (ดูที่ /combined) */}
+        {(range === 'year' || range === 'all') && rolls.length > 0 && (
+          <p className="mt-2 text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
+            ℹ️ หน้านี้นับเฉพาะข้อมูลจาก<b>ระบบชั่งใหม่</b> ซึ่งเริ่มบันทึก {DATA_START_LABEL} เป็นต้นไป —
+            ไม่ใช่ยอดทั้งปี · ยอดรวมทั้งปี (เก่า + ใหม่) ดูที่หน้า <b>รวมเทียบทั้งปี</b>
+          </p>
+        )}
       </div>
 
       {loading ? (
@@ -233,11 +253,13 @@ export default function OwnerDashboard() {
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
             <KpiCard label="ผลิตดี (FG)" value={`${nf(k.goodKg, 0)}`} unit="kg" sub={`${nf(k.good.length)} ม้วน`} color="text-green-400" emoji="✅"
               onClick={() => open(`ม้วนดีทั้งหมด (${nf(k.good.length)} ม้วน)`, k.good)} />
-            <KpiCard label="ของเสีย+เศษ" value={`${nf(k.wasteKg, 0)}`} unit="kg" sub={`${nf(k.wastePct, 1)}% ของผลิต`} color="text-red-400" emoji="⚠️"
-              onClick={() => open(`ของเสีย+เศษ (${nf(k.waste.length)} ม้วน)`, k.waste)} />
+            <KpiCard label="เศษทิ้ง + ส่งกรอ" value={`${nf(k.wasteKg, 0)}`} unit="kg"
+              sub={`เศษทิ้ง ${nf(k.scrapKg, 0)} · ส่งกรอ ${nf(k.badKg, 0)}`} color="text-red-400" emoji="⚠️"
+              onClick={() => open(`เศษทิ้ง + ส่งกรอ (${nf(k.waste.length)} ม้วน)`, k.waste)} />
             <KpiCard label="Yield เฉลี่ย" value={`${nf(k.yieldPct, 1)}`} unit="%" sub={`ดี/ผลิตรวม`} color="text-brand-300" emoji="🎯"
               onClick={() => open(`ม้วนทั้งหมด (${nf(R.length)} ม้วน)`, R)} />
-            <KpiCard label="ความยาวรวม" value={`${nf(k.lenM, 0)}`} unit="m" sub={`${nf(k.pcs)} ชิ้น`} color="text-cyan-300" emoji="📏"
+            {/* pcs ยังไม่มีการบันทึกจริง — โชว์ "0 ชิ้น" จะอ่านเป็นผลิตได้ 0 ชิ้น */}
+            <KpiCard label="ความยาวรวม" value={`${nf(k.lenM, 0)}`} unit="m" sub={k.pcs > 0 ? `${nf(k.pcs)} ชิ้น` : 'ยังไม่บันทึกจำนวนชิ้น'} color="text-cyan-300" emoji="📏"
               onClick={() => open(`ม้วนดี (ความยาว/ชิ้น)`, k.good)} />
             <KpiCard label="โอนเข้าคลัง" value={`${nf(k.shipKg, 0)}`} unit="kg" sub={`${nf(docs.length)} ใบโอน`} color="text-amber-300" emoji="📦"
               onClick={() => setDocDrill({ title: `ใบโอนเข้าคลัง (${nf(docs.length)} ใบ)`, docs })} />

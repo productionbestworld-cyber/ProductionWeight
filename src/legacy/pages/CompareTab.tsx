@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import type { ProductionRecord } from '../lib/types'
-import { fmt, kpiCalc, machineAgg, BLS } from '../lib/utils'
+import { fmt, kpiCalc, machineAgg, machineOrder } from '../lib/utils'
 
 interface Props { allData: ProductionRecord[] }
 
@@ -20,10 +20,13 @@ export default function CompareTab({ allData }: Props) {
 
   const m1Map = Object.fromEntries(m1.map(r => [r.m, r]))
   const m2Map = Object.fromEntries(m2.map(r => [r.m, r]))
-  const scrapData = BLS.filter(bl => m1Map[bl] || m2Map[bl]).map(bl => ({
+  // FG = 0 → %เสีย คำนวณไม่ได้ (เดิมหารด้วย 1 ทำให้ได้ค่าเป็นหมื่น %)
+  const scrapPct = (r?: { sc: number; fg: number }) =>
+    r && r.fg > 0 ? parseFloat(((r.sc / r.fg) * 100).toFixed(2)) : 0
+  const scrapData = machineOrder([...new Set([...Object.keys(m1Map), ...Object.keys(m2Map)])]).map(bl => ({
     m: bl,
-    '%เสีย ช่วง 1': m1Map[bl] ? parseFloat(((m1Map[bl].sc / (m1Map[bl].fg || 1)) * 100).toFixed(2)) : 0,
-    '%เสีย ช่วง 2': m2Map[bl] ? parseFloat(((m2Map[bl].sc / (m2Map[bl].fg || 1)) * 100).toFixed(2)) : 0,
+    '%เสีย ช่วง 1': scrapPct(m1Map[bl]),
+    '%เสีย ช่วง 2': scrapPct(m2Map[bl]),
   }))
 
   function KpiRow({ label, v1, v2, unit }: { label: string; v1: number; v2: number; unit?: string }) {

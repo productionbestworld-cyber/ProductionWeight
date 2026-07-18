@@ -42,6 +42,8 @@ export default function LegacyDashboard() {
   }
 
   const filtered = useMemo(() => applyFilter(all, filter), [all, filter])
+  // แท็บเปรียบเทียบเลือกช่วงวันเอง จึงใช้ตัวกรองอื่นทั้งหมดแต่ไม่เอา from/to มาทับ
+  const compareData = useMemo(() => applyFilter(all, { ...filter, from: '', to: '' }), [all, filter])
   const kpi      = useMemo(() => kpiCalc(filtered), [filtered])
 
   function set(k: keyof FilterState, v: string) {
@@ -163,7 +165,7 @@ export default function LegacyDashboard() {
             {tab === 'dashboard' && <DashboardTab data={filtered} kpi={kpi} />}
             {tab === 'daily'     && <DailyTab     data={filtered} />}
             {tab === 'problems'  && <ProblemsTab  data={filtered} />}
-            {tab === 'compare'   && <CompareTab   allData={all} />}
+            {tab === 'compare'   && <CompareTab   allData={compareData} />}
             {tab === 'table'     && <TableTab     data={filtered} />}
             {tab === 'admin'     && <AdminEntryTab />}
           </>

@@ -12,7 +12,10 @@ import TableTab from '../legacy/pages/TableTab'
 import { applyFilter, kpiCalc, uniq } from '../legacy/lib/utils'
 import type { ProductionRecord, FilterState } from '../legacy/lib/types'
 
-const CUTOFF_KEY = 'bwp_combined_cutoff'
+// ขึ้น v2: ค่าเดิมที่ค้างในเครื่องผู้ใช้คือ 2026-06-01 ซึ่งจะทำให้ข้อมูลเก่า 1–13 มิ.ย. หายทั้งก้อน
+const CUTOFF_KEY = 'bwp_combined_cutoff_v2'
+// วันสุดท้ายที่ระบบเก่าบันทึกคือ 2026-06-13 → ตั้งแต่ 14 มิ.ย. ใช้ระบบใหม่ล้วน ไม่มีช่วงคาบเกี่ยว
+const SEAM_DATE = '2026-06-14'
 type Tab = 'dashboard' | 'daily' | 'problems' | 'compare' | 'table'
 const EMPTY: FilterState = { from:'', to:'', machine:'', customer:'', size:'', shift:'', search:'' }
 
@@ -39,12 +42,14 @@ export default function CombinedDashboard() {
   const [newRows, setNewRows] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<Tab>('dashboard')
-  const [cutoff, setCutoff] = useState(() => localStorage.getItem(CUTOFF_KEY) || '2026-06-01')
+  const [cutoff, setCutoff] = useState(() => localStorage.getItem(CUTOFF_KEY) || SEAM_DATE)
   // โหมดช่วงรอยต่อ:
-  //  'auto' = เครื่อง+วันไหนมีในระบบใหม่ ใช้ข้อมูลใหม่ · ที่เหลือใช้เก่า (ไม่ตก ไม่ซ้ำ) ★แนะนำ
-  //  'sum'  = บวกเก่า+ใหม่ทั้งหมด (วันทับกันรวมกัน)
-  //  'cut'  = ตัดตามจุดตัด (เก่าก่อนจุดตัด · ใหม่ตั้งแต่จุดตัด)
-  const [seamMode, setSeamMode] = useState<'auto' | 'sum' | 'cut'>('auto')
+  //  'cut'  = ตัดตามจุดตัด (เก่าก่อนจุดตัด · ใหม่ตั้งแต่จุดตัด) ★ค่าเริ่มต้น — ตัวเลขตรงที่สุด
+  //  'auto' = เครื่อง+วันไหนมีในระบบใหม่ ใช้ข้อมูลใหม่ · ที่เหลือใช้เก่า
+  //           ⚠️ ช่วง 1–13 มิ.ย. ระบบใหม่ชั่งไม่ครบ โหมดนี้จะทิ้งข้อมูลเก่าทั้งวันแล้วเหลือแต่ยอดใหม่ที่ไม่ครบ
+  //           (เช่น 8 มิ.ย. BL03 ของจริง 3,285 kg เหลือ 202 kg) — ข้อมูลช่วงนี้คลาดเคลื่อน
+  //  'sum'  = บวกเก่า+ใหม่ทั้งหมด (วันทับกันจะนับซ้ำ)
+  const [seamMode, setSeamMode] = useState<'auto' | 'sum' | 'cut'>('cut')
   const [filter, setFilter] = useState<FilterState>({ ...EMPTY })
 
   useEffect(() => {
@@ -70,11 +75,16 @@ export default function CombinedDashboard() {
       const mc = (r.machine_no ?? '').trim()
       const cust = custKey(r.customer)
       const size = r.width_cm && r.thick_mc ? `${r.width_cm}${r.width_unit ?? 'cm'}×${r.thick_mc}mc` : ''
-      const k = `${date}|${mc}|${cust}|${size}`
+      // อาการต้องอยู่ใน key ด้วย ไม่งั้นน้ำหนักเสียของทั้งกลุ่มจะถูกโยนไปให้อาการของม้วนแรกม้วนเดียว
+      // (ม้วนดีไม่มี remark → ตกกลุ่ม '' ตามเดิม ยอดรวม FG/KPI ไม่เปลี่ยนเพราะเป็นการบวกกันอยู่แล้ว)
+      // remark ของม้วนดีไม่ใช่ "อาการ" — นับเฉพาะม้วนเสีย/เศษ
+      const sym = r.roll_type === 'good' ? '' : String(r.remark ?? '').trim()
+      const k = `${date}|${mc}|${cust}|${size}|${sym}`
       if (!m.has(k)) m.set(k, {
         production_date: date, machine: mc, customer: cust, size,
         product_code: r.product_code ?? '', order_no: r.work_order ?? '', sales_order: r.sale_order ?? '',
         shift: 'unknown', fg_kg: 0, fg_rolls: 0, scrap_kg: 0, rework_kg: 0, rework_rolls: 0,
+        symptom: sym || undefined,
       } as ProductionRecord)
       const rec = m.get(k)!; const w = +(r.weight ?? 0)
       if (r.roll_type === 'good') {
@@ -86,8 +96,8 @@ export default function CombinedDashboard() {
           if (src > w) rec.rework_scrap_kg = (rec.rework_scrap_kg ?? 0) + (src - w)
         }
       }
-      else if (r.roll_type === 'bad') { rec.rework_kg = (rec.rework_kg ?? 0) + w; rec.rework_rolls = (rec.rework_rolls ?? 0) + 1; if (r.remark && !rec.symptom) rec.symptom = String(r.remark) }
-      else if (String(r.roll_type).startsWith('scrap')) { rec.scrap_kg = (rec.scrap_kg ?? 0) + w; if ((r.section ?? '') === 'rewind') rec.rework_scrap_kg = (rec.rework_scrap_kg ?? 0) + w; if (r.remark && !rec.symptom) rec.symptom = String(r.remark) }
+      else if (r.roll_type === 'bad') { rec.rework_kg = (rec.rework_kg ?? 0) + w; rec.rework_rolls = (rec.rework_rolls ?? 0) + 1 }
+      else if (String(r.roll_type).startsWith('scrap')) { rec.scrap_kg = (rec.scrap_kg ?? 0) + w; if ((r.section ?? '') === 'rewind') rec.rework_scrap_kg = (rec.rework_scrap_kg ?? 0) + w }
     }
     return [...m.values()]
   }, [newRows])
@@ -115,6 +125,8 @@ export default function CombinedDashboard() {
   }, [oldRows, newAsRecords, cutoff, seamMode])
 
   const filtered = useMemo(() => applyFilter(combinedAll, filter), [combinedAll, filter])
+  // แท็บเปรียบเทียบเลือกช่วงวันเอง จึงใช้ตัวกรองอื่นทั้งหมดแต่ไม่เอา from/to มาทับ
+  const compareData = useMemo(() => applyFilter(combinedAll, { ...filter, from: '', to: '' }), [combinedAll, filter])
   const kpi = useMemo(() => kpiCalc(filtered), [filtered])
   const set = (k: keyof FilterState, v: string) => setFilter(f => ({ ...f, [k]: v }))
   const machines  = useMemo(() => uniq(combinedAll, 'machine'),  [combinedAll])
@@ -186,7 +198,7 @@ export default function CombinedDashboard() {
         {tab === 'dashboard' && <DashboardTab data={filtered} kpi={kpi} />}
         {tab === 'daily'     && <DailyTab     data={filtered} />}
         {tab === 'problems'  && <ProblemsTab  data={filtered} />}
-        {tab === 'compare'   && <CompareTab   allData={combinedAll} />}
+        {tab === 'compare'   && <CompareTab   allData={compareData} />}
         {tab === 'table'     && <TableTab     data={filtered} />}
       </div>
     </div>

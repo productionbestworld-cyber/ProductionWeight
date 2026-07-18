@@ -8,6 +8,14 @@ export const MACHINE_COLORS: Record<string, string> = {
   BL09:'#14b8a6', BL10:'#ef4444', BL11:'#84cc16',
 }
 
+// เครื่องที่ไม่ได้อยู่ใน MACHINE_COLORS (เช่น S01–S04) ให้สีจาก PALETTE แบบคงที่ตามชื่อ
+export function machineColor(m: string): string {
+  if (MACHINE_COLORS[m]) return MACHINE_COLORS[m]
+  let h = 0
+  for (let i = 0; i < m.length; i++) h = (h * 31 + m.charCodeAt(i)) >>> 0
+  return PALETTE[h % PALETTE.length]
+}
+
 export const PALETTE = [
   '#6366f1','#10b981','#f59e0b','#ef4444','#3b82f6',
   '#ec4899','#06b6d4','#f97316','#14b8a6','#a855f7','#84cc16','#0ea5e9',
@@ -62,6 +70,14 @@ export function kpiCalc(data: ProductionRecord[]): KpiData {
   return { fg, rolls, sc, rw, pl, t, rwFg, rwScrap, fgP: t > 0 ? fgFirst/t*100 : 0, lossP: t > 0 ? (rw+prodScrap)/t*100 : 0, scP: fg > 0 ? sc/fg*100 : 0, rwP: fg > 0 ? rw/fg*100 : 0 }
 }
 
+// เรียงเครื่อง: ตามลำดับใน BLS ก่อน ที่เหลือ (เช่น S01–S04) ต่อท้ายแบบเรียงตัวอักษร
+// hardcode BLS อย่างเดียวทำให้เครื่องใหม่หายไปจากรายงานเงียบๆ
+export function machineOrder(keys: string[]): string[] {
+  const known = BLS.filter(b => keys.includes(b))
+  const rest  = keys.filter(k => !BLS.includes(k)).sort()
+  return [...known, ...rest]
+}
+
 export function machineAgg(data: ProductionRecord[]) {
   const m: Record<string, { fg: number; sc: number; rw: number; rolls: number }> = {}
   data.forEach(r => {
@@ -72,7 +88,7 @@ export function machineAgg(data: ProductionRecord[]) {
     m[r.machine].rw    += r.rework_kg ?? 0
     m[r.machine].rolls += r.fg_rolls  ?? 0
   })
-  return BLS.filter(k => m[k]).map(k => ({ m: k, ...m[k] }))
+  return machineOrder(Object.keys(m)).map(k => ({ m: k, ...m[k] }))
 }
 
 export function dailyAgg(data: ProductionRecord[]) {
@@ -96,16 +112,27 @@ export function customerAgg(data: ProductionRecord[]) {
   return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([c, fg]) => ({ c, fg }))
 }
 
+export const NO_SYMPTOM = 'ไม่ระบุอาการ'
+
+// "เเ" (สระเอ 2 ตัว) กับ "แ" แสดงผลเหมือนกันทุกประการ แต่เป็นคนละอักขระ
+// ทำให้ "โป่งเเตก" ถูกนับแยกจาก "โป่งแตก" — รวมให้เป็นตัวเดียวกัน
+export function normSymptom(s: string): string {
+  return s.replace(/เเ/g, 'แ').trim()
+}
+
+// คืนค่าอาการ "ทุกตัว" เรียงตาม loss — แถวที่ไม่ได้กรอกอาการถูกรวมไว้ใน NO_SYMPTOM
+// เพื่อให้ผลรวมของลิสต์นี้เท่ากับ loss จริงทั้งหมด (scrap + rework) ของข้อมูลที่กรองไว้
 export function symptomAgg(data: ProductionRecord[]) {
   const m: Record<string, { s: string; n: number; l: number }> = {}
   data.forEach(r => {
-    if (!r.symptom) return
-    const k = r.symptom.trim()
+    const loss = (r.scrap_kg ?? 0) + (r.rework_kg ?? 0)
+    if (loss === 0 && !r.symptom) return
+    const k = normSymptom(r.symptom ?? '') || NO_SYMPTOM
     if (!m[k]) m[k] = { s: k, n: 0, l: 0 }
     m[k].n++
-    m[k].l += (r.scrap_kg ?? 0) + (r.rework_kg ?? 0)
+    m[k].l += loss
   })
-  return Object.values(m).sort((a, b) => b.l - a.l).slice(0, 15)
+  return Object.values(m).sort((a, b) => b.l - a.l)
 }
 
 export function machineCauseAgg(data: ProductionRecord[]) {
@@ -123,7 +150,7 @@ export function machineCauseAgg(data: ProductionRecord[]) {
     }
   })
   const res: Record<string, { c: string; n: number; l: number; syms: Record<string, number> }[]> = {}
-  BLS.forEach(bl => { if (m[bl]) res[bl] = Object.values(m[bl]).sort((a, b) => b.l - a.l) })
+  machineOrder(Object.keys(m)).forEach(bl => { res[bl] = Object.values(m[bl]).sort((a, b) => b.l - a.l) })
   return res
 }
 

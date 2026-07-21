@@ -10,6 +10,7 @@ import { fetchProducts, backfillProductMatCore, backfillCustomer, addProductIfMi
 import { fetchFlag } from './Admin'
 import ReworkInbox from './ReworkInbox'
 import ExportButton from '../components/ExportButton'
+import ReasonSelect from '../components/ReasonSelect'
 
 function fmt(n: number | null | undefined, d: 1|2 = 2) {
   if (n === null || n === undefined || isNaN(n as number)) return (0).toFixed(d)
@@ -3227,11 +3228,9 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                   ⏳ รอ ผจก พิจารณา
                 </button>
               </div>
-              <input value={badReason} onChange={e => setBadReason(e.target.value)}
-                placeholder={badMode === 'pending_review' ? 'เหตุผลที่ไม่แน่ใจว่ากรอได้ (จำเป็น)...' : 'เหตุผลม้วนกรอ (จำเป็น)...'}
-                className={`w-full bg-slate-800 border rounded-xl px-3 py-2 text-sm text-white outline-none placeholder-slate-500 ${
-                  badMode === 'pending_review' ? 'border-amber-500/40 focus:border-amber-500' : 'border-orange-500/40 focus:border-orange-500'
-                }`} />
+              <ReasonSelect category="bad" value={badReason} onChange={setBadReason}
+                accent={badMode === 'pending_review' ? 'amber' : 'orange'}
+                placeholder={badMode === 'pending_review' ? 'เลือกเหตุผลที่ไม่แน่ใจว่ากรอได้ (จำเป็น)...' : 'เลือกเหตุผลม้วนกรอ (จำเป็น)...'} />
               {badMode === 'pending_review' && (
                 <p className="text-[10px] text-amber-400/80 leading-tight">
                   💡 ม้วนนี้จะรอ ผจก พิจารณา — ยังไม่ถูกส่งไปแผนกกรอ
@@ -3242,9 +3241,8 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
 
           {/* Scrap reason */}
           {isScrap && (
-            <input value={scrapReason} onChange={e => setScrapReason(e.target.value)}
-              placeholder="เหตุผลเศษเสีย (จำเป็น)..."
-              className="w-full bg-slate-800 border border-red-500/40 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-red-500 placeholder-slate-500" />
+            <ReasonSelect category="scrap" value={scrapReason} onChange={setScrapReason}
+              accent="red" placeholder="เลือกเหตุผลเศษเสีย (จำเป็น)..." />
           )}
 
           {/* แผนกกรอ: เลือกม้วนต้นทางที่กำลังกรอ (ติ๊กก่อนชั่ง) */}

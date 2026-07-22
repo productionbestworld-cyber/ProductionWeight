@@ -53,6 +53,7 @@ type Roll = {
   section?: string | null
   rework_status?: string | null
   rework_remark?: string | null
+  is_rewound?: boolean | null
   is_legacy?: boolean
 }
 
@@ -172,7 +173,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
       // ม้วนหลัก (ฐานคำนวณ KPI) — ดึงทีละหน้าจนครบ กันเพดาน 1000 แถวตัดข้อมูล
       fetchAll<Roll>(() => supabase
         .from('production_rolls')
-        .select('id,roll_type,weight,gross_weight,core_weight,length,pcs,machine_no,lot_no,product_name,product_code,item_code,customer,cust_code,width_cm,width_unit,thick_mc,inspector,work_order,sale_order,created_at,roll_no,section,remark,review_status,review_action,review_action_reason,review_decision_by,rework_status,rework_remark,transferred,transferred_at,inbound_type')
+        .select('id,roll_type,weight,gross_weight,core_weight,length,pcs,machine_no,lot_no,product_name,product_code,item_code,customer,cust_code,width_cm,width_unit,thick_mc,inspector,work_order,sale_order,created_at,roll_no,section,remark,review_status,review_action,review_action_reason,review_decision_by,rework_status,rework_remark,is_rewound,transferred,transferred_at,inbound_type')
         .gte('created_at', from.toISOString())
         .lte('created_at', to.toISOString())
         .order('created_at', { ascending: true })),
@@ -222,7 +223,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
       const to   = new Date(dateTo);   to.setHours(23,59,59,999)
       fetchAll<Roll>(() => supabase
         .from('production_rolls')
-        .select('id,roll_type,weight,gross_weight,core_weight,length,pcs,machine_no,lot_no,product_name,product_code,item_code,customer,cust_code,width_cm,width_unit,thick_mc,inspector,work_order,sale_order,created_at,roll_no,section,remark,review_status,review_action,review_action_reason,review_decision_by,rework_status,rework_remark,transferred,transferred_at,inbound_type')
+        .select('id,roll_type,weight,gross_weight,core_weight,length,pcs,machine_no,lot_no,product_name,product_code,item_code,customer,cust_code,width_cm,width_unit,thick_mc,inspector,work_order,sale_order,created_at,roll_no,section,remark,review_status,review_action,review_action_reason,review_decision_by,rework_status,rework_remark,is_rewound,transferred,transferred_at,inbound_type')
         .gte('created_at', from.toISOString())
         .lte('created_at', to.toISOString())
         .order('created_at', { ascending: true }))
@@ -296,10 +297,15 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   const kg = (arr: typeof filtered) => arr.reduce((s, r) => s + (r.weight ?? 0), 0)
 
   // แยก FG: ครั้งแรก (จากผลิต) vs จากกรอ (แผนก rewind กู้คืนได้)
-  const fgFirst   = useMemo(() => fg.filter(r => ((r as any).section ?? 'blow') !== 'rewind'), [fg])
-  const fgRework  = useMemo(() => fg.filter(r => ((r as any).section ?? 'blow') === 'rewind'), [fg])
+  // ม้วนจากกรอ = ชั่งที่แผนกกรอ (section=rewind) หรือ ชั่งที่เครื่องผลิตแต่ติ๊ก "มาจากกรอ" (is_rewound)
+  const isReworkFg = (r: any) => (r.section ?? 'blow') === 'rewind' || r.is_rewound === true
+  const fgFirst   = useMemo(() => fg.filter(r => !isReworkFg(r)), [fg])   // ผลิตครั้งแรก (ไม่นับม้วนกรอ → กันนับซ้ำ)
+  const fgRework  = useMemo(() => fg.filter(r =>  isReworkFg(r)), [fg])   // FG จากกรอ (ยังนับเป็นผลงานกรอ)
   const fgFirstKg = useMemo(() => kg(fgFirst),  [fgFirst])
   const fgReworkKg= useMemo(() => kg(fgRework), [fgRework])
+  // ม้วนกรอที่เอามาชั่งที่ "เครื่องผลิต" (is_rewound) — แยกให้เห็นชัดว่าเลขไปต่อเนื่องกับผลิต
+  const fgBlowRework   = useMemo(() => fg.filter(r => (r as any).is_rewound === true), [fg])
+  const fgBlowReworkKg = useMemo(() => kg(fgBlowRework), [fgBlowRework])
   const fgKg         = useMemo(() => kg(fg),         [fg])
   const badKg        = useMemo(() => kg(bad),        [bad])
   const scrapClearKg = useMemo(() => kg(scrapClear), [scrapClear])
@@ -997,6 +1003,9 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
               <div className="pt-2 border-t border-gray-100 space-y-0.5 text-[11px]">
                 <p className="flex justify-between"><span className="text-gray-500">🏭 FG ครั้งแรก</span><span className="font-bold text-gray-700">{num(fgFirstKg,1)} kg · {fgFirst.length}</span></p>
                 <p className="flex justify-between"><span className="text-emerald-600">🔧 FG จากกรอ</span><span className="font-bold text-emerald-700">{num(fgReworkKg,1)} kg · {fgRework.length}</span></p>
+                {fgBlowRework.length > 0 && (
+                  <p className="flex justify-between pl-3 text-[10px]"><span className="text-emerald-500/80">↳ 🔁 กรอ ชั่งที่เครื่องผลิต</span><span className="font-bold text-emerald-600">{num(fgBlowReworkKg,1)} kg · {fgBlowRework.length}</span></p>
+                )}
               </div>
             </div>
             {/* Total + Yield */}

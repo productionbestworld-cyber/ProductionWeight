@@ -2055,6 +2055,7 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
   const [rwManual, setRwManual]         = useState(false)
   const [rwManualText, setRwManualText] = useState('')
   const [rwManualKg, setRwManualKg]     = useState('')
+  const [rwSearch, setRwSearch]         = useState('')   // ค้นหาม้วนต้นทาง (เลขม้วน/Lot/WO/สินค้า/ลูกค้า/เหตุผล)
   async function loadRwSrcRolls() {
     const ic = (profile.itemCode ?? '').trim()
     if (!ic) { setRwSrcRolls([]); return }
@@ -3305,7 +3306,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
             <div className="space-y-1.5 bg-slate-900 border border-emerald-500/30 rounded-xl p-2.5 order-last">
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input type="checkbox" checked={fromRework}
-                  onChange={e => { setFromRework(e.target.checked); if (!e.target.checked) { setRwSel(null); setRwManual(false); setRwManualText(''); setRwManualKg('') } }}
+                  onChange={e => { setFromRework(e.target.checked); if (!e.target.checked) { setRwSel(null); setRwManual(false); setRwManualText(''); setRwManualKg(''); setRwSearch('') } }}
                   className="w-4 h-4 accent-emerald-500 shrink-0" />
                 <span className="text-emerald-300 text-xs font-bold">🔁 ม้วนนี้มาจากกรอ (ชั่งต่อเลขผลิต — ลูกค้าเห็นเป็นม้วนใหม่)</span>
               </label>
@@ -3331,8 +3332,18 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                         className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-white placeholder:text-slate-500" />
                     </div>
                   ) : (
+                    <>
+                    <input value={rwSearch} onChange={e => setRwSearch(e.target.value)}
+                      placeholder="🔎 ค้นหา — เลขม้วน / Lot / WO / สินค้า / ลูกค้า / เหตุผล"
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-white placeholder:text-slate-500" />
                     <div className="space-y-1 max-h-[45vh] overflow-y-auto">
-                      {rwSrcRolls.map(s => {
+                      {rwSrcRolls.filter(s => {
+                        const q = rwSearch.trim().toLowerCase()
+                        if (!q) return true
+                        return q.split(/\s+/).every(term =>
+                          [s.roll_no, s.lot_no, s.work_order, s.sale_order, s.product_name, s.customer, s.remark]
+                            .map(v => String(v ?? '').toLowerCase()).join(' ').includes(term))
+                      }).map(s => {
                         const sel = rwSel?.id === s.id
                         return (
                           <button key={s.id} onClick={() => setRwSel(sel ? null : s)}
@@ -3352,7 +3363,16 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                       {rwSrcRolls.length === 0 && (
                         <p className="text-[10px] text-slate-500 px-1">ไม่มีม้วนเสียรอกรอของสินค้านี้ในระบบ — ถ้ากรอมาจากม้วนนอกระบบ กด "➕ ม้วนนอกระบบ" ด้านบน</p>
                       )}
+                      {rwSrcRolls.length > 0 && rwSearch.trim() && rwSrcRolls.filter(s => {
+                        const q = rwSearch.trim().toLowerCase()
+                        return q.split(/\s+/).every(term =>
+                          [s.roll_no, s.lot_no, s.work_order, s.sale_order, s.product_name, s.customer, s.remark]
+                            .map(v => String(v ?? '').toLowerCase()).join(' ').includes(term))
+                      }).length === 0 && (
+                        <p className="text-[10px] text-slate-500 px-1">ไม่พบม้วนที่ตรงกับ "{rwSearch}"</p>
+                      )}
                     </div>
+                    </>
                   )}
                 </>
               )}

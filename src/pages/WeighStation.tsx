@@ -64,6 +64,8 @@ function rollToProfile(roll: any, size: 'long' | 'short' = 'long'): any {
     coreWeight:  String(roll.core_weight ?? '1.25'),
     inspector:   roll.inspector    ?? '',
     labelSize:   size,
+    headerText:  roll.header_text  ?? '',   // หัวใบ (ชื่อลูกค้า) ที่ใช้ตอนชั่ง → รีปริ้นให้ตรงเดิม
+    blankHeader: roll.blank_header ?? false,
     section:     roll.section      ?? 'rewind',
     soNo:        roll.sale_order   ?? '',
     woNo:        roll.work_order   ?? '',
@@ -2780,6 +2782,8 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         customer:     profile.custName,
         cust_code:    (profile as any).custCode ?? '',   // ✨ เก็บรหัสลูกค้า → รีปริ้นรู้ลูกค้า 08 = มี EXP
         cust_branch:  (profile as any).custBranch ?? '',
+        header_text:  (profile as any).headerText ?? '',   // ✨ เก็บหัวใบ (ชื่อลูกค้า) → รีปริ้นหัวใบตรงเดิม
+        blank_header: (profile as any).blankHeader ?? false,
         section:      profile.section ?? 'blow',
         width_cm:     profile.widthCm || null,
         width_unit:   profile.widthUnit ?? 'cm',

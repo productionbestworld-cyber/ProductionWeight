@@ -1,10 +1,18 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '2.17.1'
-export const APP_BUILD_DATE = '2026-07-22'
+export const APP_VERSION = '2.18.0'
+export const APP_BUILD_DATE = '2026-07-23'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '2.18.0', date: '2026-07-23',
+    items: [
+      'แก้รีปริ้นใบลาเบล "หัวใบ (ชื่อลูกค้า) ไม่ตรงงานจริง" — เดิมหัวใบ (header_text เช่น "MMP Coporation LTD...") เก็บแค่ในโปรไฟล์เครื่อง ไม่ได้ติดกับม้วน · รีปริ้นเลยตกไปใช้ค่าเริ่มต้น "บริษัท เบสท์เวิลด์ฯ" แทนชื่อลูกค้า',
+      'ตอนชั่งเก็บ header_text/blank_header ลงม้วนด้วย (แนวเดียวกับ cust_code) → รีปริ้นหัวใบตรงกับตอนชั่งเสมอ · backfill ม้วนเก่าของงานที่ยังเดินอยู่ให้แล้ว',
+      '⚠ เพิ่มคอลัมน์ header_text/blank_header ใน production_rolls (รันบน Supabase แล้ว)',
+    ],
+  },
   {
     version: '2.17.1', date: '2026-07-22',
     items: [

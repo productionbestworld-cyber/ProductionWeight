@@ -1394,8 +1394,11 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
     const yy = String((new Date().getFullYear() + 543) % 100).padStart(2, '0')
     const mm = String(new Date().getMonth() + 1).padStart(2, '0')
     const mc = (machine ?? '').toUpperCase()
-    const cc = (custCode ?? '').replace(/\D/g, '').padStart(4, '0').slice(-4)
-    if (!mc || !cc || cc === '0000') return ''
+    // ต้องมี "ตัวเลข" ในรหัสลูกค้าอย่างน้อย 1 ตัว — รหัส "00" (ลูกค้าตัวอย่าง) นับว่ามี → เจนได้
+    // (เดิมเช็ก cc === '0000' ทำให้รหัส 00 ถูกบล็อกเพราะเติมศูนย์แล้วกลายเป็น 0000)
+    const digits = (custCode ?? '').replace(/\D/g, '')
+    if (!mc || !digits) return ''
+    const cc = digits.padStart(4, '0').slice(-4)
     return `${yy}${mc}${cc}${mm}`
   }
   // เช็คว่า lot string ตรงรูปแบบ auto-gen ของเครื่องนี้หรือเปล่า: yy + machine_no + 4digit + mm

@@ -458,8 +458,10 @@ function EditModal({ p, products, onChange, onAutoFill, onRemove, onClose, onPro
                   const yy = String((new Date().getFullYear() + 543) % 100).padStart(2, '0')
                   const mm = String(new Date().getMonth() + 1).padStart(2, '0')
                   const mc = (p.machine_no ?? '').toUpperCase()
-                  const cc = (p.custCode ?? '').replace(/\D/g, '').padStart(4, '0').slice(-4)
-                  if (!mc || !cc || cc === '0000') return
+                  // บล็อกเฉพาะตอน "ไม่มีตัวเลขในรหัสลูกค้าเลย" — รหัส 00 นับว่ามี → เจนได้
+                  const digits = (p.custCode ?? '').replace(/\D/g, '')
+                  if (!mc || !digits) return
+                  const cc = digits.padStart(4, '0').slice(-4)
                   onChange('lotNo', `${yy}${mc}${cc}${mm}`)
                 }}
                 placeholder="คลิกเพื่อสร้างอัตโนมัติ หรือพิมพ์เอง..."
@@ -523,13 +525,14 @@ function EditModal({ p, products, onChange, onAutoFill, onRemove, onClose, onPro
                   const yy = String((new Date().getFullYear() + 543) % 100).padStart(2,'0')
                   const mm = String(new Date().getMonth() + 1).padStart(2,'0')
                   const mc = (p.machine_no ?? '').toUpperCase()
-                  const oldCc = (p.custCode ?? '').replace(/\D/g,'').padStart(4,'0').slice(-4)
-                  const oldAuto = mc && oldCc !== '0000' ? `${yy}${mc}${oldCc}${mm}` : ''
+                  const oldDigits = (p.custCode ?? '').replace(/\D/g,'')
+                  const oldCc = oldDigits.padStart(4,'0').slice(-4)
+                  const oldAuto = mc && oldDigits ? `${yy}${mc}${oldCc}${mm}` : ''
                   onChange('custCode', newCode)
                   if (oldAuto && (p.lotNo ?? '') === oldAuto) {
-                    const newCcDigits = newCode.replace(/\D/g,'').padStart(4,'0').slice(-4)
-                    if (mc && newCcDigits !== '0000') {
-                      onChange('lotNo', `${yy}${mc}${newCcDigits}${mm}`)
+                    const newDigits = newCode.replace(/\D/g,'')
+                    if (mc && newDigits) {
+                      onChange('lotNo', `${yy}${mc}${newDigits.padStart(4,'0').slice(-4)}${mm}`)
                     }
                   }
                 }}

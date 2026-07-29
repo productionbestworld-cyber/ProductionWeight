@@ -1133,6 +1133,7 @@ function ResumeClosedJobModal({ dept, machines, onClose, onResumed }: {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all'|'closed'|'open'>('all')
+  const [closedDate, setClosedDate] = useState('')   // วันที่ปิดงาน (YYYY-MM-DD) — กรองงานที่ปิดตรงวันนั้น
   const [restoring, setRestoring] = useState<string | null>(null)
 
   useEffect(() => {
@@ -1228,8 +1229,14 @@ function ResumeClosedJobModal({ dept, machines, onClose, onResumed }: {
     })()
   }, [])
 
+  // วันที่ปิดงานแบบ YYYY-MM-DD ตามเวลาไทย (ใช้เทียบกับ input date)
+  const closedDay = (iso: string | null) => iso
+    ? new Date(iso).toLocaleDateString('sv-SE', { timeZone: 'Asia/Bangkok' })   // sv-SE → YYYY-MM-DD
+    : ''
+
   const filtered = rows.filter(r => {
     if (statusFilter !== 'all' && r.source !== statusFilter) return false
+    if (closedDate && closedDay(r.closed_at) !== closedDate) return false
     if (!search.trim()) return true
     const s = search.toLowerCase()
     return [r.machine_no, r.lot_no, r.product_name, r.customer, r.work_order, r.sale_order]
@@ -1304,7 +1311,7 @@ function ResumeClosedJobModal({ dept, machines, onClose, onResumed }: {
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="ค้นหา (เครื่อง / lot / สินค้า / ลูกค้า / WO / SO)..."
             className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-brand-500"/>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
             {([
               ['all', `ทั้งหมด (${rows.length})`],
               ['closed', `🏁 จบงานแล้ว (${rows.filter((r:any)=>r.source==='closed').length})`],
@@ -1315,13 +1322,22 @@ function ResumeClosedJobModal({ dept, machines, onClose, onResumed }: {
                 {label}
               </button>
             ))}
+            <div className="flex items-center gap-1 ml-auto">
+              <span className="text-[11px] text-slate-400 font-semibold">📅 วันปิดงาน</span>
+              <input type="date" value={closedDate} onChange={e => setClosedDate(e.target.value)}
+                className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-white text-[11px] outline-none focus:border-brand-500"/>
+              {closedDate && (
+                <button onClick={() => setClosedDate('')}
+                  className="text-[11px] text-slate-400 hover:text-white px-1.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700" title="ล้างวันที่">✕</button>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto px-2">
           {loading ? (
             <p className="text-center py-10 text-slate-500">กำลังโหลด...</p>
           ) : filtered.length === 0 ? (
-            <p className="text-center py-10 text-slate-500">{search.trim() ? 'ไม่พบงานที่ตรงกัน' : 'ยังไม่มีงานที่ปิดไว้'}</p>
+            <p className="text-center py-10 text-slate-500">{(search.trim() || closedDate) ? 'ไม่พบงานที่ตรงกัน' : 'ยังไม่มีงานที่ปิดไว้'}</p>
           ) : (
             <table className="w-full text-sm">
               <thead className="bg-slate-800/50 text-[10px] text-slate-400 uppercase sticky top-0">
@@ -1360,7 +1376,9 @@ function ResumeClosedJobModal({ dept, machines, onClose, onResumed }: {
                         {isClosed
                           ? <span className="inline-block px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 font-bold">🏁 ปิดถาวร</span>
                           : <span className="inline-block px-1.5 py-0.5 rounded bg-emerald-900/40 text-emerald-300 font-bold">📦 ยังไม่ปิด</span>}
-                        <p className="text-slate-500 mt-0.5">{lastActive}</p>
+                        {isClosed && r.closed_at
+                          ? <p className="text-slate-400 mt-0.5">ปิด {new Date(r.closed_at).toLocaleString('th-TH', { timeZone:'Asia/Bangkok', dateStyle:'short', timeStyle:'short' })}</p>
+                          : <p className="text-slate-500 mt-0.5">{lastActive}</p>}
                       </td>
                       <td className="px-3 py-2 text-right">
                         <button onClick={() => resume(r)} disabled={restoring === r.id}

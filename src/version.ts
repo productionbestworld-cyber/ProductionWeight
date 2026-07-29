@@ -1,10 +1,18 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '2.18.1'
-export const APP_BUILD_DATE = '2026-07-24'
+export const APP_VERSION = '2.18.2'
+export const APP_BUILD_DATE = '2026-07-29'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '2.18.2', date: '2026-07-29',
+    items: [
+      'แก้บั๊ก "ดึงงานเก่ามาชั่งต่อ แล้วรายละเอียดกลับมาไม่ครบ" — ตอน restore profile ลืมก็อป หัวใบ (header_text), เว้นหัวว่าง (blank_header) จากม้วนเดิม และ วันส่งของ (delivery_date) ไม่ถูกดึงมาจาก job_summaries → เป็นค่าว่างเสมอ',
+      'เก็บ ขนาดใบปะหน้า (label_size) + ที่อยู่ลูกค้า (cust_address) ติดกับม้วนตอนชั่ง (แนวเดียวกับ header_text) → ดึงงานเก่ากลับมาได้ครบทุกฟิลด์ที่เคยตั้งไว้ (decimal เป็นค่าประจำเครื่องจึงคงเดิมอยู่แล้ว)',
+      '⚠ เพิ่มคอลัมน์ label_size/cust_address ใน production_rolls (รัน scripts/add-cols-label-address.sql บน Supabase) + backfill งานที่ยังเดินอยู่ (scripts/backfill-label-address.mjs)',
+    ],
+  },
   {
     version: '2.18.1', date: '2026-07-24',
     items: [

@@ -63,7 +63,7 @@ function rollToProfile(roll: any, size: 'long' | 'short' = 'long'): any {
     pcs:         roll.pcs          ?? '',
     coreWeight:  String(roll.core_weight ?? '1.25'),
     inspector:   roll.inspector    ?? '',
-    labelSize:   size,
+    labelSize:   roll.label_size   ?? size,   // ใช้ขนาดใบที่เก็บกับม้วน (ถ้ามี) → รีปริ้นตรงเดิม
     headerText:  roll.header_text  ?? '',   // หัวใบ (ชื่อลูกค้า) ที่ใช้ตอนชั่ง → รีปริ้นให้ตรงเดิม
     blankHeader: roll.blank_header ?? false,
     section:     roll.section      ?? 'rewind',
@@ -1173,6 +1173,7 @@ function ResumeClosedJobModal({ dept, machines, onClose, onResumed }: {
           planned_qty:  s.planned_qty,
           good_kg:      s.good_kg,
           inspector:    s.inspector,
+          delivery_date: s.delivery_date ?? null,   // ✨ วันส่งของ — เก็บใน job_summaries
           closed_at:    s.closed_at,
           source:       'closed',
         })
@@ -1257,6 +1258,11 @@ function ResumeClosedJobModal({ dept, machines, onClose, onResumed }: {
         delivery_date: r.delivery_date ?? null,
         product_name:  r.product_name ?? '',
         cust_name:     r.customer    ?? '',
+        // ✨ ก็อปฟิลด์ที่เก็บบนม้วน — ที่อยู่ลูกค้า / หัวใบ / เว้นหัวว่าง (เดิมหายตอนดึงกลับ)
+        cust_address:  sample?.cust_address ?? '',
+        header_text:   sample?.header_text  ?? '',
+        blank_header:  sample?.blank_header ?? false,
+        label_size:    sample?.label_size   ?? 'long',
         item_code:     r.item_code   ?? '',
         mat_code:      r.mat_code    ?? '',
         planned_qty:   r.planned_qty != null ? String(r.planned_qty) : '',
@@ -2787,6 +2793,8 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         cust_branch:  (profile as any).custBranch ?? '',
         header_text:  (profile as any).headerText ?? '',   // ✨ เก็บหัวใบ (ชื่อลูกค้า) → รีปริ้นหัวใบตรงเดิม
         blank_header: (profile as any).blankHeader ?? false,
+        label_size:   (profile as any).labelSize ?? 'long',   // ✨ เก็บขนาดใบปะหน้า → ดึงงานเก่ากลับได้ครบ
+        cust_address: (profile as any).custAddress ?? '',     // ✨ เก็บที่อยู่ลูกค้าติดม้วน → กู้กลับได้
         section:      profile.section ?? 'blow',
         width_cm:     profile.widthCm || null,
         width_unit:   profile.widthUnit ?? 'cm',

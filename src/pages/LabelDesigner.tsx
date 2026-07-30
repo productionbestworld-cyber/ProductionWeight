@@ -179,7 +179,7 @@ export const DEFAULT_LAYOUT_SHORT: LabelLayout = {
       fontSize:8, fontWeight:'700', align:'center',
       visible:true, type:'text', border:false, italic:false },
     { id:'rollno', label:'Roll No',
-      sampleValue:'Roll #5',
+      sampleValue:'No. 5',
       x:54, y:8.5, w:20, h:4.5,
       fontSize:8, fontWeight:'700', align:'right',
       visible:true, type:'text', border:false, italic:false },

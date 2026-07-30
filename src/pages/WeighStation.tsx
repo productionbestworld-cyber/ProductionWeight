@@ -211,7 +211,7 @@ ${savedLayout.fields.map(renderLongField).join('\n')}
   // ═══════════════════════════════════════════════════════
   const shortLayout  = await loadShortLayout()
   const shortHeader  = p.blankHeader ? '' : ((p.headerText || '').trim() || 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด')
-  const rollWord     = rollType.startsWith('scrap') ? 'ถุง' : rollType === 'bad' ? 'กรอ' : 'Roll'
+  const rollWord     = rollType.startsWith('scrap') ? 'ถุง' : rollType === 'bad' ? 'กรอ No.' : 'No.'
   const shortFieldData: Record<string, string> = {
     header:    (rollType === 'bad')
                ? `<span style="font-size:0.9em">SO <b>${p.soNo || '—'}</b> · WO <b>${p.woNo || '—'}</b> · รหัส <b>${p.itemCode || '—'}</b></span>${rollTypeLabelLong ? ` [${rollTypeLabelLong}]` : ''}${rollType === 'bad' && reason ? ` <span style="color:#c00">เหตุผล: ${reason}</span>` : ''}`

@@ -26,7 +26,14 @@ function thaiDate(d: Date = new Date()) {
 function barcodeUrl(text: string, h = 10) {
   return `https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(text||'0')}&scale=2&height=${h}&includetext`
 }
-// เลื่อน lot อัตโนมัติเป็น "เดือนปัจจุบัน" ถ้า lot เป็น auto-pattern ของเดือนเก่า
+// ปี(พ.ศ. 2 หลัก) + เดือน 2 หลัก ตาม "เวลาไทย" เสมอ (ไม่ขึ้นกับ timezone ของ OS เครื่องชั่ง)
+//   ใช้กับ lot ทั้งหมด (สร้าง/เช็ค/เลื่อนเดือน) — กัน lot เพี้ยนช่วงข้ามเที่ยงคืนถ้าเครื่องตั้งเวลาไม่ใช่ ICT
+function thaiYM(d: Date = new Date()): { yy: string; mm: string } {
+  const p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit' }).formatToParts(d)
+  const g = (t: string) => p.find(x => x.type === t)?.value ?? ''
+  return { yy: String((parseInt(g('year')) + 543) % 100).padStart(2, '0'), mm: g('month') }
+}
+// เลื่อน lot อัตโนมัติเป็น "เดือนปัจจุบัน (เวลาไทย)" ถ้า lot เป็น auto-pattern ของเดือนเก่า
 //   รูปแบบ auto = yy + machine + custCode(4หลัก) + mm  (เช่น 69BL01003406)
 //   ใช้ตอนงานข้ามเดือน → คืน lot เดือนใหม่ (เลขม้วนจะรีเซ็ต #1 เพราะ lot ใหม่ยังไม่มีม้วน)
 //   ถ้า lot กรอกเอง (ไม่ตรง pattern) → คืนค่าเดิม ไม่แตะ
@@ -35,8 +42,7 @@ function rolloverLotNo(lot: string, machine: string): string {
   const mc = machine.toUpperCase()
   const m = lot.match(new RegExp(`^(\\d{2})${mc}(\\d{4})(\\d{2})$`))
   if (!m) return lot
-  const yy = String((new Date().getFullYear() + 543) % 100).padStart(2, '0')
-  const mm = String(new Date().getMonth() + 1).padStart(2, '0')
+  const { yy, mm } = thaiYM()
   return `${yy}${mc}${m[2]}${mm}`
 }
 
@@ -751,6 +757,31 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
           if (r.roll_type === 'good') { map[key].done += r.weight ?? 0; map[key].rolls += 1 }
           else if (r.roll_type === 'bad') { map[key].badKg += r.weight ?? 0; map[key].badRolls += 1 }
         })
+        // ── carryover ข้ามเดือน (เป่า/พิมพ์): บวกยอดม้วนดีของ "WO ปัจจุบัน" ที่อยู่ lot อื่น (เดือนก่อน) ──
+        //   ให้การ์ดเลือกเครื่องโชว์ "เหลือ" ตรงกับหน้าจอชั่ง หลังข้ามเดือน (ไม่งั้นดูเหมือนเพิ่งเริ่ม)
+        const curWOs = Array.from(new Set(profiles.map(p => p.woNo).filter(Boolean)))
+        if (dept !== 'rewind' && curWOs.length) {
+          const co: any[] = []
+          for (let from = 0; ; from += PAGE) {
+            const { data: cd, error: ce } = await supabase.from('production_rolls')
+              .select('machine_no, lot_no, work_order, weight')
+              .eq('roll_type', 'good')
+              .in('machine_no', machineNos)
+              .in('work_order', curWOs)
+              .order('id', { ascending: true }).range(from, from + PAGE - 1)
+            if (ce || !cd) break
+            co.push(...cd)
+            if (cd.length < PAGE) break
+          }
+          co.forEach(r => {
+            const key = r.machine_no ?? ''
+            const curLot = lotMap[key]
+            if (!curLot || r.lot_no === curLot) return                 // นับเฉพาะ lot อื่น (เดือนก่อน)
+            if ((r.work_order ?? '') !== (woMap[key] ?? '')) return     // เฉพาะ WO ปัจจุบันของเครื่องนี้
+            if (!map[key]) map[key] = { done: 0, rolls: 0, badKg: 0, badRolls: 0 }
+            map[key].done += r.weight ?? 0
+          })
+        }
         setProgress(map)
       }
     })()
@@ -1415,8 +1446,7 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
 
   // ── helper สร้าง Lot No อัตโนมัติ ──
   function genLotNo(machine: string, custCode: string): string {
-    const yy = String((new Date().getFullYear() + 543) % 100).padStart(2, '0')
-    const mm = String(new Date().getMonth() + 1).padStart(2, '0')
+    const { yy, mm } = thaiYM()
     const mc = (machine ?? '').toUpperCase()
     // ต้องมี "ตัวเลข" ในรหัสลูกค้าอย่างน้อย 1 ตัว — รหัส "00" (ลูกค้าตัวอย่าง) นับว่ามี → เจนได้
     // (เดิมเช็ก cc === '0000' ทำให้รหัส 00 ถูกบล็อกเพราะเติมศูนย์แล้วกลายเป็น 0000)
@@ -1428,8 +1458,7 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
   // เช็คว่า lot string ตรงรูปแบบ auto-gen ของเครื่องนี้หรือเปล่า: yy + machine_no + 4digit + mm
   function isAutoLotPattern(lot: string, machine_no: string): boolean {
     if (!lot || !machine_no) return false
-    const yy = String((new Date().getFullYear() + 543) % 100).padStart(2, '0')
-    const mm = String(new Date().getMonth() + 1).padStart(2, '0')
+    const { yy, mm } = thaiYM()
     const re = new RegExp(`^${yy}${machine_no.toUpperCase()}\\d{4}${mm}$`)
     return re.test(lot)
   }
@@ -2030,6 +2059,8 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
   const awaitingClearRef = useRef(false)
   const grossAtSaveRef   = useRef(0)
   const [weighedKg,    setWeighedKg]    = useState(0)
+  // ยอดผลิต "ม้วนดี" ของ WO นี้ ที่ทำไปแล้วใน lot อื่น (เดือนก่อน) — ใช้คิด "เหลืออีกเท่าไหร่" ข้ามเดือน
+  const [carryoverKg,  setCarryoverKg]  = useState(0)
   const [weighedRolls, setWeighedRolls] = useState<any[]>([])
   const [showCloseModal, setShowCloseModal] = useState(false)
   const [closing,        setClosing]        = useState(false)
@@ -2334,9 +2365,11 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
   const dec       = profile.decimal
   const planned   = parseFloat(profile.plannedQty) || 0
   const net       = parseFloat(Math.max(0, gross - core).toFixed(dec))
-  const remaining = Math.max(0, planned - weighedKg)
-  const pct       = planned > 0 ? Math.min(100, Math.round((weighedKg / planned) * 100)) : 0
-  const done      = planned > 0 && weighedKg >= planned
+  // เป้าคงเหลือคิดจาก "ยอดรวมทั้ง WO ข้ามเดือน" = ม้วนดีเดือนนี้ + เดือนก่อน (carryover)
+  const cumGoodKg = weighedKg + carryoverKg
+  const remaining = Math.max(0, planned - cumGoodKg)
+  const pct       = planned > 0 ? Math.min(100, Math.round((cumGoodKg / planned) * 100)) : 0
+  const done      = planned > 0 && cumGoodKg >= planned
   // กรอ: เลขม้วนถัดไปที่จะ "โชว์" (เริ่ม 1 ใหม่ต่อรอบ) — roll_no จริงยังเป็น rollNo เดิม
   const reworkDispNo = isRework
     ? weighedRolls.filter((r:any)=>r?.roll_type==='good' && (r.rework_batch??1)===reworkRound).length + 1
@@ -2360,23 +2393,8 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
 
   // โหลดม้วนทั้งหมดของ machine+lot นี้ — merge กับ offline queue เพื่อไม่ให้เลขม้วนชน
   async function loadRollsForMachine() {
-    // ── กันข้ามเดือน: ถ้า lot เป็น auto-pattern ของเดือนเก่า → เลื่อนเป็นเดือนปัจจุบัน (ม้วนใหม่ปริ้น lot เดือนใหม่) ──
-    //    เป่า/พิมพ์: lot ใหม่ยังไม่มีม้วน → เลขรีเซ็ต #1 · กรอ: เลขยังยึด item (ไม่รีเซ็ต) แต่ lot เปลี่ยนตามเดือน
-    {
-      const effLot = rolloverLotNo(profile.lotNo ?? '', profile.machine_no ?? '')
-      if (effLot && effLot !== (profile.lotNo ?? '')) {
-        setProfile(prev => ({ ...prev, lotNo: effLot }))
-        if (!isRework) {
-          // เป่า/พิมพ์: บันทึกลง machine_profiles → หน้าโอน/แดชบอร์ดเห็น lot ถูก (สถานะ "เดิน/จบ")
-          void supabase.from('machine_profiles').update({ lot_no: effLot }).eq('machine_no', profile.machine_no ?? '')
-        } else {
-          // กรอ: อัปเดต lot ของงานกรอด้วย (เลขม้วนยังยึด item — ไม่รีเซ็ต)
-          const jid = (profile as any).reworkJobId
-          if (jid) void supabase.from('rework_jobs').update({ lot_no: effLot }).eq('id', jid)
-        }
-        return   // setProfile → useEffect[profile.lotNo] จะเรียก loadRollsForMachine ใหม่ด้วย lot ใหม่
-      }
-    }
+    // หมายเหตุ: การข้ามเดือนจัดการที่ตอน "บันทึกม้วน" (saveRoll) แบบ ปิดยอดเดือนเก่า+เปิดงานเดือนใหม่
+    //   ไม่เลื่อน lot ตอนโหลดอีกต่อไป (เดิมเลื่อนตรงนี้ทำให้ม้วนเดือนเก่าค้างไม่มีใบสรุป)
     // freshStart (งานผลิตดึงกลับ): นับเฉพาะม้วนของ WO นี้
     // ⚠ งานกรอ: ห้ามกรองตาม WO — เพราะงานรวมข้ามไซส์มีหลาย WO ใน Lot เดียว
     //   เลขม้วนต้อง unique ทั้ง Lot ไม่งั้นแจกเลขซ้ำ (เช่น #12 ชนกัน)
@@ -2436,19 +2454,23 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
     }
     setBadRollNo(nextRollNo(badRolls, isRework))
   }
+  // เก็บ ref ของ loadRollsForMachine ล่าสุดทุก render — กัน realtime callback (deps []) จับ closure เก่า
+  //   (เดิมพอ lot เลื่อนเดือน callback ยังอ่าน lot เก่า → รีเฟรชค้าง lot เดิม)
+  const loadRef = useRef(loadRollsForMachine)
+  loadRef.current = loadRollsForMachine
 
   useEffect(() => {
     loadRollsForMachine()
     setStable(true)
 
-    // Realtime: อัปเดตสถานะ transferred ทันทีเมื่อโอนจากหน้าอื่น
+    // Realtime: อัปเดตสถานะ transferred ทันทีเมื่อโอนจากหน้าอื่น (เรียกผ่าน ref → ใช้ lot ล่าสุดเสมอ)
     const channel = supabase.channel(`rolls-${profile.machine_no}-${profile.lotNo}`)
       .on('postgres_changes', {
         event: 'UPDATE',
         schema: 'public',
         table: 'production_rolls',
         filter: `machine_no=eq.${profile.machine_no}`,
-      }, () => { loadRollsForMachine() })
+      }, () => { loadRef.current() })
       .subscribe()
 
     return () => {
@@ -2459,6 +2481,28 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
 
   // reload ม้วนเมื่อ freshStart/WO/Lot เปลี่ยน (profile โหลด async หลัง mount)
   useEffect(() => { loadRollsForMachine() }, [(profile as any).freshStart, profile.woNo, profile.lotNo]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── "เหลืออีกเท่าไหร่" ข้ามเดือน: ยอดม้วนดีของ WO นี้ที่ทำไปแล้วใน lot อื่น (เดือนก่อน) ──
+  //   เป่า/พิมพ์เท่านั้น (ยึด WO) · พอ lot เลื่อนเดือน (…07→…08) จะดึงยอดเดือนก่อนมาคิดเป้าคงเหลือให้
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      // ⚠ ใช้ WO "ไม่ trim" ให้ตรงกับค่าที่บันทึกจริงบนม้วน (loadRollsForMachine/save ก็ไม่ trim)
+      //   trim เฉพาะตอนเช็คว่า "มี WO ไหม" — กัน carryover พลาดเป็น 0 ถ้า WO มีช่องว่างติด
+      const wo = profile.woNo ?? ''
+      if (isRework || !wo.trim() || !profile.machine_no || !profile.lotNo) { if (!cancelled) setCarryoverKg(0); return }
+      try {
+        const rows = await fetchAll(() => supabase.from('production_rolls')
+          .select('weight')
+          .eq('machine_no', profile.machine_no)
+          .eq('work_order', wo)
+          .eq('roll_type', 'good')
+          .neq('lot_no', profile.lotNo))
+        if (!cancelled) setCarryoverKg(rows.reduce((s: number, r: any) => s + (r.weight ?? 0), 0))
+      } catch { if (!cancelled) setCarryoverKg(0) }
+    })()
+    return () => { cancelled = true }
+  }, [isRework, profile.machine_no, profile.woNo, profile.lotNo]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function clearAwaiting() {
     if (awaitingClearRef.current) { awaitingClearRef.current = false; setAwaitingClear(false) }
@@ -2603,7 +2647,8 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       const dbYield = dbTotal > 0 ? Math.round(dbGoodKg / dbTotal * 100) : 0
 
       // ── เตือนถ้ายังมี offline queue ค้าง (ม้วนยังไม่ sync = สรุปยังไม่ครบ) ──
-      const pendingForLot = loadQueue().filter((q:any) => q.machine_no === profile.machine_no && q.lot_no === profile.lotNo)
+      //   ไม่กรองตาม lot — งานข้ามเดือนอาจมีม้วนค้างของ lot เดือนเก่า (ต้องเตือนด้วย)
+      const pendingForLot = loadQueue().filter((q:any) => q.machine_no === profile.machine_no)
       if (pendingForLot.length > 0) {
         if (!confirm(`⚠ ยังมีม้วน ${pendingForLot.length} ม้วนค้าง offline ของ lot นี้\nสรุปยอดอาจไม่ครบ — ปิดงานต่อหรือไม่?`)) {
           setClosing(false); setShowCloseModal(false); return
@@ -2680,7 +2725,105 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
   // เศษใช้ gross โดยตรง (มาเป็นถุง ไม่หักแกน), ม้วนดี/กรอใช้ net
   const saveWeight = isScrap ? gross : net
 
+  // ── ปิดยอด "งานเดือนเก่า" อัตโนมัติแบบเงียบ (เป่า/พิมพ์) — เขียน job_summaries ของ lot เดิม ──
+  //   ไม่ปริ้น ไม่เคลียร์เครื่อง ไม่เด้งออก (ปริ้นใบสรุปทีหลังจากหน้าประวัติ)
+  //   idempotent: ถ้ามีใบสรุป (เครื่อง+lot+WO) แล้ว → ข้าม · ไม่มีม้วนเดือนเก่า → ไม่ต้องมีใบสรุป
+  //   คืน true = ปลอดภัยที่จะเลื่อนเดือน (ปิดยอดแล้ว/ไม่มีอะไรต้องปิด) · false = เขียนไม่สำเร็จ (อย่าเพิ่งเลื่อน)
+  async function autoCloseMonthJob(oldLot: string): Promise<boolean> {
+    try {
+      const wo = (profile as any).woNo ?? ''
+      const { data: existing, error: exErr } = await supabase.from('job_summaries')
+        .select('id').eq('machine_no', profile.machine_no).eq('lot_no', oldLot).eq('work_order', wo).limit(1)
+      if (exErr) return false
+      if (existing && existing.length) return true   // ปิดยอดไปแล้ว
+      const all = await fetchAll(() => supabase.from('production_rolls')
+        .select('weight, roll_type, transferred')
+        .eq('machine_no', profile.machine_no).eq('lot_no', oldLot).eq('work_order', wo)
+        .order('id', { ascending: true }))
+      if (!all.length) return true   // งานเดือนเก่ายังไม่มีม้วน → เลื่อนได้เลย
+      const g = all.filter((r:any)=>r.roll_type==='good')
+      const b = all.filter((r:any)=>r.roll_type==='bad')
+      const s = all.filter((r:any)=>typeof r.roll_type==='string' && r.roll_type.startsWith('scrap'))
+      const gk = g.reduce((a:number,r:any)=>a+(r.weight??0),0)
+      const bk = b.reduce((a:number,r:any)=>a+(r.weight??0),0)
+      const sk = s.reduce((a:number,r:any)=>a+(r.weight??0),0)
+      const tk = g.filter((r:any)=>r.transferred).reduce((a:number,r:any)=>a+(r.weight??0),0)
+      const tot = gk + bk + sk
+      const { error: insErr } = await supabase.from('job_summaries').insert({
+        machine_no:     profile.machine_no,
+        lot_no:         oldLot,
+        sale_order:     profile.soNo ?? '',
+        work_order:     wo,
+        delivery_date:  profile.deliveryDate || null,
+        product_name:   profile.productName,
+        customer:       profile.custName,
+        item_code:      profile.itemCode,
+        mat_code:       profile.matCode,
+        // เป้า (planned) ยกไปไว้ที่ใบปิดงานจริง (เดือนสุดท้าย) เท่านั้น — กันเป้าถูกนับซ้ำ
+        //   ต่อ WO เวล่ารวมยอดข้ามเดือน (ใบปิดเดือนกลางทางจึงเป็น 0)
+        planned_qty:    0,
+        good_kg:        parseFloat(gk.toFixed(2)),
+        good_rolls:     g.length,
+        bad_kg:         parseFloat(bk.toFixed(2)),
+        bad_rolls:      b.length,
+        scrap_kg:       parseFloat(sk.toFixed(2)),
+        transferred_kg: parseFloat(tk.toFixed(2)),
+        yield_pct:      tot > 0 ? Math.round(gk / tot * 100) : 0,
+        closed_at:      new Date().toISOString(),
+        closed_by:      inspector || 'auto-ข้ามเดือน',
+        inspector:      inspector || null,
+      })
+      return !insErr
+    } catch (e:any) {
+      console.warn('autoCloseMonthJob err (non-fatal):', e?.message ?? e)
+      return false
+    }
+  }
+
+  // ── ดีเลย์ตอนข้ามเดือน: เด้งหน้า "รอ 2 นาที ระบบกำลังเริ่มต้นเดือนใหม่" + ล็อกชั่ง ──
+  //   พอถึงเที่ยงคืนเดือนใหม่ (เวลาไทย) จะปิดยอดเดือนเก่า + ตั้งต้นเดือนใหม่ให้เบื้องหลัง
+  //   ระหว่างนั้นล็อกชั่งไว้ ~2 นาที กันหน้างานชั่งแทรกจนรวน
+  const GRACE_SECS = 120
+  const [graceSecs, setGraceSecs] = useState(0)
+  const graceHandledRef = useRef<string>('')   // lot ที่จัดการ boundary แล้ว (กันเด้งซ้ำ)
+  const profileRef = useRef(profile);           profileRef.current = profile
+  const weighedKgRef = useRef(weighedKg);       weighedKgRef.current = weighedKg
+  const autoCloseRef = useRef(autoCloseMonthJob); autoCloseRef.current = autoCloseMonthJob
+  useEffect(() => {
+    const check = () => {
+      const p = profileRef.current
+      if (!p?.lotNo || !p.machine_no || p.section === 'rewind' || !p.productName) return  // เฉพาะเป่า/พิมพ์ที่มีงานเดินอยู่
+      const rolled = rolloverLotNo(p.lotNo, p.machine_no)
+      if (!rolled || rolled === p.lotNo) return           // ยังไม่ข้ามเดือน
+      if (graceHandledRef.current === p.lotNo) return      // จัดการ boundary นี้แล้ว
+      graceHandledRef.current = p.lotNo
+      setGraceSecs(GRACE_SECS)                             // เด้งหน้า + นับถอยหลัง
+      ;(async () => {                                      // ปิดยอดเดือนเก่า + ตั้งต้นเดือนใหม่ (เบื้องหลัง)
+        if (await autoCloseRef.current(p.lotNo)) {
+          setCarryoverKg(prev => prev + weighedKgRef.current)
+          setWeighedKg(0)
+          setProfile(prev => ({ ...prev, lotNo: rolled }))
+          void supabase.from('machine_profiles').update({ lot_no: rolled }).eq('machine_no', p.machine_no ?? '')
+        }
+      })()
+    }
+    check()
+    const iv = setInterval(check, 15_000)
+    return () => clearInterval(iv)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // นับถอยหลังหน้าดีเลย์ (สร้าง interval ครั้งเดียวตอนเริ่มล็อก)
+  useEffect(() => {
+    if (graceSecs <= 0) return
+    const iv = setInterval(() => setGraceSecs(s => (s <= 1 ? 0 : s - 1)), 1000)
+    return () => clearInterval(iv)
+  }, [graceSecs > 0]) // eslint-disable-line react-hooks/exhaustive-deps
+
   async function handleSave() {
+    // ระหว่างดีเลย์ข้ามเดือน — ล็อกชั่งจนกว่าจะครบเวลา
+    if (graceSecs > 0) {
+      alert(`⏳ ระบบกำลังเริ่มต้นเดือนใหม่ กรุณารอสักครู่ (อีก ${graceSecs} วินาที)`)
+      return
+    }
     // ล็อกหยุดชั่งทั้งระบบ (ผู้ดูแลสั่งหยุดชั่วคราว เช่น ตอนแก้ข้อมูล/ข้ามเดือน)
     if (weighLocked) {
       alert('⛔ ระบบหยุดชั่งชั่วคราว (ผู้ดูแลกำลังแก้ไขข้อมูล)\n\nกรุณารอจนกว่าจะเปิดให้ชั่งอีกครั้ง')
@@ -2714,6 +2857,18 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
     setSaving(true)
     try {
       const actualType = isScrap ? scrapSub : weighType
+      // ── ข้ามเดือน (เฉพาะเป่า/พิมพ์): ม้วนแรกที่ตกเดือนใหม่ (เวลาไทย) → ปิดยอดเดือนเก่า + เปิดงานใหม่ ──
+      //   • ปิดยอด lot เดือนเก่าเป็น job_summaries (เงียบ — ปริ้นทีหลังจากหน้าประวัติ)
+      //   • ม้วนนี้เป็น #1 ของ lot เดือนใหม่ · ใช้ WO เดิมต่อ · งานกรอไม่ยุ่ง (lot กรอยึดต้นทาง/สินค้า)
+      //   • ถ้าปิดยอดไม่สำเร็จ → ยังไม่เลื่อนเดือนรอบนี้ (กันยอดเดือนเก่าขาดใบสรุป)
+      let effLot = profile.lotNo ?? ''
+      let monthRolled = false
+      if (!isRework) {
+        const rolled = rolloverLotNo(effLot, profile.machine_no ?? '')
+        if (rolled && rolled !== effLot) {
+          if (await autoCloseMonthJob(effLot)) { effLot = rolled; monthRolled = true }
+        }
+      }
       // ── ชุดระบบใหม่ (กรอ): เลขม้วนนับต่อ "สินค้า (item_code)" รีเซ็ตตามการโอน ──
       //   เลข = max(เลขม้วนของสินค้านี้ ที่เป็นชุดใหม่ + ยังไม่โอน) + 1
       //   พอโอนหมด → max=0 → เริ่ม #1 ใหม่อัตโนมัติ
@@ -2726,7 +2881,10 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
           .eq('new_system', true).eq('transferred', false)
         nsRollNo = Math.max(0, ...((nsRows ?? []).map((x:any) => x.roll_no ?? 0))) + 1
       }
-      const useRollNo  = isNewSysRoll ? nsRollNo : (isBad ? badRollNo : isGood ? rollNo : 0)
+      // เลขม้วน: ข้ามเดือน → lot ใหม่ยังไม่มีม้วน → เริ่ม #1 (เศษ=0) · ปกติ → ใช้ตัวนับปัจจุบัน
+      const useRollNo  = isNewSysRoll ? nsRollNo
+        : monthRolled ? (isScrap ? 0 : 1)
+        : (isBad ? badRollNo : isGood ? rollNo : 0)
       // หมายเหตุม้วนกรอ: หยิบม้วนต้นทางมากี่โล ชั่งได้กี่โล เศษกี่โล
       const useSrc = (isRework && isGood && selSrc) ? selSrc : null
       // ผลิตเป่า: ม้วนต้นทางที่กรอมา (แยกจากโหมดกรอ) — ม้วนออกเลข/Lot/WO ของเครื่องนี้ตามปกติ
@@ -2794,7 +2952,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         remark:       rollRemark,
         inspector:    inspector || null,
         machine_no:   profile.machine_no,
-        lot_no:       profile.lotNo,
+        lot_no:       effLot,
         sale_order:   useSo,
         work_order:   useWo,
         rework_source_roll_id: useSrc ? useSrc.id : (rwUseSrc ? rwUseSrc.id : null),
@@ -2834,7 +2992,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         const existing = await fetchAll(() => supabase.from('production_rolls')
           .select('roll_no, roll_type, work_order')
           .eq('machine_no', profile.machine_no)
-          .eq('lot_no', profile.lotNo)
+          .eq('lot_no', effLot)
           .order('id', { ascending: true }))
         // เป่า/พิมพ์: หาเลขว่างเฉพาะ WO เดียวกัน (นับตาม WO) · กรอ: ทั้ง item
         const sameTypeRolls = existing.filter((x:any) =>
@@ -2860,7 +3018,17 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       }
 
       setLastRoll({ ...data, weighType: actualType })
-      setWeighedRolls(prev => [...prev, data].filter(Boolean))
+      if (monthRolled) {
+        // ข้ามเดือนสำเร็จ → เปลี่ยน lot บนจอเป็นเดือนใหม่ + เก็บลง machine_profiles
+        //   useEffect[profile.lotNo] จะรีโหลดม้วนของ lot ใหม่ → ยอด/เลขม้วนตั้งใหม่ให้เอง
+        setProfile(prev => ({ ...prev, lotNo: effLot }))
+        void supabase.from('machine_profiles').update({ lot_no: effLot }).eq('machine_no', profile.machine_no ?? '')
+        // ยอดเดือนเก่า (weighedKg ของ lot เดิม) ยกเป็น carryover ทันที — กันแฟลช "เหลือ=เต็มเป้า"
+        //   ก่อน effect ดึงยอดจริงมา reconcile (ได้ค่าเท่ากัน)
+        setCarryoverKg(prev => prev + weighedKg)
+        setWeighedKg(0)   // เริ่มยอดเดือนใหม่จาก 0 (กันแฟลชยอดเดือนเก่า ก่อน branch บวกม้วนนี้)
+      }
+      setWeighedRolls(prev => (monthRolled ? [data] : [...prev, data]).filter(Boolean))
       // ม้วนต้นทาง: ชั่งได้แล้ว → ปิดม้วน (ที่เหลือเป็นเศษ) → หายจากลิสต์ กันชั่งซ้ำ
       // ⚠ เฉพาะตอนเซฟสำเร็จ (online) — ถ้าออฟไลน์ ม้วนใหม่ยังไม่ลง DB จึงไม่หักม้วนต้นทาง
       let jobDoneAutoExit = false
@@ -2878,7 +3046,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         const sc = Math.max(0, (rwUseSrc.weight ?? 0) - saveWeight)
         await supabase.from('production_rolls').update({
           rework_status: 'reworked',
-          rework_remark: `กรอเสร็จ (ชั่งที่เครื่องผลิต ${profile.machine_no}) · หยิบมา ${fmt(rwUseSrc.weight,dec)} · ชั่งได้ ${fmt(saveWeight,dec)} · เศษ ${fmt(sc,dec)} Kg → ออกม้วน Lot ${profile.lotNo} #${useRollNo}`,
+          rework_remark: `กรอเสร็จ (ชั่งที่เครื่องผลิต ${profile.machine_no}) · หยิบมา ${fmt(rwUseSrc.weight,dec)} · ชั่งได้ ${fmt(saveWeight,dec)} · เศษ ${fmt(sc,dec)} Kg → ออกม้วน Lot ${effLot} #${useRollNo}`,
         }).eq('id', rwUseSrc.id)
         setRwSel(null)
         setRwSrcRolls(prev => prev.filter(x => x.id !== rwUseSrc.id))
@@ -2924,7 +3092,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       //   ไม่ใช้ default ของเซิร์ฟเวอร์ — ไม่งั้นชั่ง offline แล้ว sync ทีหลัง เวลาจะเพี้ยน
       const logPayload = {
         machine_no:   profile.machine_no,
-        lot_no:       profile.lotNo,
+        lot_no:       effLot,
         work_order:   profile.woNo ?? '',
         sale_order:   profile.soNo ?? '',
         item_code:    profile.itemCode,
@@ -2962,10 +3130,11 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       if (isGood) {
         setWeighedKg(prev => parseFloat((prev + saveWeight).toFixed(dec)))
         // เป่า: เลขต่อเนื่อง (max+1) · กรอ: gap-fill
-        const newList = [...weighedRolls, data]
+        //   ข้ามเดือน: ตัดม้วนเดือนเก่าทิ้ง (weighedRolls ยังเป็นชุดเก่า) → เลขถัดไปนับจาก lot ใหม่ #1 เท่านั้น
+        const newList = [...(monthRolled ? [] : weighedRolls), data]
         setRollNo(nextRollNo(newList.filter((r:any) => r?.roll_type === 'good'), isRework))
         // print fire-and-forget (ไม่ await — ไม่บล็อก save flow)
-        printLabel({...profile, length: lengthVal || profile.length, pcs: pcsVal || profile.pcs, inspector}, rollNo, gross, saveWeight, (isRework ? 'short' : (profile.labelSize ?? 'long')),'good', '', data.id)
+        printLabel({...profile, lotNo: effLot, length: lengthVal || profile.length, pcs: pcsVal || profile.pcs, inspector}, useRollNo, gross, saveWeight, (isRework ? 'short' : (profile.labelSize ?? 'long')),'good', '', data.id)
         // กรอต่อ: ม้วนต้นทางที่ 2 ถูกรวมเข้าม้วนนี้แล้ว → mark consumed (หลุดจากลิสต์ต้นทาง)
         if (useSrc2) {
           supabase.from('production_rolls')
@@ -2981,13 +3150,13 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
             .then(() => {}, (e: any) => console.warn('update rework cause err:', e))
         }
       } else if (isBad) {
-        const newList = [...weighedRolls, data]
+        const newList = [...(monthRolled ? [] : weighedRolls), data]
         setBadRollNo(nextRollNo(newList.filter((r:any) => r?.roll_type === 'bad')))
-        printLabel({...profile, inspector}, badRollNo, gross, saveWeight, (isRework ? 'short' : (profile.labelSize ?? 'long')),'bad', badReason, data.id)
+        printLabel({...profile, lotNo: effLot, inspector}, useRollNo, gross, saveWeight, (isRework ? 'short' : (profile.labelSize ?? 'long')),'bad', badReason, data.id)
         setBadReason('')
       } else {
         // เศษ — ไม่มี roll_no ไม่นับม้วน พิมพ์ label แยก
-        printLabel({...profile, inspector}, 0, gross, gross, (isRework ? 'short' : (profile.labelSize ?? 'long')),actualType, scrapReason, data.id)
+        printLabel({...profile, lotNo: effLot, inspector}, 0, gross, gross, (isRework ? 'short' : (profile.labelSize ?? 'long')),actualType, scrapReason, data.id)
         setScrapReason('')
       }
       // หลัง save: ถ้า simMode อยู่ → สุ่มค่าใหม่ให้พร้อมม้วนถัดไป, ถ้าไม่ → reset
@@ -3111,6 +3280,20 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         </div>
       )}
 
+      {/* ── ดีเลย์ข้ามเดือน: เด้งหน้า "รอ ระบบกำลังเริ่มต้นเดือนใหม่" + นับถอยหลัง (ล็อกชั่ง) ── */}
+      {graceSecs > 0 && (
+        <div className="fixed inset-0 z-[85] bg-black/85 flex items-center justify-center p-6">
+          <div className="bg-slate-900 border-2 border-brand-500/60 rounded-2xl max-w-md w-full text-center px-8 py-10 shadow-2xl">
+            <div className="text-6xl mb-4">🗓️</div>
+            <h2 className="text-white text-2xl font-black mb-2">กำลังเริ่มต้นเดือนใหม่</h2>
+            <p className="text-slate-300 text-sm leading-relaxed">ระบบกำลังปิดยอดเดือนเก่าและตั้งต้นงานเดือนใหม่ให้อัตโนมัติ<br/><b className="text-brand-300">กรุณารอสักครู่ · อย่าเพิ่งชั่ง</b></p>
+            <p className="text-brand-200 font-black text-5xl mt-5 tabular-nums">{Math.floor(graceSecs / 60)}:{String(graceSecs % 60).padStart(2, '0')}</p>
+            <p className="text-slate-500 text-xs mt-4">จอจะปลดล็อกเองอัตโนมัติ · ไม่ต้องกดอะไร</p>
+            <button onClick={() => setGraceSecs(0)} className="mt-5 text-slate-500 hover:text-slate-300 text-xs underline">พร้อมแล้ว เริ่มชั่งต่อเลย</button>
+          </div>
+        </div>
+      )}
+
       {/* ── Popup "ม้วนที่จะชั่ง" — เด้งตอนเข้าจอกรอ พร้อมรายละเอียด แล้วกดชั่งเลย (ไม่ต้องโชว์ถ้าเป็น modal อยู่แล้ว) ── */}
       {reworkIntro && !asModal && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={gotoScale}>
@@ -3174,10 +3357,10 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
               </button>
             </div>
           )}
-          {/* Progress mini */}
+          {/* Progress mini — คิดยอดรวมทั้ง WO (ข้ามเดือน) */}
           {planned > 0 && (
             <div className="text-right hidden sm:block">
-              <p className="text-xs text-slate-500">{fmt(weighedKg,dec)} / {fmt(planned,dec)} Kgs.</p>
+              <p className="text-xs text-slate-500">{fmt(cumGoodKg,dec)} / {fmt(planned,dec)} Kgs.</p>
               <div className="h-1.5 bg-slate-800 rounded-full w-32 mt-1">
                 <div className={`h-full rounded-full ${progressColor}`} style={{width:`${pct}%`}}/>
               </div>
@@ -3719,21 +3902,23 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
             </div>
           )}
 
-          {/* Progress — แถบเดียวแบ่งสี (น้ำเงิน=ม้วนดี, เหลือง=กรอ) ชี้เมาส์เห็นยอดจริง */}
+          {/* Progress — แถบเดียวแบ่งสี (น้ำเงิน=ม้วนดี, เหลือง=กรอ) ชี้เมาส์เห็นยอดจริง · คิดยอดรวมทั้ง WO ข้ามเดือน */}
           {planned > 0 && (() => {
-            const fgW  = Math.min(100, planned > 0 ? (weighedKg / planned) * 100 : 0)
+            const fgW  = Math.min(100, planned > 0 ? (cumGoodKg / planned) * 100 : 0)
             const badW = Math.min(100 - fgW, planned > 0 ? (badKgSum / planned) * 100 : 0)
             return (
             <div className={`rounded-xl p-3 border ${done ? 'bg-green-500/10 border-green-500/30' : 'bg-slate-900 border-slate-800'}`}>
               <div className="flex justify-between text-xs mb-1.5">
-                <span className="text-slate-400">ชั่งแล้ว (ม้วนดี) <b className={done?'text-green-300':'text-white'}>{fmt(weighedKg,dec)}</b></span>
+                <span className="text-slate-400">ชั่งแล้ว (ม้วนดี) <b className={done?'text-green-300':'text-white'}>{fmt(weighedKg,dec)}</b>
+                  {carryoverKg > 0 && <span className="text-slate-500"> +เดือนก่อน {fmt(carryoverKg,dec)} = <b className="text-slate-300">{fmt(cumGoodKg,dec)}</b></span>}
+                </span>
                 <span className={done ? 'text-green-400 font-bold' : 'text-brand-300'}>{done ? '✓ ครบ' : `เหลือ ${fmt(remaining,dec)}`}</span>
               </div>
               {/* แถบเดียว 2 สี — hover ดูยอดจริง */}
               <div className="h-3 bg-slate-800 rounded-full overflow-hidden flex"
-                   title={`ม้วนดี ${fmt(weighedKg,dec)} + กรอ ${fmt(badKgSum,dec)} = รวม ${fmt(goodPlusBadKg,dec)} Kgs. (เป้า ${fmt(planned,dec)})`}>
+                   title={`ม้วนดี(รวมข้ามเดือน) ${fmt(cumGoodKg,dec)} + กรอ ${fmt(badKgSum,dec)} Kgs. (เป้า ${fmt(planned,dec)})`}>
                 <div className={`h-full ${done ? 'bg-green-500' : 'bg-brand-500'} transition-all`} style={{width:`${fgW}%`}}
-                     title={`ม้วนดี ${fmt(weighedKg,dec)} Kgs. (${goodCnt} ม้วน)`}/>
+                     title={`ม้วนดีรวม ${fmt(cumGoodKg,dec)} Kgs. (เดือนนี้ ${fmt(weighedKg,dec)} · เดือนก่อน ${fmt(carryoverKg,dec)})`}/>
                 <div className="h-full bg-amber-400 transition-all" style={{width:`${badW}%`}}
                      title={`กรอ ${fmt(badKgSum,dec)} Kgs. (${badCnt} ม้วน)`}/>
               </div>
@@ -3741,9 +3926,10 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
               <div className="flex justify-between items-center mt-1">
                 <p className="text-slate-600 text-[10px]">
                   <span className="text-brand-400">■</span> ดี {fmt(weighedKg,dec)}
+                  {carryoverKg > 0 && <> · เดือนก่อน {fmt(carryoverKg,dec)}</>}
                   {badKgSum > 0 && <> · <span className="text-amber-400">■</span> กรอ {fmt(badKgSum,dec)}</>}
                 </p>
-                <p className="text-slate-500 text-[10px]">รวม <b className="text-slate-300">{fmt(goodPlusBadKg,dec)}</b> · เป้า {fmt(planned,dec)}</p>
+                <p className="text-slate-500 text-[10px]">รวม <b className="text-slate-300">{fmt(cumGoodKg,dec)}</b> / เป้า {fmt(planned,dec)}</p>
               </div>
             </div>
             )

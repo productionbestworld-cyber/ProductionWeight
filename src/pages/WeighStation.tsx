@@ -2114,7 +2114,7 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
     // ม้วนเสียที่เบิกมา = bad + reworking + สินค้าเดียวกัน
     //   กรอต่อ (mergeMode): รวมม้วนที่ยังอยู่ในคิว (ยังไม่เบิก) ด้วย → เลือกม้วนที่ 2 ได้แม้ยังไม่เบิก
     let q = supabase.from('production_rolls')
-      .select('id, lot_no, roll_no, weight, core_weight, length, pcs, work_order, sale_order, remark, inbound_type, product_name, customer, width_cm, width_unit, thick_mc, machine_no, review_action_reason, review_decision_by, new_system, rework_status')
+      .select('id, lot_no, roll_no, weight, core_weight, length, pcs, work_order, sale_order, remark, inbound_type, product_name, customer, width_cm, width_unit, thick_mc, machine_no, review_action_reason, review_decision_by, new_system, rework_status, header_text, blank_header')
       .eq('roll_type', 'bad').eq('item_code', ic)
       .order('created_at', { ascending: true })
     q = mergeMode
@@ -2809,8 +2809,10 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         customer:     profile.custName,
         cust_code:    (profile as any).custCode ?? '',   // ✨ เก็บรหัสลูกค้า → รีปริ้นรู้ลูกค้า 08 = มี EXP
         cust_branch:  (profile as any).custBranch ?? '',
-        header_text:  (profile as any).headerText ?? '',   // ✨ เก็บหัวใบ (ชื่อลูกค้า) → รีปริ้นหัวใบตรงเดิม
-        blank_header: (profile as any).blankHeader ?? false,
+        // ✨ หัวใบ (ชื่อลูกค้า): ม้วนกรอ → สืบทอดจากม้วนต้นทาง (งานเป่าตั้งหัวไว้ยังไง กรอต้องเป็นแบบนั้น)
+        //    · งานเป่า/พิมพ์ปกติ → ใช้หัวที่ตั้งกับเครื่อง (profile)
+        header_text:  (isRework && isGood && useSrc) ? (useSrc.header_text ?? '') : ((profile as any).headerText ?? ''),
+        blank_header: (isRework && isGood && useSrc) ? (useSrc.blank_header ?? false) : ((profile as any).blankHeader ?? false),
         label_size:   (profile as any).labelSize ?? 'long',   // ✨ เก็บขนาดใบปะหน้า → ดึงงานเก่ากลับได้ครบ
         cust_address: (profile as any).custAddress ?? '',     // ✨ เก็บที่อยู่ลูกค้าติดม้วน → กู้กลับได้
         section:      profile.section ?? 'blow',

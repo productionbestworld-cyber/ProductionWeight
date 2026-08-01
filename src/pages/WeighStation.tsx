@@ -3928,50 +3928,40 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
             </div>
           )}
 
-          {/* Progress — แถบเดียวแบ่งสี (น้ำเงิน=ม้วนดี, เหลือง=กรอ) ชี้เมาส์เห็นยอดจริง · คิดยอดรวมทั้ง WO ข้ามเดือน */}
+          {/* Progress — แถบรวมทั้ง WO ข้ามเดือน: ฟ้าอ่อน=เดือนเก่า · ฟ้าเข้ม=เดือนใหม่ · เหลือง=กรอ */}
           {planned > 0 && (() => {
-            // ยอดรวมทั้ง WO ข้ามเดือน (เดือนนี้ + เดือนก่อน) ของแต่ละประเภท
-            const cumBadKg    = badKgSum + carryoverBad.kg
-            const cumBadRolls = badCnt   + carryoverBad.rolls
-            const cumScrapKg    = scrapKg          + carryoverScrap.kg
-            const cumScrapRolls = scrapRolls.length + carryoverScrap.rolls
-            const fgW    = Math.min(100, planned > 0 ? (cumGoodKg / planned) * 100 : 0)
-            const badW   = Math.min(100 - fgW, planned > 0 ? (cumBadKg / planned) * 100 : 0)
-            const scrapW = Math.min(100 - fgW - badW, planned > 0 ? (cumScrapKg / planned) * 100 : 0)
-            // แยกส่วน "เดือนก่อน" (สีเข้ม) กับ "เดือนนี้" (สีสด) ในแถบม้วนดี ให้เห็นสัดส่วนข้ามเดือน
-            const prevW = Math.min(fgW, planned > 0 ? (carryoverKg / planned) * 100 : 0)
-            const curW  = Math.max(0, fgW - prevW)
+            const cumBadKg  = badKgSum + carryoverBad.kg            // กรอรวมข้ามเดือน
+            const madePlusBad = cumGoodKg + cumBadKg                // ผลิต(ดี) + กรอ
+            const fgW   = Math.min(100, planned > 0 ? (cumGoodKg / planned) * 100 : 0)
+            const badW  = Math.min(100 - fgW, planned > 0 ? (cumBadKg / planned) * 100 : 0)
+            const prevW = Math.min(fgW, planned > 0 ? (carryoverKg / planned) * 100 : 0)   // เดือนเก่า
+            const curW  = Math.max(0, fgW - prevW)                                          // เดือนใหม่
             return (
             <div className={`rounded-xl p-3 border ${done ? 'bg-green-500/10 border-green-500/30' : 'bg-slate-900 border-slate-800'}`}>
               <div className="flex justify-between text-xs mb-1.5">
-                <span className="text-slate-400">ชั่งแล้ว (ม้วนดี) <b className={done?'text-green-300':'text-white'}>{fmt(cumGoodKg,dec)}</b>
-                  <span className="text-slate-500"> · {goodRolls.length + carryoverRolls} ม้วน</span>
-                  {carryoverKg > 0 && <span className="text-slate-500"> (เดือนนี้ {fmt(weighedKg,dec)}/{goodRolls.length}ม้วน + เดือนก่อน {fmt(carryoverKg,dec)}/{carryoverRolls}ม้วน)</span>}
-                </span>
+                <span className="text-slate-400">ชั่งแล้ว (ม้วนดี) <b className={done?'text-green-300':'text-white'}>{fmt(cumGoodKg,dec)}</b></span>
                 <span className={done ? 'text-green-400 font-bold' : 'text-brand-300'}>{done ? '✓ ครบ' : `เหลือ ${fmt(remaining,dec)}`}</span>
               </div>
-              {/* แถบเดียว 2 สี — hover ดูยอดจริง */}
+              {/* แถบรวม WO — ฟ้าอ่อน(เดือนเก่า) + ฟ้าเข้ม(เดือนใหม่) + เหลือง(กรอ) */}
               <div className="h-3 bg-slate-800 rounded-full overflow-hidden flex"
-                   title={`ม้วนดี(รวมข้ามเดือน) ${fmt(cumGoodKg,dec)} + กรอ ${fmt(cumBadKg,dec)} + เศษ ${fmt(cumScrapKg,dec)} Kgs. (เป้า ${fmt(planned,dec)})`}>
+                   title={`ผลิต ${fmt(cumGoodKg,dec)} + กรอ ${fmt(cumBadKg,dec)} = ${fmt(madePlusBad,dec)} / เป้า ${fmt(planned,dec)} Kgs.`}>
                 {prevW > 0 && (
-                  <div className={`h-full ${done ? 'bg-green-700' : 'bg-brand-700'} transition-all`} style={{width:`${prevW}%`}}
-                       title={`เดือนก่อน ${fmt(carryoverKg,dec)} Kgs. (${carryoverRolls} ม้วน)`}/>
+                  <div className="h-full bg-sky-300 transition-all" style={{width:`${prevW}%`}}
+                       title={`เดือนเก่า ${fmt(carryoverKg,dec)} Kgs.`}/>
                 )}
-                <div className={`h-full ${done ? 'bg-green-500' : 'bg-brand-500'} transition-all`} style={{width:`${curW}%`}}
-                     title={`เดือนนี้ ${fmt(weighedKg,dec)} Kgs. (${goodRolls.length} ม้วน · รวมข้ามเดือน ${fmt(cumGoodKg,dec)}/${goodRolls.length + carryoverRolls} ม้วน)`}/>
+                <div className={`h-full ${done ? 'bg-green-500' : 'bg-brand-600'} transition-all`} style={{width:`${curW}%`}}
+                     title={`เดือนใหม่ ${fmt(weighedKg,dec)} Kgs.`}/>
                 <div className="h-full bg-amber-400 transition-all" style={{width:`${badW}%`}}
-                     title={`กรอ ${fmt(cumBadKg,dec)} Kgs. (${cumBadRolls} ม้วน${carryoverBad.rolls>0?` · เดือนนี้ ${badCnt} + เดือนก่อน ${carryoverBad.rolls}`:''})`}/>
-                <div className="h-full bg-red-500 transition-all" style={{width:`${scrapW}%`}}
-                     title={`เศษ ${fmt(cumScrapKg,dec)} Kgs. (${cumScrapRolls} ถุง${carryoverScrap.rolls>0?` · เดือนนี้ ${scrapRolls.length} + เดือนก่อน ${carryoverScrap.rolls}`:''})`}/>
+                     title={`กรอ ${fmt(cumBadKg,dec)} Kgs.`}/>
               </div>
-              {/* legend + ยอดรวม */}
-              <div className="flex justify-between items-center mt-1">
-                <p className="text-slate-600 text-[10px]">
-                  <span className="text-brand-400">■</span> ดี {fmt(cumGoodKg,dec)}/{goodRolls.length + carryoverRolls}ม้วน
-                  {cumBadKg > 0 && <> · <span className="text-amber-400">■</span> กรอ {fmt(cumBadKg,dec)}/{cumBadRolls}ม้วน</>}
-                  {cumScrapKg > 0 && <> · <span className="text-red-400">■</span> เศษ {fmt(cumScrapKg,dec)}/{cumScrapRolls}ถุง</>}
-                </p>
-                <p className="text-slate-500 text-[10px]">รวม <b className="text-slate-300">{fmt(cumGoodKg,dec)}</b>/{goodRolls.length + carryoverRolls}ม้วน / เป้า {fmt(planned,dec)}</p>
+              {/* ยอดรวม ผลิต+กรอ / เป้าเต็ม */}
+              <div className="mt-1 text-[11px] leading-tight">
+                <div className="flex flex-wrap gap-x-2 text-slate-500">
+                  <span className="whitespace-nowrap"><span className="text-sky-300">■</span> เดือนเก่า {fmt(carryoverKg,dec)}</span>
+                  <span className="whitespace-nowrap"><span className="text-brand-400">■</span> เดือนใหม่ {fmt(weighedKg,dec)}</span>
+                  {cumBadKg > 0 && <span className="whitespace-nowrap"><span className="text-amber-400">■</span> กรอ {fmt(cumBadKg,dec)}</span>}
+                </div>
+                <p className="text-slate-400 mt-0.5">ผลิต+กรอ <b className="text-slate-200">{fmt(madePlusBad,dec)}</b> / เป้า {fmt(planned,dec)}</p>
               </div>
             </div>
             )

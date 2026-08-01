@@ -853,8 +853,9 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
             const ready    = isReady(p)
             const prog     = progress[p.machine_no] ?? { done: 0, rolls: 0, badKg: 0, badRolls: 0 }
             const planned  = parseFloat(p.plannedQty) || 0
-            const pct      = planned > 0 ? Math.min((prog.done / planned) * 100, 100) : 0
-            const remaining = Math.max(planned - prog.done, 0)
+            const totalKg  = prog.done + prog.badKg   // ผลิตดี + กรอ
+            const pct      = planned > 0 ? Math.min((totalKg / planned) * 100, 100) : 0
+            const remaining = Math.max(planned - totalKg, 0)   // เหลือ = เป้า − (ผลิตดี + กรอ)
             return (
               <div key={i} className={`rounded-2xl text-left transition-all group flex flex-col relative overflow-hidden ${
                 ready
@@ -927,21 +928,34 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
                         {planned > 0 && (() => {
                           const fgW  = Math.min(100, (prog.done / planned) * 100)
                           const badW = Math.min(100 - fgW, (prog.badKg / planned) * 100)
+                          const dec  = p.decimal ?? 2
+                          const netKg = prog.done - prog.badKg   // หักยอดผลิต = ผลิตดี − รวมกรอ
                           return (
                           <>
                             {/* แถบเดียว 2 สี — น้ำเงิน=ดี, เหลือง=กรอ */}
                             <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden flex"
-                                 title={`ม้วนดี ${prog.done.toFixed(p.decimal ?? 2)} + กรอ ${prog.badKg.toFixed(p.decimal ?? 2)} = รวม ${(prog.done + prog.badKg).toFixed(p.decimal ?? 2)} Kgs.`}>
+                                 title={`ม้วนดี ${prog.done.toFixed(dec)} + กรอ ${prog.badKg.toFixed(dec)} = รวม ${(prog.done + prog.badKg).toFixed(dec)} Kgs.`}>
                               <div className={`h-full transition-all ${pct >= 100 ? 'bg-green-500' : 'bg-brand-500'}`} style={{ width: `${fgW}%` }}
-                                   title={`ม้วนดี ${prog.done.toFixed(p.decimal ?? 2)} Kgs. (${prog.rolls} ม้วน)`}/>
+                                   title={`ม้วนดี ${prog.done.toFixed(dec)} Kgs. (${prog.rolls} ม้วน)`}/>
                               <div className="h-full bg-amber-400 transition-all" style={{ width: `${badW}%` }}
-                                   title={`กรอ ${prog.badKg.toFixed(p.decimal ?? 2)} Kgs. (${prog.badRolls} ม้วน)`}/>
+                                   title={`กรอ ${prog.badKg.toFixed(dec)} Kgs. (${prog.badRolls} ม้วน)`}/>
                             </div>
-                            <div className="flex justify-between text-[10px] mt-0.5">
-                              <span className="text-slate-500">
-                                <span className="text-brand-400">■</span> ดี {prog.done.toFixed(p.decimal ?? 2)}
-                                {prog.badRolls > 0 && <> · <span className="text-amber-400">■</span> กรอ {prog.badKg.toFixed(p.decimal ?? 2)}</>}
-                              </span>
+                            {/* ── ผลิตดี · รวมกรอ · หักยอดผลิต ── */}
+                            <div className="grid grid-cols-3 gap-1 mt-1 text-center">
+                              <div className="bg-brand-500/10 rounded px-1 py-0.5">
+                                <div className="text-[9px] text-brand-300/80 leading-none">ผลิตดี</div>
+                                <div className="text-[11px] text-brand-300 font-bold leading-tight">{prog.done.toFixed(dec)}</div>
+                              </div>
+                              <div className="bg-amber-400/10 rounded px-1 py-0.5">
+                                <div className="text-[9px] text-amber-300/80 leading-none">รวมกรอ</div>
+                                <div className="text-[11px] text-amber-300 font-bold leading-tight">{prog.badKg.toFixed(dec)}</div>
+                              </div>
+                              <div className={`rounded px-1 py-0.5 ${netKg < 0 ? 'bg-red-500/10' : 'bg-emerald-500/10'}`}>
+                                <div className={`text-[9px] leading-none ${netKg < 0 ? 'text-red-300/80' : 'text-emerald-300/80'}`}>หักยอดผลิต</div>
+                                <div className={`text-[11px] font-bold leading-tight ${netKg < 0 ? 'text-red-300' : 'text-emerald-300'}`}>{netKg.toFixed(dec)}</div>
+                              </div>
+                            </div>
+                            <div className="flex justify-end text-[10px] mt-0.5">
                               <span className="text-slate-500">เป้า {planned.toLocaleString()} ({pct.toFixed(0)}%)</span>
                             </div>
                           </>
@@ -3906,19 +3920,26 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
           {planned > 0 && (() => {
             const fgW  = Math.min(100, planned > 0 ? (cumGoodKg / planned) * 100 : 0)
             const badW = Math.min(100 - fgW, planned > 0 ? (badKgSum / planned) * 100 : 0)
+            // แยกส่วน "เดือนก่อน" (สีเข้ม) กับ "เดือนนี้" (สีสด) ในแถบม้วนดี ให้เห็นสัดส่วนข้ามเดือน
+            const prevW = Math.min(fgW, planned > 0 ? (carryoverKg / planned) * 100 : 0)
+            const curW  = Math.max(0, fgW - prevW)
             return (
             <div className={`rounded-xl p-3 border ${done ? 'bg-green-500/10 border-green-500/30' : 'bg-slate-900 border-slate-800'}`}>
               <div className="flex justify-between text-xs mb-1.5">
-                <span className="text-slate-400">ชั่งแล้ว (ม้วนดี) <b className={done?'text-green-300':'text-white'}>{fmt(weighedKg,dec)}</b>
-                  {carryoverKg > 0 && <span className="text-slate-500"> +เดือนก่อน {fmt(carryoverKg,dec)} = <b className="text-slate-300">{fmt(cumGoodKg,dec)}</b></span>}
+                <span className="text-slate-400">ชั่งแล้ว (ม้วนดี) <b className={done?'text-green-300':'text-white'}>{fmt(cumGoodKg,dec)}</b>
+                  {carryoverKg > 0 && <span className="text-slate-500"> (เดือนนี้ {fmt(weighedKg,dec)} + เดือนก่อน {fmt(carryoverKg,dec)})</span>}
                 </span>
                 <span className={done ? 'text-green-400 font-bold' : 'text-brand-300'}>{done ? '✓ ครบ' : `เหลือ ${fmt(remaining,dec)}`}</span>
               </div>
               {/* แถบเดียว 2 สี — hover ดูยอดจริง */}
               <div className="h-3 bg-slate-800 rounded-full overflow-hidden flex"
                    title={`ม้วนดี(รวมข้ามเดือน) ${fmt(cumGoodKg,dec)} + กรอ ${fmt(badKgSum,dec)} Kgs. (เป้า ${fmt(planned,dec)})`}>
-                <div className={`h-full ${done ? 'bg-green-500' : 'bg-brand-500'} transition-all`} style={{width:`${fgW}%`}}
-                     title={`ม้วนดีรวม ${fmt(cumGoodKg,dec)} Kgs. (เดือนนี้ ${fmt(weighedKg,dec)} · เดือนก่อน ${fmt(carryoverKg,dec)})`}/>
+                {prevW > 0 && (
+                  <div className={`h-full ${done ? 'bg-green-700' : 'bg-brand-700'} transition-all`} style={{width:`${prevW}%`}}
+                       title={`เดือนก่อน ${fmt(carryoverKg,dec)} Kgs.`}/>
+                )}
+                <div className={`h-full ${done ? 'bg-green-500' : 'bg-brand-500'} transition-all`} style={{width:`${curW}%`}}
+                     title={`เดือนนี้ ${fmt(weighedKg,dec)} Kgs. (รวมข้ามเดือน ${fmt(cumGoodKg,dec)})`}/>
                 <div className="h-full bg-amber-400 transition-all" style={{width:`${badW}%`}}
                      title={`กรอ ${fmt(badKgSum,dec)} Kgs. (${badCnt} ม้วน)`}/>
               </div>

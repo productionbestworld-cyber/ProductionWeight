@@ -82,10 +82,17 @@ export function jobToProfile(job: ReworkJob, machine_no: string): MachineProfile
 
 function fmt(n: number, d = 2) { return Number(n ?? 0).toFixed(d) }
 
+// ปี(พ.ศ. 2 หลัก) + เดือน 2 หลัก ตาม "เวลาไทย" เสมอ (ไม่ขึ้นกับ timezone ของ OS)
+//   ให้ Lot กรอใช้เดือนเดียวกับฝั่งผลิต (WeighStation.thaiYM) — กัน lot เพี้ยนช่วงข้ามเที่ยงคืน
+function thaiYM(d: Date = new Date()): { yy: string; mm: string } {
+  const p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit' }).formatToParts(d)
+  const g = (t: string) => p.find(x => x.type === t)?.value ?? ''
+  return { yy: String((parseInt(g('year')) + 543) % 100).padStart(2, '0'), mm: g('month') }
+}
+
 // สร้าง Lot รูปแบบเดียวกับฝั่งผลิต: yy + เครื่อง + รหัสลูกค้า(4) + เดือน
 export function genReworkLot(machine: string, custCode: string, seq?: number): string {
-  const yy = String((new Date().getFullYear() + 543) % 100).padStart(2, '0')
-  const mm = String(new Date().getMonth() + 1).padStart(2, '0')
+  const { yy, mm } = thaiYM()
   const mc = (machine ?? '').toUpperCase()
   if (!mc) return ''
   // ช่องกลาง 4 หลัก: ถ้ามีเลขรัน (seq) ใช้เลขรัน (กัน Lot ชนกันเมื่อ cust_code ว่าง)
@@ -108,10 +115,22 @@ export function swapLotMachine(sourceLot?: string, sourceMachine?: string, rewor
   return sl.slice(0, idx) + rm + sl.slice(idx + sm.length)
 }
 
+// Lot กรอยึด "เดือนที่กรอจริง" (เวลาไทย) — ไม่ใช่เดือนของม้วนต้นทาง
+//   งานกรอเดือน ส.ค. ที่กรอจากม้วนต้นทางเดือน ก.ค. → ท้าย lot ต้องเป็น 08
+//   (traceback ยังปลอดภัย: production_rolls.rework_source_lot เก็บ lot ต้นทางจริงไว้แล้ว)
+//   รูปแบบ auto = yy + machine + running(4) + mm · ถ้า lot กรอกเอง (ไม่ตรง pattern) → คืนค่าเดิม ไม่แตะ
+export function reworkLotThisMonth(lot: string, machine: string): string {
+  if (!lot || !machine) return lot
+  const mc = machine.toUpperCase()
+  const m = lot.match(new RegExp(`^(\\d{2})${mc}(\\d{4})(\\d{2})$`))
+  if (!m) return lot
+  const { yy, mm } = thaiYM()
+  return `${yy}${mc}${m[2]}${mm}`
+}
+
 // หาเลขรันถัดไปของ Lot กรอ สำหรับเครื่อง+เดือนนี้ (กัน Lot ชนกัน)
 export async function nextReworkSeq(machine: string): Promise<number> {
-  const yy = String((new Date().getFullYear() + 543) % 100).padStart(2, '0')
-  const mm = String(new Date().getMonth() + 1).padStart(2, '0')
+  const { yy, mm } = thaiYM()
   const mc = (machine ?? '').toUpperCase()
   const prefix = `${yy}${mc}`
   const { data } = await supabase.from('rework_jobs').select('lot_no').like('lot_no', `${prefix}%${mm}`)
@@ -311,8 +330,12 @@ function JobListView({ onPickJob, refreshSignal }: { onPickJob: (profile: Machin
       const { data: sr } = await supabase.from('production_rolls')
         .select('machine_no').eq('lot_no', srcLot).limit(1).maybeSingle()
       gen = swapLotMachine(srcLot, sr?.machine_no ?? '', machine_no)
+      // ✨ ยึด "เดือนที่กรอจริง" ไม่ใช่เดือนม้วนต้นทาง — เปิดงานกรอเดือน ส.ค. จากม้วน ก.ค. → lot เป็น 08
+      if (gen) gen = reworkLotThisMonth(gen, machine_no)
     }
     if (!gen && !lot) gen = genReworkLot(machine_no, job.cust_code ?? '')
+    // งานกรอที่เปิดค้างข้ามเดือน (lot เดิมของเดือนก่อน) → เลื่อนเป็นเดือนปัจจุบันตอนเปิดจอชั่ง
+    else if (!gen && lot) gen = reworkLotThisMonth(lot, machine_no)
     if (gen && gen !== lot) {
       lot = gen
       await supabase.from('rework_jobs').update({ lot_no: gen }).eq('id', job.id)

@@ -2075,6 +2075,10 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
   const [weighedKg,    setWeighedKg]    = useState(0)
   // ยอดผลิต "ม้วนดี" ของ WO นี้ ที่ทำไปแล้วใน lot อื่น (เดือนก่อน) — ใช้คิด "เหลืออีกเท่าไหร่" ข้ามเดือน
   const [carryoverKg,  setCarryoverKg]  = useState(0)
+  const [carryoverRolls, setCarryoverRolls] = useState(0)   // จำนวนม้วนดีเดือนก่อน (ข้ามเดือน)
+  // ยอด "กรอ" และ "เศษ" เดือนก่อน (ข้ามเดือน) — โชว์รวมทั้ง WO
+  const [carryoverBad,  setCarryoverBad]  = useState({ kg: 0, rolls: 0 })
+  const [carryoverScrap, setCarryoverScrap] = useState({ kg: 0, rolls: 0 })
   const [weighedRolls, setWeighedRolls] = useState<any[]>([])
   const [showCloseModal, setShowCloseModal] = useState(false)
   const [closing,        setClosing]        = useState(false)
@@ -2504,16 +2508,24 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
       // ⚠ ใช้ WO "ไม่ trim" ให้ตรงกับค่าที่บันทึกจริงบนม้วน (loadRollsForMachine/save ก็ไม่ trim)
       //   trim เฉพาะตอนเช็คว่า "มี WO ไหม" — กัน carryover พลาดเป็น 0 ถ้า WO มีช่องว่างติด
       const wo = profile.woNo ?? ''
-      if (isRework || !wo.trim() || !profile.machine_no || !profile.lotNo) { if (!cancelled) setCarryoverKg(0); return }
+      const reset = () => { setCarryoverKg(0); setCarryoverRolls(0); setCarryoverBad({ kg: 0, rolls: 0 }); setCarryoverScrap({ kg: 0, rolls: 0 }) }
+      if (isRework || !wo.trim() || !profile.machine_no || !profile.lotNo) { if (!cancelled) reset(); return }
       try {
         const rows = await fetchAll(() => supabase.from('production_rolls')
-          .select('weight')
+          .select('weight, roll_type')
           .eq('machine_no', profile.machine_no)
           .eq('work_order', wo)
-          .eq('roll_type', 'good')
           .neq('lot_no', profile.lotNo))
-        if (!cancelled) setCarryoverKg(rows.reduce((s: number, r: any) => s + (r.weight ?? 0), 0))
-      } catch { if (!cancelled) setCarryoverKg(0) }
+        if (!cancelled) {
+          const g = rows.filter((r:any)=>r.roll_type==='good')
+          const b = rows.filter((r:any)=>r.roll_type==='bad')
+          const s = rows.filter((r:any)=>r.roll_type?.startsWith?.('scrap'))
+          const sumKg = (arr:any[]) => arr.reduce((t:number,r:any)=>t+(r.weight??0),0)
+          setCarryoverKg(sumKg(g));   setCarryoverRolls(g.length)
+          setCarryoverBad({ kg: sumKg(b), rolls: b.length })
+          setCarryoverScrap({ kg: sumKg(s), rolls: s.length })
+        }
+      } catch { if (!cancelled) reset() }
     })()
     return () => { cancelled = true }
   }, [isRework, profile.machine_no, profile.woNo, profile.lotNo]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -3918,8 +3930,14 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
 
           {/* Progress — แถบเดียวแบ่งสี (น้ำเงิน=ม้วนดี, เหลือง=กรอ) ชี้เมาส์เห็นยอดจริง · คิดยอดรวมทั้ง WO ข้ามเดือน */}
           {planned > 0 && (() => {
-            const fgW  = Math.min(100, planned > 0 ? (cumGoodKg / planned) * 100 : 0)
-            const badW = Math.min(100 - fgW, planned > 0 ? (badKgSum / planned) * 100 : 0)
+            // ยอดรวมทั้ง WO ข้ามเดือน (เดือนนี้ + เดือนก่อน) ของแต่ละประเภท
+            const cumBadKg    = badKgSum + carryoverBad.kg
+            const cumBadRolls = badCnt   + carryoverBad.rolls
+            const cumScrapKg    = scrapKg          + carryoverScrap.kg
+            const cumScrapRolls = scrapRolls.length + carryoverScrap.rolls
+            const fgW    = Math.min(100, planned > 0 ? (cumGoodKg / planned) * 100 : 0)
+            const badW   = Math.min(100 - fgW, planned > 0 ? (cumBadKg / planned) * 100 : 0)
+            const scrapW = Math.min(100 - fgW - badW, planned > 0 ? (cumScrapKg / planned) * 100 : 0)
             // แยกส่วน "เดือนก่อน" (สีเข้ม) กับ "เดือนนี้" (สีสด) ในแถบม้วนดี ให้เห็นสัดส่วนข้ามเดือน
             const prevW = Math.min(fgW, planned > 0 ? (carryoverKg / planned) * 100 : 0)
             const curW  = Math.max(0, fgW - prevW)
@@ -3927,30 +3945,33 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
             <div className={`rounded-xl p-3 border ${done ? 'bg-green-500/10 border-green-500/30' : 'bg-slate-900 border-slate-800'}`}>
               <div className="flex justify-between text-xs mb-1.5">
                 <span className="text-slate-400">ชั่งแล้ว (ม้วนดี) <b className={done?'text-green-300':'text-white'}>{fmt(cumGoodKg,dec)}</b>
-                  {carryoverKg > 0 && <span className="text-slate-500"> (เดือนนี้ {fmt(weighedKg,dec)} + เดือนก่อน {fmt(carryoverKg,dec)})</span>}
+                  <span className="text-slate-500"> · {goodRolls.length + carryoverRolls} ม้วน</span>
+                  {carryoverKg > 0 && <span className="text-slate-500"> (เดือนนี้ {fmt(weighedKg,dec)}/{goodRolls.length}ม้วน + เดือนก่อน {fmt(carryoverKg,dec)}/{carryoverRolls}ม้วน)</span>}
                 </span>
                 <span className={done ? 'text-green-400 font-bold' : 'text-brand-300'}>{done ? '✓ ครบ' : `เหลือ ${fmt(remaining,dec)}`}</span>
               </div>
               {/* แถบเดียว 2 สี — hover ดูยอดจริง */}
               <div className="h-3 bg-slate-800 rounded-full overflow-hidden flex"
-                   title={`ม้วนดี(รวมข้ามเดือน) ${fmt(cumGoodKg,dec)} + กรอ ${fmt(badKgSum,dec)} Kgs. (เป้า ${fmt(planned,dec)})`}>
+                   title={`ม้วนดี(รวมข้ามเดือน) ${fmt(cumGoodKg,dec)} + กรอ ${fmt(cumBadKg,dec)} + เศษ ${fmt(cumScrapKg,dec)} Kgs. (เป้า ${fmt(planned,dec)})`}>
                 {prevW > 0 && (
                   <div className={`h-full ${done ? 'bg-green-700' : 'bg-brand-700'} transition-all`} style={{width:`${prevW}%`}}
-                       title={`เดือนก่อน ${fmt(carryoverKg,dec)} Kgs.`}/>
+                       title={`เดือนก่อน ${fmt(carryoverKg,dec)} Kgs. (${carryoverRolls} ม้วน)`}/>
                 )}
                 <div className={`h-full ${done ? 'bg-green-500' : 'bg-brand-500'} transition-all`} style={{width:`${curW}%`}}
-                     title={`เดือนนี้ ${fmt(weighedKg,dec)} Kgs. (รวมข้ามเดือน ${fmt(cumGoodKg,dec)})`}/>
+                     title={`เดือนนี้ ${fmt(weighedKg,dec)} Kgs. (${goodRolls.length} ม้วน · รวมข้ามเดือน ${fmt(cumGoodKg,dec)}/${goodRolls.length + carryoverRolls} ม้วน)`}/>
                 <div className="h-full bg-amber-400 transition-all" style={{width:`${badW}%`}}
-                     title={`กรอ ${fmt(badKgSum,dec)} Kgs. (${badCnt} ม้วน)`}/>
+                     title={`กรอ ${fmt(cumBadKg,dec)} Kgs. (${cumBadRolls} ม้วน${carryoverBad.rolls>0?` · เดือนนี้ ${badCnt} + เดือนก่อน ${carryoverBad.rolls}`:''})`}/>
+                <div className="h-full bg-red-500 transition-all" style={{width:`${scrapW}%`}}
+                     title={`เศษ ${fmt(cumScrapKg,dec)} Kgs. (${cumScrapRolls} ถุง${carryoverScrap.rolls>0?` · เดือนนี้ ${scrapRolls.length} + เดือนก่อน ${carryoverScrap.rolls}`:''})`}/>
               </div>
               {/* legend + ยอดรวม */}
               <div className="flex justify-between items-center mt-1">
                 <p className="text-slate-600 text-[10px]">
-                  <span className="text-brand-400">■</span> ดี {fmt(weighedKg,dec)}
-                  {carryoverKg > 0 && <> · เดือนก่อน {fmt(carryoverKg,dec)}</>}
-                  {badKgSum > 0 && <> · <span className="text-amber-400">■</span> กรอ {fmt(badKgSum,dec)}</>}
+                  <span className="text-brand-400">■</span> ดี {fmt(cumGoodKg,dec)}/{goodRolls.length + carryoverRolls}ม้วน
+                  {cumBadKg > 0 && <> · <span className="text-amber-400">■</span> กรอ {fmt(cumBadKg,dec)}/{cumBadRolls}ม้วน</>}
+                  {cumScrapKg > 0 && <> · <span className="text-red-400">■</span> เศษ {fmt(cumScrapKg,dec)}/{cumScrapRolls}ถุง</>}
                 </p>
-                <p className="text-slate-500 text-[10px]">รวม <b className="text-slate-300">{fmt(cumGoodKg,dec)}</b> / เป้า {fmt(planned,dec)}</p>
+                <p className="text-slate-500 text-[10px]">รวม <b className="text-slate-300">{fmt(cumGoodKg,dec)}</b>/{goodRolls.length + carryoverRolls}ม้วน / เป้า {fmt(planned,dec)}</p>
               </div>
             </div>
             )

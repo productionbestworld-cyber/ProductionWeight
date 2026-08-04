@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { RefreshCw, Search } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase, fetchAll } from '../lib/supabase'
 import ExportButton from '../components/ExportButton'
 
 function fmt(n: number | null | undefined, d = 1) {
@@ -32,125 +32,153 @@ type Job = {
   scrapKg: number
 }
 
+// ── คอลัมน์ที่ "ตารางหลัก" ใช้จริง (บวกยอด + เมทาดาทาโชว์) — 13 คอลัมน์ ──────────
+//   ตัด id/roll_no/gross_weight/core_weight/remark/inspector ออก (ใช้แค่ตอนเปิด
+//   ป็อปอัพรายละเอียด) → payload เล็กลงมาก (19MB → 13MB บนข้อมูลทั้งหมด)
+const LIST_COLS = 'machine_no, lot_no, work_order, sale_order, product_name, customer, width_cm, width_unit, thick_mc, roll_type, weight, created_at, section'
+// ── คอลัมน์เต็มสำหรับป็อปอัพรายละเอียดม้วน (ดึงเฉพาะงานที่กดเปิด) ──────────────
+const DETAIL_COLS = 'id, created_at, roll_type, roll_no, gross_weight, core_weight, weight, remark, inspector'
+
+// ── สร้างรายการงาน (key = machine|WO) จากม้วน + โปรไฟล์เครื่อง + สรุปงาน ──────────
+//   ยึด WO เป็นหลัก · 1 WO = 1 งาน · WO ที่ใช้หลาย lot รวมเป็นแถวเดียว
+function buildJobs(rolls: any[], profs: any[], sums: any[]): Job[] {
+  // งานปัจจุบันต่อเครื่อง + เป้าจากโปรไฟล์เครื่อง
+  const activeKey = new Set<string>()
+  const targetByKey: Record<string, number> = {}
+  for (const p of profs ?? []) {
+    if (!p.machine_no) continue
+    const k = `${p.machine_no}|${p.work_order ?? ''}`
+    activeKey.add(k)
+    const t = parseFloat(p.planned_qty ?? '') || 0
+    if (t) targetByKey[k] = t
+  }
+  // เป้า + closed จาก job_summaries
+  const closedByKey: Record<string, string> = {}
+  for (const s of sums ?? []) {
+    const k = `${s.machine_no}|${s.work_order ?? ''}`
+    const t = parseFloat(s.planned_qty ?? '') || 0
+    if (t && !targetByKey[k]) targetByKey[k] = t
+    if (s.closed_at && s.closed_at > (closedByKey[k] ?? '')) closedByKey[k] = s.closed_at
+  }
+
+  const map = new Map<string, Job>()
+  const byKey: Record<string, any[]> = {}
+  for (const r of rolls ?? []) {
+    if (!r.machine_no) continue
+    const k = `${r.machine_no}|${r.work_order ?? ''}`
+    ;(byKey[k] = byKey[k] ?? []).push(r)
+    let j = map.get(k)
+    if (!j) {
+      j = {
+        key: k, machine_no: r.machine_no, lot_no: r.lot_no ?? '', work_order: r.work_order ?? '',
+        sale_order: r.sale_order ?? '', product_name: r.product_name ?? '', customer: r.customer ?? '',
+        size: r.width_cm ? `${r.width_cm} ${r.width_unit ?? 'cm'} × ${r.thick_mc ?? '—'} mc` : '',
+        active: activeKey.has(k), target: targetByKey[k] ?? 0, closedAt: closedByKey[k],
+        goodKg: 0, goodRolls: 0, badKg: 0, badRolls: 0, scrapKg: 0,
+      }
+      map.set(k, j)
+    }
+    if (!j.start || r.created_at < j.start) j.start = r.created_at
+    if (!j.end   || r.created_at > j.end)   j.end   = r.created_at
+    if (!j.sale_order && r.sale_order) j.sale_order = r.sale_order
+    if (r.roll_type === 'good')      { j.goodKg += r.weight ?? 0; j.goodRolls += 1 }
+    else if (r.roll_type === 'bad')  { j.badKg  += r.weight ?? 0; j.badRolls  += 1 }
+    else if (typeof r.roll_type === 'string' && r.roll_type.startsWith('scrap')) { j.scrapKg += r.weight ?? 0 }
+  }
+  // เครื่องที่ตั้งงานแล้วแต่ยังไม่ได้ชั่ง (ไม่มี roll) — โชว์เป็น active ด้วย
+  for (const p of profs ?? []) {
+    if (!p.machine_no || !p.lot_no) continue
+    const k = `${p.machine_no}|${p.work_order ?? ''}`
+    if (!map.has(k)) {
+      map.set(k, {
+        key: k, machine_no: p.machine_no, lot_no: p.lot_no, work_order: p.work_order ?? '',
+        sale_order: p.sale_order ?? '', product_name: p.product_name ?? '', customer: p.cust_name ?? '',
+        size: p.width_cm ? `${p.width_cm} ${p.width_unit ?? 'cm'} × ${p.thick_mc ?? '—'} mc` : '',
+        active: true, target: targetByKey[k] ?? 0,
+        goodKg: 0, goodRolls: 0, badKg: 0, badRolls: 0, scrapKg: 0,
+      })
+    }
+  }
+
+  // เวลาเริ่ม/จบ = เวลา "ผลิตจริง" เท่านั้น — ตัดม้วนแผนกกรอ (section='rewind') ออก
+  //   (กรอ WO นั้นทำทีหลัง คนละกิจกรรม → ไม่นับเวลากรอ · งานกรอล้วนจะไม่มีเวลาผลิต)
+  // เริ่ม = เริ่มของ "รอบล่าสุด" — ถ้า WO เดินซ้ำคนละรอบ (ห่าง >24 ชม.) ยึดรอบหลังสุด ไม่คร่อมรอบเก่า
+  const RUN_GAP = 24 * 3600 * 1000
+  for (const [, j] of map) {
+    const ts = (byKey[j.key] ?? [])
+      .filter(r => (r.section ?? '') !== 'rewind')
+      .map(r => r.created_at).filter(Boolean).sort()
+    if (!ts.length) { j.start = undefined; j.end = undefined; continue }
+    let segStart = ts[0]
+    for (let i = 1; i < ts.length; i++) {
+      if (new Date(ts[i]).getTime() - new Date(ts[i - 1]).getTime() > RUN_GAP) segStart = ts[i]
+    }
+    j.start = segStart
+    j.end   = ts[ts.length - 1]
+  }
+
+  const list = [...map.values()]
+  list.sort((a, b) => {
+    if (a.active !== b.active) return a.active ? -1 : 1
+    return (b.end || '').localeCompare(a.end || '')
+  })
+  return list
+}
+
 export default function Planning({ dept }: { dept?: string }) {
+  void dept  // กรองตามแผนกยังไม่เปิดใช้ — แสดงทุกแผนก
   const [jobs, setJobs] = useState<Job[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(false)      // จังหวะแรก (งานที่กำลังเดิน)
+  const [fullLoaded, setFullLoaded] = useState(false) // โหลดประวัติทั้งหมดเสร็จหรือยัง
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'active' | 'done' | 'all'>('active')
-  const [rollsByKey, setRollsByKey] = useState<Record<string, any[]>>({})
   const [detail, setDetail] = useState<Job | null>(null)
+  const [detailRolls, setDetailRolls] = useState<any[]>([])
+  const [detailLoading, setDetailLoading] = useState(false)
 
   async function load() {
     setLoading(true)
-    // ดึงม้วนทีละหน้า (page ละ 1000) จนครบ — Supabase บังคับ max-rows = 1000 ต่อ query
-    // (.limit(8000) จะถูก cap เหลือ 1000 เงียบ ๆ → ม้วนใหม่หาย ยอดผลิตขาด)
-    async function fetchAllRolls() {
-      const all: any[] = []
-      const PAGE = 1000
-      for (let from = 0; ; from += PAGE) {
-        const { data, error } = await supabase.from('production_rolls')
-          .select('id, machine_no, lot_no, work_order, sale_order, product_name, customer, width_cm, width_unit, thick_mc, roll_type, roll_no, weight, gross_weight, core_weight, remark, inspector, created_at, section')
-          .order('created_at', { ascending: true }).order('id', { ascending: true })
-          .range(from, from + PAGE - 1)
-        if (error || !data) break
-        all.push(...data)
-        if (data.length < PAGE) break
-      }
-      return all
-    }
-    const [{ data: profs }, rolls, { data: sums }] = await Promise.all([
+    setFullLoaded(false)
+    // โปรไฟล์เครื่อง + สรุปงาน (เล็ก) — ใช้ทั้งสองจังหวะ
+    const [{ data: profs }, { data: sums }] = await Promise.all([
       supabase.from('machine_profiles').select('machine_no, lot_no, work_order, sale_order, product_name, cust_name, width_cm, width_unit, thick_mc, planned_qty, section'),
-      fetchAllRolls(),
       supabase.from('job_summaries').select('machine_no, lot_no, work_order, planned_qty, closed_at').limit(2000),
     ])
+    const P = profs ?? [], S = sums ?? []
 
-    // งานปัจจุบันต่อเครื่อง (key = machine|wo) — ยึด WO เป็นหลัก ไม่แยกตาม lot
-    //   1 WO = 1 งาน · WO ที่ใช้หลาย lot จะรวมเป็นแถวเดียว (ยอดผลิต/เป้าถูกต้อง ไม่ถูกหาร)
-    const activeKey = new Set<string>()
-    const targetByKey: Record<string, number> = {}
-    for (const p of profs ?? []) {
-      if (!p.machine_no) continue
-      const k = `${p.machine_no}|${p.work_order ?? ''}`
-      activeKey.add(k)
-      const t = parseFloat(p.planned_qty ?? '') || 0
-      if (t) targetByKey[k] = t
-    }
-    // เป้า + closed จาก job_summaries
-    const closedByKey: Record<string, string> = {}
-    for (const s of sums ?? []) {
-      const k = `${s.machine_no}|${s.work_order ?? ''}`
-      const t = parseFloat(s.planned_qty ?? '') || 0
-      if (t && !targetByKey[k]) targetByKey[k] = t
-      if (s.closed_at && s.closed_at > (closedByKey[k] ?? '')) closedByKey[k] = s.closed_at
-    }
-
-    const map = new Map<string, Job>()
-    const byKey: Record<string, any[]> = {}
-    for (const r of rolls ?? []) {
-      if (!r.machine_no) continue
-      const k = `${r.machine_no}|${r.work_order ?? ''}`
-      ;(byKey[k] = byKey[k] ?? []).push(r)
-      let j = map.get(k)
-      if (!j) {
-        j = {
-          key: k, machine_no: r.machine_no, lot_no: r.lot_no ?? '', work_order: r.work_order ?? '',
-          sale_order: r.sale_order ?? '', product_name: r.product_name ?? '', customer: r.customer ?? '',
-          size: r.width_cm ? `${r.width_cm} ${r.width_unit ?? 'cm'} × ${r.thick_mc ?? '—'} mc` : '',
-          active: activeKey.has(k), target: targetByKey[k] ?? 0, closedAt: closedByKey[k],
-          goodKg: 0, goodRolls: 0, badKg: 0, badRolls: 0, scrapKg: 0,
-        }
-        map.set(k, j)
-      }
-      if (!j.start || r.created_at < j.start) j.start = r.created_at
-      if (!j.end   || r.created_at > j.end)   j.end   = r.created_at
-      if (!j.sale_order && r.sale_order) j.sale_order = r.sale_order
-      if (r.roll_type === 'good')      { j.goodKg += r.weight ?? 0; j.goodRolls += 1 }
-      else if (r.roll_type === 'bad')  { j.badKg  += r.weight ?? 0; j.badRolls  += 1 }
-      else if (typeof r.roll_type === 'string' && r.roll_type.startsWith('scrap')) { j.scrapKg += r.weight ?? 0 }
-    }
-    // เครื่องที่ตั้งงานแล้วแต่ยังไม่ได้ชั่ง (ไม่มี roll) — โชว์เป็น active ด้วย
-    for (const p of profs ?? []) {
-      if (!p.machine_no || !p.lot_no) continue
-      const k = `${p.machine_no}|${p.work_order ?? ''}`
-      if (!map.has(k)) {
-        map.set(k, {
-          key: k, machine_no: p.machine_no, lot_no: p.lot_no, work_order: p.work_order ?? '',
-          sale_order: p.sale_order ?? '', product_name: p.product_name ?? '', customer: p.cust_name ?? '',
-          size: p.width_cm ? `${p.width_cm} ${p.width_unit ?? 'cm'} × ${p.thick_mc ?? '—'} mc` : '',
-          active: true, target: targetByKey[k] ?? 0,
-          goodKg: 0, goodRolls: 0, badKg: 0, badRolls: 0, scrapKg: 0,
-        })
-      }
-    }
-
-    // เวลาเริ่ม/จบ = เวลา "ผลิตจริง" เท่านั้น — ตัดม้วนแผนกกรอ (section='rewind') ออก
-    //   (กรอ WO นั้นทำทีหลัง คนละกิจกรรม → ไม่นับเวลากรอ · งานกรอล้วนจะไม่มีเวลาผลิต)
-    // เริ่ม = เริ่มของ "รอบล่าสุด" — ถ้า WO เดินซ้ำคนละรอบ (ห่าง >24 ชม.) ยึดรอบหลังสุด ไม่คร่อมรอบเก่า
-    const RUN_GAP = 24 * 3600 * 1000
-    for (const [, j] of map) {
-      const ts = (byKey[j.key] ?? [])
-        .filter(r => (r.section ?? '') !== 'rewind')
-        .map(r => r.created_at).filter(Boolean).sort()
-      if (!ts.length) { j.start = undefined; j.end = undefined; continue }
-      let segStart = ts[0]
-      for (let i = 1; i < ts.length; i++) {
-        if (new Date(ts[i]).getTime() - new Date(ts[i - 1]).getTime() > RUN_GAP) segStart = ts[i]
-      }
-      j.start = segStart
-      j.end   = ts[ts.length - 1]
-    }
-
-    let list = [...map.values()]
-    if (dept) {
-      // กรองตามแผนก: ดูจาก section ของ profile (เป่า/พิมพ์/กรอ) — ถ้าไม่ระบุ แสดงทั้งหมด
-    }
-    list.sort((a, b) => {
-      if (a.active !== b.active) return a.active ? -1 : 1
-      return (b.end || '').localeCompare(a.end || '')
-    })
-    setJobs(list)
-    setRollsByKey(byKey)
+    // ── จังหวะ 1: เฉพาะม้วนของงานที่ "กำลังเดิน" → โชว์ทันที (~0.2 วิ) ──────────────
+    //   งานที่กำลังเดิน = WO ในโปรไฟล์เครื่อง (+ เครื่องที่ WO ว่าง เก็บเป็น '' ในฐานข้อมูล)
+    const activeWOs = [...new Set(P.map(p => p.work_order).filter(Boolean))] as string[]
+    const orderBy = (q: any) => q.order('created_at', { ascending: true }).order('id', { ascending: true })
+    const [woRolls, emptyRolls] = await Promise.all([
+      activeWOs.length
+        ? fetchAll(() => orderBy(supabase.from('production_rolls').select(LIST_COLS).in('work_order', activeWOs)))
+        : Promise.resolve([]),
+      // เครื่องที่ WO ว่าง (เพิ่งตั้งเครื่อง) — ดึงม้วน WO='' มาด้วย
+      P.some(p => !p.work_order)
+        ? fetchAll(() => orderBy(supabase.from('production_rolls').select(LIST_COLS).eq('work_order', '')))
+        : Promise.resolve([]),
+    ])
+    setJobs(buildJobs([...woRolls, ...emptyRolls], P, S))
     setLoading(false)
+
+    // ── จังหวะ 2: ประวัติทั้งหมด (พื้นหลัง) → เปิดแท็บ "จบงาน/ทั้งหมด" ──────────────
+    const allRolls = await fetchAll(() => orderBy(supabase.from('production_rolls').select(LIST_COLS)))
+    setJobs(buildJobs(allRolls, P, S))
+    setFullLoaded(true)
+  }
+
+  // เปิดป็อปอัพ — ดึงม้วนของงานนั้นแบบเต็ม (เฉพาะตอนกด) พร้อมคอลัมน์รายละเอียด
+  async function openDetail(j: Job) {
+    setDetail(j)
+    setDetailRolls([])
+    setDetailLoading(true)
+    const rolls = await fetchAll(() =>
+      supabase.from('production_rolls').select(DETAIL_COLS)
+        .eq('machine_no', j.machine_no).eq('work_order', j.work_order)
+        .order('created_at', { ascending: true }).order('id', { ascending: true }))
+    setDetailRolls(rolls)
+    setDetailLoading(false)
   }
 
   useEffect(() => { load() }, [])
@@ -169,6 +197,8 @@ export default function Planning({ dept }: { dept?: string }) {
   const totGood = filtered.reduce((s, j) => s + j.goodKg, 0)
   const totScrap = filtered.reduce((s, j) => s + j.scrapKg, 0)
   const totBad = filtered.reduce((s, j) => s + j.badKg, 0)
+  // แท็บที่ต้องรอประวัติ (จบงาน/ทั้งหมด) ยังโหลดพื้นหลังไม่เสร็จ
+  const waitingHistory = !loading && !fullLoaded && statusFilter !== 'active'
 
   return (
     <div className="bg-[#0a0f1e] p-4 min-h-[calc(100vh-48px)]">
@@ -202,7 +232,7 @@ export default function Planning({ dept }: { dept?: string }) {
               ]}
               fileName="แผนงาน_ติดตามผลิต" sheetName="ติดตามงาน" label="📥 Export" />
             <button onClick={load} className="flex items-center gap-1.5 text-slate-400 hover:text-white text-xs bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-lg">
-              <RefreshCw size={12}/> รีเฟรช
+              <RefreshCw size={12} className={loading ? 'animate-spin' : ''}/> รีเฟรช
             </button>
           </div>
         </div>
@@ -243,10 +273,15 @@ export default function Planning({ dept }: { dept?: string }) {
             ] as const).map(t => (
               <button key={t.k} onClick={() => setStatusFilter(t.k)}
                 className={`text-xs font-semibold px-3 py-1.5 rounded-md transition-colors ${statusFilter === t.k ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
-                {t.label} <span className="opacity-70">({t.n})</span>
+                {t.label} <span className="opacity-70">({t.n}{!fullLoaded && t.k !== 'active' ? '…' : ''})</span>
               </button>
             ))}
           </div>
+          {!fullLoaded && !loading && (
+            <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
+              <RefreshCw size={11} className="animate-spin"/> กำลังโหลดประวัติงานที่จบแล้ว…
+            </span>
+          )}
         </div>
 
         {/* Table */}
@@ -263,13 +298,17 @@ export default function Planning({ dept }: { dept?: string }) {
               <tbody className="divide-y divide-slate-800/50">
                 {loading ? (
                   <tr><td colSpan={12} className="py-16 text-center text-slate-500">กำลังโหลด...</td></tr>
+                ) : waitingHistory && filtered.length === 0 ? (
+                  <tr><td colSpan={12} className="py-16 text-center text-slate-500">
+                    <RefreshCw size={16} className="animate-spin inline mr-2"/>กำลังโหลดประวัติงานที่จบแล้ว…
+                  </td></tr>
                 ) : filtered.length === 0 ? (
                   <tr><td colSpan={12} className="py-16 text-center text-slate-600">ไม่มีงาน</td></tr>
                 ) : filtered.map(j => {
                   const remain = Math.max(0, j.target - j.goodKg)
                   const pct = j.target > 0 ? Math.min(100, Math.round(j.goodKg / j.target * 100)) : 0
                   return (
-                    <tr key={j.key} onClick={() => setDetail(j)} title="คลิกดูรายละเอียดม้วน"
+                    <tr key={j.key} onClick={() => openDetail(j)} title="คลิกดูรายละเอียดม้วน"
                       className={`hover:bg-slate-800/50 cursor-pointer ${j.active ? 'bg-green-500/5' : ''}`}>
                       <td className="px-3 py-2 font-black text-white whitespace-nowrap">{j.machine_no}</td>
                       <td className="px-3 py-2 whitespace-nowrap">
@@ -320,7 +359,7 @@ export default function Planning({ dept }: { dept?: string }) {
 
       {/* ── รายละเอียดม้วนของงานที่คลิก ── */}
       {detail && (() => {
-        const rs = [...(rollsByKey[detail.key] ?? [])].sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''))
+        const rs = detailRolls
         const typeLabel = (t: string) => t === 'good' ? 'ดี' : t === 'bad' ? 'กรอ' : t?.startsWith('scrap') ? 'เศษ' : t
         const typeCls = (t: string) => t === 'good' ? 'bg-green-500/20 text-green-300' : t === 'bad' ? 'bg-amber-500/20 text-amber-300' : 'bg-red-500/20 text-red-300'
         return (
@@ -365,7 +404,9 @@ export default function Planning({ dept }: { dept?: string }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/40">
-                    {rs.length === 0 ? (
+                    {detailLoading ? (
+                      <tr><td colSpan={7} className="py-10 text-center text-slate-500"><RefreshCw size={16} className="animate-spin inline mr-2"/>กำลังโหลดม้วน…</td></tr>
+                    ) : rs.length === 0 ? (
                       <tr><td colSpan={7} className="py-10 text-center text-slate-600">ยังไม่มีม้วน</td></tr>
                     ) : rs.map(r => (
                       <tr key={r.id} className="hover:bg-slate-800/30">

@@ -179,8 +179,8 @@ export const DEFAULT_LAYOUT_SHORT: LabelLayout = {
       fontSize:8, fontWeight:'700', align:'center',
       visible:true, type:'text', border:false, italic:false },
     { id:'rollno', label:'Roll No',
-      sampleValue:'No. 5',
-      x:54, y:8.5, w:20, h:4.5,
+      sampleValue:'Roll No. 5',
+      x:50, y:8.5, w:24, h:4.5,
       fontSize:8, fontWeight:'700', align:'right',
       visible:true, type:'text', border:false, italic:false },
     { id:'sep1', label:'เส้นคั่น 1', sampleValue:'',
@@ -357,9 +357,14 @@ async function loadLayoutBySize(size: LabelSize): Promise<LabelLayout> {
       const parsed = data.layout as LabelLayout
       const savedIds = new Set(parsed.fields.map((f: FieldConfig) => f.id))
       const removed  = new Set(parsed.removedIds ?? [])
+      // sampleValue เป็น "ข้อความตัวอย่าง" preview เท่านั้น (ไม่ใช้ตอนปริ้นจริง)
+      // → ดึงจาก default เสมอตาม id เพื่อให้ preview ตรงกับใบปริ้นล่าสุด โดยไม่ต้องรีเซ็ต
+      const defSample = new Map(def.fields.map((f: FieldConfig) => [f.id, f.sampleValue]))
+      const synced = parsed.fields.map((f: FieldConfig) =>
+        defSample.has(f.id) ? { ...f, sampleValue: defSample.get(f.id)! } : f)
       // เติมเฉพาะฟิลด์ default ที่ "เป็นของใหม่จริง" — ไม่ใช่ฟิลด์ที่ผู้ใช้ลบทิ้งไปเอง
       const missing  = def.fields.filter(f => !savedIds.has(f.id) && !removed.has(f.id))
-      return { ...parsed, fields: [...parsed.fields, ...missing] }
+      return { ...parsed, fields: [...synced, ...missing] }
     }
     await saveLayoutToDB(def, size)
   } catch (e) { console.warn('[LabelDesigner]', e) }

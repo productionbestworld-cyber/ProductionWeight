@@ -218,7 +218,7 @@ ${savedLayout.fields.map(renderLongField).join('\n')}
   // ═══════════════════════════════════════════════════════
   const shortLayout  = await loadShortLayout()
   const shortHeader  = p.blankHeader ? '' : ((p.headerText || '').trim() || 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด')
-  const rollWord     = rollType.startsWith('scrap') ? 'ถุง' : rollType === 'bad' ? 'กรอ No.' : 'No.'
+  const rollWord     = rollType.startsWith('scrap') ? 'ถุง' : rollType === 'bad' ? 'กรอ No.' : 'Roll No.'
   const shortFieldData: Record<string, string> = {
     header:    (rollType === 'bad')
                ? `<span style="font-size:0.9em">SO <b>${p.soNo || '—'}</b> · WO <b>${p.woNo || '—'}</b> · รหัส <b>${p.itemCode || '—'}</b></span>${rollTypeLabelLong ? ` [${rollTypeLabelLong}]` : ''}${rollType === 'bad' && reason ? ` <span style="color:#c00">เหตุผล: ${reason}</span>` : ''}`
@@ -226,7 +226,7 @@ ${savedLayout.fields.map(renderLongField).join('\n')}
     mat:       `Mat&nbsp;&nbsp;<b>${p.matCode}</b>`,
     // ใบสั้นเล็ก → แสดงแค่วันผลิต (MFG) · วันหมดอายุ (EXP) ให้ดูผ่าน QR แทน
     mfg:       `MFG&nbsp;&nbsp;<b>${mfgDate}</b>`,
-    rollno:    `${rollWord}&nbsp;<b>${rollNo === 0 ? '—' : rollNo}</b>`,
+    rollno:    `<span style="font-size:0.72em;font-weight:400">${rollWord}</span>&nbsp;<b>${rollNo === 0 ? '—' : rollNo}</b>`,
     prodname:  p.productName,
     prodcode:  p.productCode || '—',
     itemcode:  p.itemCode || '—',

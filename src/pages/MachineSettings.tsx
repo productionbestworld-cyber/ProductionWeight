@@ -59,6 +59,8 @@ export interface MachineProfile {
   labelSize:   'long' | 'short'
   headerText:  string   // หัวกระดาษใบสั้น (กำหนดเอง)
   blankHeader: boolean  // ติ๊ก = เว้นหัวว่าง
+  // ตำแหน่งแปะป้าย (กำหนดตามที่ส่ง) — แปะหัว / แปะข้าง
+  labelPosition?: '' | 'head' | 'side'
   // แผนก
   section:     'blow' | 'print' | 'rewind'
   // Sale Order
@@ -75,7 +77,7 @@ const EMPTY_PROFILE: MachineProfile = {
   machine_no:'', custCode:'', custName:'', custBranch:'', custAddress:'', decimal:2,
   itemCode:'', matCode:'', productCode:'', productName:'', widthCm:'', widthUnit:'cm', thickMc:'',
   lotNo:'', length:'', pcs:'', coreWeight:'1.25', inspector:'', locked:false,
-  plannedQty:'', labelSize:'long', headerText:'', blankHeader:false, section:'blow',
+  plannedQty:'', labelSize:'long', headerText:'', blankHeader:false, labelPosition:'', section:'blow',
   soNo:'', woNo:'', deliveryDate:'',
 }
 
@@ -116,6 +118,7 @@ function dbToProfile(row: any): MachineProfile {
     labelSize:   (row.label_size  ?? 'long') as 'long'|'short',
     headerText:  row.header_text  ?? '',
     blankHeader: row.blank_header ?? false,
+    labelPosition: (row.label_position ?? '') as ''|'head'|'side',
     section:     (row.section     ?? 'blow') as 'blow'|'print'|'rewind',
     soNo:        row.sale_order   ?? '',
     woNo:        row.work_order    ?? '',
@@ -148,6 +151,7 @@ function profileToDb(p: MachineProfile) {
     label_size:    p.labelSize,
     header_text:   p.headerText,
     blank_header:  p.blankHeader,
+    label_position: p.labelPosition ?? '',
     section:       p.section,
     sale_order:    p.soNo ?? '',
     work_order:    p.woNo ?? '',
@@ -583,6 +587,18 @@ function EditModal({ p, products, onChange, onAutoFill, onRemove, onClose, onPro
               )}
             </div>
           )}
+          {/* ตำแหน่งแปะป้าย — กำหนดตามที่ส่ง (ไหลลงม้วน → ใบส่งสินค้า) */}
+          <div>
+            <label className="block text-[10px] text-slate-500 mb-1">ตำแหน่งแปะป้าย (ตามที่ส่ง)</label>
+            <div className="flex gap-1">
+              {([['','—'],['head','🔝 แปะหัว'],['side','↔ แปะข้าง']] as const).map(([v,lbl]) => (
+                <button key={v} onMouseDown={e => { e.preventDefault(); onChange('labelPosition', v) }}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-semibold ${(p.labelPosition??'')===v?'bg-brand-600 text-white':'bg-slate-800 text-slate-400'}`}>
+                  {lbl}
+                </button>
+              ))}
+            </div>
+          </div>
           <button onClick={onRemove}
             className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-red-400 transition-colors">
             <Trash2 size={12}/> ลบเครื่องนี้

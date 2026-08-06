@@ -14,7 +14,7 @@ function thaiDate(d = new Date()) {
   return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()+543}`
 }
 
-type Tab = 'stock' | 'so' | 'ship' | 'scrap' | 'delivery'
+type Tab = 'stock' | 'so' | 'ship' | 'scrap' | 'delivery' | 'history'
 const SCRAP_LABEL: Record<string,string> = {
   scrap_clear: 'เศษใส', scrap_color: 'เศษสี', scrap_lump: 'เศษก้อน/ตะกอน',
 }
@@ -39,6 +39,15 @@ function printDelivery(rolls: Roll[], so: SO, staff: string, docNo: string) {
     const k = r.lot_no ?? '?'
     if (!groups[k]) groups[k] = []
     groups[k].push(r)
+  })
+  // เรียงในแต่ละ Lot: ม้วน #1 เป็นต้นไป (ให้ลูกค้าเช็คตามลำดับม้วน)
+  Object.values(groups).forEach(items => items.sort((a, b) =>
+    (a.roll_no ?? 0) - (b.roll_no ?? 0) || (a.created_at ?? '').localeCompare(b.created_at ?? '')))
+  // เรียง Lot เก่า→ใหม่ ตามม้วนแรกที่ชั่งใน Lot (FIFO) แล้วค่อยชื่อ Lot
+  const sortedGroups = Object.entries(groups).sort((a, b) => {
+    const ea = Math.min(...a[1].map(r => new Date(r.created_at ?? 0).getTime()))
+    const eb = Math.min(...b[1].map(r => new Date(r.created_at ?? 0).getTime()))
+    return ea - eb || a[0].localeCompare(b[0])
   })
   const win = window.open('', '_blank', 'width=900,height=700')
   if (!win) return
@@ -83,10 +92,11 @@ th{background:#f5f5f5;font-weight:700;text-align:left}
     <div class="info-row"><b>น้ำหนักรวม:</b> ${totalKg.toFixed(2)} Kgs.</div>
   </div>
 </div>
-${Object.entries(groups).map(([lot, items]) => {
+${sortedGroups.map(([lot, items]) => {
   const subKg = items.reduce((s, r) => s + r.weight, 0)
+  const lp = labelPosOf(items)
   return `
-  <div class="section-title">Lot: ${lot} — ${items[0]?.product_name ?? ''}</div>
+  <div class="section-title">Lot: ${lot} — ${items[0]?.product_name ?? ''}${lp ? `　·　ป้าย: ${lp.replace(/^[^ก-๙A-Za-z]+/, '')}` : ''}</div>
   <table>
     <thead><tr>
       <th style="width:5%">ลำดับ</th><th style="width:9%">ม้วนที่</th>
@@ -187,6 +197,24 @@ const RETURN_TO_REWORK_TYPES = [
   { key:'warehouse_damage', no:'1.5', label:'เสียจากคลัง/เคลื่อนย้าย', emoji:'📦' },
 ] as const
 
+// เลือกเฉพาะคอลัมน์ที่หน้านี้ใช้จริง (ลด Egress — เดิมดึง * ทุกคอลัมน์)
+const RCOLS = 'id,roll_no,roll_type,weight,gross_weight,core_weight,machine_no,lot_no,product_name,product_code,item_code,mat_code,customer,cust_code,cust_branch,inspector,created_at,transferred_at,transferred,shipped,shipped_at,shipped_by,ship_doc_no,so_id,sale_order,work_order,section,width_cm,thick_mc,width_unit,length,pcs,inbound_type,remark,rework_source_lot,rework_source_roll_id,review_status,label_position'
+const LABELPOS_TH: Record<string,string> = { head: '🔝 แปะหัว', side: '↔ แปะข้าง' }
+// สรุปตำแหน่งแปะป้ายของกลุ่มม้วน: ตรงกันหมด → ค่านั้น, ต่างกัน → "หลายแบบ", ไม่มี → ''
+function labelPosOf(rolls: any[]): string {
+  const set = new Set(rolls.map(r => (r.label_position ?? '').trim()).filter(Boolean))
+  if (set.size === 0) return ''
+  if (set.size === 1) return LABELPOS_TH[[...set][0]] ?? [...set][0]
+  return '⚠ หลายแบบ'
+}
+// สต็อกคงเหลือ = โอนแล้ว & ยังไม่ขาย
+const stockQ = () => supabase.from('production_rolls').select(RCOLS)
+  .eq('transferred', true).not('shipped', 'is', true)
+  .order('created_at', { ascending: false }).order('id', { ascending: false })
+// เส้นแบ่ง "ใหม่/เก่า" = 7 วันล่าสุด (~4 พันม้วน ขึ้นหน้าได้ในไม่กี่วินาที)
+// ที่เหลืออีก 3 หมื่นกว่าม้วนตามมาเบื้องหลัง
+const RECENT_CUTOFF = new Date(Date.now() - 7 * 864e5).toISOString()
+
 export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
   const [tab, setTab] = useState<Tab>('stock')
   const [rolls, setRolls] = useState<Roll[]>([])
@@ -194,6 +222,15 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   const [ncRolls, setNcRolls] = useState<any[]>([])
   const [sos, setSOs] = useState<SO[]>([])
   const [loading, setLoading] = useState(true)
+  const [olderLoading, setOlderLoading] = useState(false)   // สต็อกเก่ากว่า 7 วันกำลังโหลด
+  const [olderLoaded, setOlderLoaded]   = useState(false)
+  const [totalStockN, setTotalStockN]   = useState<number | null>(null)  // ยอดม้วนดีคงเหลือทั้งหมด (head count)
+  const [scrapLoading, setScrapLoading] = useState(false)
+  const [scrapLoaded, setScrapLoaded]   = useState(false)
+  const [histRolls, setHistRolls]     = useState<any[]>([])   // ม้วนที่เบิก/ส่งออกแล้ว (ประวัติ)
+  const [histLoading, setHistLoading] = useState(false)
+  const [histLoaded, setHistLoaded]   = useState(false)
+  const [replaceGroup, setReplaceGroup] = useState<any | null>(null)  // ใบเบิกที่กำลังหาม้วนมาแทน
   const [showSOModal, setShowSOModal] = useState(false)
 
   // stock filters
@@ -225,37 +262,102 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   const [delOpenWO, setDelOpenWO] = useState<Set<string>>(new Set())  // WO ที่กางดูม้วน
 
   async function loadAll() {
+    const wasFull = olderLoaded   // ถ้าเคยโหลดสต็อกเก่าครบแล้ว → รีเฟรชเสร็จค่อยโหลดกลับให้ (ไม่ยุบเหลือ 7 วัน)
     setLoading(true)
-    // เลือกเฉพาะคอลัมน์ที่หน้านี้ใช้จริง (ลด Egress — เดิมดึง * ทุกคอลัมน์)
-    const RCOLS = 'id,roll_no,roll_type,weight,gross_weight,core_weight,machine_no,lot_no,product_name,product_code,item_code,mat_code,customer,cust_code,cust_branch,inspector,created_at,transferred_at,transferred,shipped,shipped_at,shipped_by,ship_doc_no,so_id,sale_order,work_order,section,width_cm,thick_mc,width_unit,length,pcs,inbound_type,remark,rework_source_lot,rework_source_roll_id,review_status'
-    const [r, { data: s }, sc, nc, rShip] = await Promise.all([
-      // ⚡ สต็อกคงเหลือ = โอนแล้ว & "ยังไม่ขาย (not shipped)" — เดิมดึงม้วนโอนทั้งหมด(รวมที่ขายไปแล้ว หมื่นแถว) → ช้ามาก
-      fetchAll(() => supabase.from('production_rolls').select(RCOLS)
-        .eq('transferred', true).not('shipped', 'is', true)
-        .order('created_at', { ascending: false }).order('id', { ascending: false })),
+    setScrapLoaded(false)
+    setOlderLoaded(false)
+    // จังหวะ 1 — โหลดเฉพาะสต็อก 7 วันล่าสุด (~ไม่กี่พันม้วน) ให้หน้าขึ้นทันที
+    //   สต็อกเก่ากว่านั้นสะสม 3-4 หมื่นม้วนและแทบไม่เปลี่ยน — ไม่ดึงอัตโนมัติแล้ว
+    //   นับ "ยอดรวมทั้งหมด" ด้วย head count (ไม่ดึงแถว) เพื่อโชว์เลขจริงโดยไม่กินแบนด์วิดท์
+    const [rNew, { data: s }, nc, { count: totalN }] = await Promise.all([
+      fetchAll(() => stockQ().gte('created_at', RECENT_CUTOFF)),
       supabase.from('sales_orders').select('*').order('created_at', { ascending: false }),
-      // เศษ — ดึงทีละหน้าจนครบ (กันเกิน 1000 แถว)
-      fetchAll(() => supabase.from('production_rolls').select(RCOLS)
-        .in('roll_type', ['scrap_clear','scrap_color','scrap_lump'])
-        .order('created_at', { ascending: false })),
       // ม้วนที่ถูกแจ้ง NC ออกจากคลัง และ "ยังรอ ผจก ตัดสิน" เท่านั้น
       fetchAll(() => supabase.from('production_rolls').select(RCOLS)
         .eq('roll_type', 'bad')
         .eq('review_status', 'pending_review')
         .in('inbound_type', ['qc_reject','warehouse_damage'])
-        .order('created_at', { ascending: false })),
-      // ม้วนที่ "ขายแล้ว" เฉพาะที่ผูก SO — ใช้คิดยอดส่งต่อ SO เท่านั้น (ไม่ต้องโหลดที่ขาย/ส่งแบบไม่มี SO ทั้งหมด)
-      fetchAll(() => supabase.from('production_rolls').select(RCOLS)
-        .eq('transferred', true).eq('shipped', true).not('so_id', 'is', null)
-        .order('created_at', { ascending: false })),
+        .order('created_at', { ascending: false }).order('id', { ascending: false })),
+      supabase.from('production_rolls').select('id', { count: 'exact', head: true })
+        .eq('transferred', true).not('shipped', 'is', true).eq('roll_type', 'good'),
     ])
-    setRolls([...(r ?? []), ...(rShip ?? [])] as Roll[])
+    setRolls((rNew ?? []) as Roll[])
     setSOs((s ?? []) as SO[])
-    setScrapRolls(sc ?? [])
     setNcRolls(nc ?? [])
+    setTotalStockN(totalN ?? null)
     setLoading(false)
+
+    // ม้วนที่ขายแล้วผูก SO — โหลดเฉพาะเมื่อมี SO จริง (ตอนนี้ยังไม่มีใครใช้ระบบขาย)
+    if ((s ?? []).length) {
+      const rShip = await fetchAll(() => supabase.from('production_rolls').select(RCOLS)
+        .eq('transferred', true).eq('shipped', true).not('so_id', 'is', null)
+        .order('created_at', { ascending: false }).order('id', { ascending: false }))
+      setRolls(prev => [...prev, ...(rShip ?? [])] as Roll[])
+    }
+
+    if (wasFull) loadOlder()   // คืนสภาพ "โหลดครบ" หลังรีเฟรช
   }
   useEffect(() => { loadAll() }, [])
+
+  // โหลดสต็อกเก่ากว่า 7 วัน — เรียกเมื่อผู้ใช้กดปุ่ม หรือเริ่มค้นหา/กรอง (ต้องเห็นครบ)
+  async function loadOlder() {
+    if (olderLoaded || olderLoading) return
+    setOlderLoading(true)
+    const rOld = await fetchAll(() => stockQ().lt('created_at', RECENT_CUTOFF))
+    setRolls(prev => [...prev, ...(rOld ?? [])] as Roll[])
+    setOlderLoaded(true)
+    setOlderLoading(false)
+  }
+  // ค้นหา/กรอง หรือเข้าแท็บที่ต้องเห็นสต็อกครบ (SO/จัดส่ง) → ดึงส่วนเก่าให้อัตโนมัติ
+  const hasFilter = !!(search || fProduct || fCustomer || fLot || fSize || fSection)
+  const needFullStock = hasFilter || tab === 'so' || tab === 'ship' || tab === 'delivery'
+  useEffect(() => {
+    if (needFullStock && !olderLoaded && !olderLoading && !loading) loadOlder()
+  }, [needFullStock, olderLoaded, olderLoading, loading])
+
+  // เศษ — โหลดตอนเปิดแท็บเศษเท่านั้น (3 พันกว่าแถว ไม่ต้องรอตั้งแต่เปิดหน้า)
+  useEffect(() => {
+    if (tab !== 'scrap' || scrapLoaded || scrapLoading) return
+    let alive = true
+    setScrapLoading(true)
+    fetchAll(() => supabase.from('production_rolls').select(RCOLS)
+      .in('roll_type', ['scrap_clear','scrap_color','scrap_lump'])
+      .order('created_at', { ascending: false }).order('id', { ascending: false }))
+      .then(sc => { if (!alive) return; setScrapRolls(sc ?? []); setScrapLoaded(true) })
+      // อย่า gate ด้วย alive — ไม่งั้นสลับแท็บระหว่างโหลดจะค้าง "กำลังโหลด" ถาวร (scrapLoading ค้าง true)
+      .finally(() => setScrapLoading(false))
+    return () => { alive = false }
+  }, [tab, scrapLoaded])
+
+  // ประวัติเบิก/จัดส่ง — โหลดตอนเปิดแท็บ (ม้วนที่ shipped แล้วทั้งหมด)
+  useEffect(() => {
+    if (tab !== 'history' || histLoaded || histLoading) return
+    let alive = true
+    setHistLoading(true)
+    fetchAll(() => supabase.from('production_rolls').select(RCOLS)
+      .eq('shipped', true)
+      .order('shipped_at', { ascending: false }).order('id', { ascending: false }))
+      .then(h => { if (!alive) return; setHistRolls(h ?? []); setHistLoaded(true) })
+      // อย่า gate ด้วย alive — กันค้าง "กำลังโหลด" ถาวรเมื่อสลับแท็บระหว่างโหลด
+      .finally(() => setHistLoading(false))
+    return () => { alive = false }
+  }, [tab, histLoaded])
+
+  // จัดกลุ่มประวัติเป็น "ใบเบิก" — ตามเลขใบ (ship_doc_no) ถ้าไม่มีก็ตาม shipped_at+ผู้เบิก
+  const shipmentHistory = useMemo(() => {
+    const map = new Map<string, { key: string; docNo: string; at: string; by: string; customer: string; product: string; itemCode: string; soId: string | null; so: string; rolls: any[] }>()
+    histRolls.forEach(r => {
+      const doc = (r.ship_doc_no ?? '').trim()
+      const k = doc || `${r.shipped_at ?? '?'}__${r.shipped_by ?? '?'}`
+      if (!map.has(k)) map.set(k, { key: k, docNo: doc, at: r.shipped_at ?? '', by: r.shipped_by ?? '—',
+        customer: r.customer ?? '—', product: r.product_name ?? '—', itemCode: (r as any).item_code ?? '', soId: r.so_id ?? null, so: ((r as any).sale_order ?? '').trim(), rolls: [] })
+      const g = map.get(k)!
+      if (r.shipped_at && (!g.at || r.shipped_at > g.at)) g.at = r.shipped_at
+      g.rolls.push(r)
+    })
+    return Array.from(map.values()).sort((a, b) => (b.at || '').localeCompare(a.at || ''))
+  }, [histRolls])
+  const histTotalKg = useMemo(() => histRolls.reduce((s, r) => s + (r.weight ?? 0), 0), [histRolls])
 
   // stock = ม้วนดี (good) ที่ transferred แต่ยังไม่ shipped
   // กรอง roll_type='good' กันม้วนเศษ/กรอ (roll_no=0 หรือเลขซ้ำ) เล็ดลอดเข้าคลัง
@@ -411,6 +513,7 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
         shipped:     true,
         shipped_at:  now,
         shipped_by:  shipStaff,
+        ship_doc_no: docNo,
       }).in('id', ids)
       if (error) throw error
 
@@ -583,7 +686,7 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
       const now = new Date().toISOString()
       const docNo = `DN-${Date.now().toString().slice(-8)}`
       const { error } = await supabase.from('production_rolls').update({
-        shipped: true, shipped_at: now, shipped_by: delStaff.trim(),
+        shipped: true, shipped_at: now, shipped_by: delStaff.trim(), ship_doc_no: docNo,
       }).in('id', Array.from(delSel))
       if (error) throw error
       const so = { id: '', so_no: `ดีล ${delTarget || fmt(delPickedKg, 0)} kg`, customer: selItemGroup?.customer ?? '',
@@ -606,11 +709,16 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
               <Package size={22} className="text-brand-400"/> คลังสินค้า
             </h1>
             <p className="text-slate-400 text-xs mt-0.5">
-              สต็อกคงเหลือ {stock.length} ม้วน · {fmt(stock.reduce((s,r)=>s+(r.weight??0),0),1)} Kgs.
+              สต็อกคงเหลือ {stock.length}{totalStockN != null && !olderLoaded ? ` / ${totalStockN}` : ''} ม้วน · {fmt(stock.reduce((s,r)=>s+(r.weight??0),0),1)} Kgs.
+              {!olderLoaded && totalStockN != null && totalStockN > stock.length && (
+                olderLoading
+                  ? <span className="text-amber-400 ml-2">· กำลังโหลดสต็อกเก่า…</span>
+                  : <button onClick={loadOlder} className="text-brand-400 hover:text-brand-300 underline ml-2">โหลดสต็อกเก่าทั้งหมด</button>
+              )}
             </p>
           </div>
-          <button onClick={loadAll} className="flex items-center gap-1.5 text-slate-400 hover:text-white text-xs bg-slate-800 px-3 py-1.5 rounded-lg">
-            <RefreshCw size={12}/> รีเฟรช
+          <button onClick={loadAll} disabled={loading} className="flex items-center gap-1.5 text-slate-400 hover:text-white disabled:opacity-50 text-xs bg-slate-800 px-3 py-1.5 rounded-lg">
+            <RefreshCw size={12} className={loading ? 'animate-spin' : ''}/> รีเฟรช
           </button>
         </div>
 
@@ -621,7 +729,8 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
             { key:'delivery', label:'จัดส่งตาม Item', icon: Truck },
             { key:'so',    label:`Sales Orders (${sos.length})`, icon: Package },
             { key:'ship',  label:'จัดส่ง (ตาม SO)', icon: Truck },
-            { key:'scrap', label:`เศษ (${scrapRolls.length})`, icon: Trash2 },
+            { key:'scrap', label: scrapLoaded ? `เศษ (${scrapRolls.length})` : 'เศษ', icon: Trash2 },
+            { key:'history', label:'ประวัติเบิก/จัดส่ง', icon: BarChart3 },
           ] as const).map(t => (
             <button key={t.key} onClick={() => setTab(t.key)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -684,9 +793,10 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
             ].map(f => (
               <div key={f.label}>
                 <label className="block text-[10px] text-slate-500 mb-1">{f.label}</label>
-                <select value={f.val} onChange={e => f.set(e.target.value)}
+                {/* onFocus โหลดสต็อกเก่าก่อน — ไม่งั้นตัวเลือกมีแค่ของ 7 วันล่าสุด (ค่าที่มีแต่สต็อกเก่าจะหาย) */}
+                <select value={f.val} onChange={e => f.set(e.target.value)} onFocus={() => loadOlder()}
                   className="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-brand-500 min-w-[140px]">
-                  <option value="">ทั้งหมด</option>
+                  <option value="">ทั้งหมด{!olderLoaded && (olderLoading ? ' (กำลังโหลดเก่า…)' : '')}</option>
                   {f.opts.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
@@ -695,7 +805,7 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
               <label className="block text-[10px] text-slate-500 mb-1">ค้นหา</label>
               <div className="relative">
                 <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500"/>
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="ม้วน, Lot..."
+                <input value={search} onChange={e => setSearch(e.target.value)} onFocus={() => loadOlder()} placeholder="ม้วน, Lot..."
                   className="bg-slate-800 border border-slate-700 rounded-xl pl-7 pr-3 py-2 text-sm text-white outline-none focus:border-brand-500 w-36"/>
               </div>
             </div>
@@ -1284,7 +1394,7 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
             ))}
           </div>
 
-          {loading ? <div className="text-slate-500 text-sm py-8 text-center">กำลังโหลด...</div>
+          {loading || scrapLoading || !scrapLoaded ? <div className="text-slate-500 text-sm py-8 text-center">กำลังโหลด...</div>
           : scrapByLot.length === 0 ? <div className="bg-slate-900 border border-slate-800 rounded-2xl py-16 text-center text-slate-500">ยังไม่มีเศษจากงานผลิต/กรอ</div>
           : (
             <div className="space-y-2">
@@ -1340,6 +1450,110 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
           )}
         </>)}
 
+        {/* ── ประวัติเบิก/จัดส่ง ─────────────────────────────────────── */}
+        {tab === 'history' && (<>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+              <p className="text-[11px] text-slate-500">จำนวนใบเบิก/จัดส่ง</p>
+              <p className="text-3xl font-black text-brand-400 mt-1">{histLoaded ? shipmentHistory.length : '—'}</p>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+              <p className="text-[11px] text-slate-500">ม้วนที่เบิกออกรวม</p>
+              <p className="text-3xl font-black text-slate-200 mt-1">{histLoaded ? histRolls.length : '—'}</p>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 col-span-2">
+              <p className="text-[11px] text-slate-500">น้ำหนักเบิกออกรวม</p>
+              <p className="text-3xl font-black text-emerald-400 mt-1">{fmt(histTotalKg,1)}<span className="text-base text-slate-500 font-normal"> kg</span></p>
+            </div>
+          </div>
+
+          {histLoading || !histLoaded ? <div className="text-slate-500 text-sm py-8 text-center">กำลังโหลด...</div>
+          : shipmentHistory.length === 0 ? <div className="bg-slate-900 border border-slate-800 rounded-2xl py-16 text-center text-slate-500">ยังไม่มีประวัติการเบิก/จัดส่ง</div>
+          : (
+            <div className="space-y-2">
+              {shipmentHistory.map(g => {
+                const key = `hist__${g.key}`
+                const isOpen = expandedLots.has(key)
+                const subKg = g.rolls.reduce((s:number,r:any)=>s+(r.weight??0),0)
+                return (
+                  <div key={key} className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                    <div className="w-full flex items-center gap-2 px-4 py-3 hover:bg-slate-800/50 text-left flex-wrap">
+                      <button onClick={() => setExpandedLots(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })} className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
+                        {isOpen ? <ChevronDown size={16} className="text-slate-500"/> : <ChevronRight size={16} className="text-slate-500"/>}
+                        {g.docNo
+                          ? <span className="text-[11px] font-bold bg-emerald-500/15 text-emerald-300 px-1.5 py-0.5 rounded font-mono">{g.docNo}</span>
+                          : <span className="text-[11px] font-bold bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded">ไม่มีเลขใบ</span>}
+                        {g.so && <span className="text-[10px] font-bold bg-blue-500/15 text-blue-300 px-1.5 py-0.5 rounded">SO {g.so}</span>}
+                        <span className="text-sm text-slate-300">{g.product}</span>
+                        {labelPosOf(g.rolls) && <span className="text-[11px] font-bold bg-cyan-500/15 text-cyan-300 px-1.5 py-0.5 rounded">{labelPosOf(g.rolls)}</span>}
+                        <span className="text-xs text-slate-500">· {g.customer}</span>
+                        <span className="text-xs text-slate-500">· {g.at ? fmtDT(g.at) : '—'}</span>
+                        <span className="text-xs text-slate-400">· เบิกโดย {g.by}</span>
+                      </button>
+                      <span className="text-sm font-bold text-emerald-400">{fmt(subKg,1)} kg</span>
+                      <span className="text-xs text-slate-500">{g.rolls.length} ม้วน</span>
+                      <button onClick={() => {
+                          const so = { id:'', so_no: g.docNo || `เบิก ${g.at ? fmtDT(g.at) : ''}`, customer: g.customer,
+                            product_name: g.product, target_kg: 0, status:'', created_at: g.at, note:'' } as SO
+                          printDelivery(g.rolls as Roll[], so, g.by, g.docNo || '—')
+                        }}
+                        className="flex items-center gap-1 text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded">
+                        <Printer size={12}/> พิมพ์ซ้ำ
+                      </button>
+                      <button onClick={() => {
+                          const rev = `${g.docNo || 'DN'}-แก้ไข`
+                          const so = { id:'', so_no: rev, customer: g.customer,
+                            product_name: g.product, target_kg: 0, status:'', created_at: g.at, note:'' } as SO
+                          printDelivery(g.rolls as Roll[], so, g.by, rev)
+                        }}
+                        className="flex items-center gap-1 text-[11px] bg-amber-600/80 hover:bg-amber-600 text-white px-2 py-1 rounded">
+                        <Printer size={12}/> ออกใบส่งแก้ยอด
+                      </button>
+                      <button onClick={() => { loadOlder(); setReplaceGroup(g) }}
+                        className="flex items-center gap-1 text-[11px] bg-brand-600/80 hover:bg-brand-600 text-white px-2 py-1 rounded">
+                        <Plus size={12}/> เพิ่มม้วนแทน
+                      </button>
+                    </div>
+                    {isOpen && (
+                      <div className="overflow-x-auto border-t border-slate-800">
+                        <table className="w-full text-xs">
+                          <thead className="bg-slate-800/50 text-slate-400">
+                            <tr>
+                              <th className="px-3 py-2 text-left">ม้วนที่</th>
+                              <th className="px-3 py-2 text-left">Lot</th>
+                              <th className="px-3 py-2 text-right">นน.สุทธิ</th>
+                              <th className="px-3 py-2 text-left">เครื่อง</th>
+                              <th className="px-3 py-2 text-left">เวลาเบิก</th>
+                              <th className="px-3 py-2 text-right">รับคืน</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {g.rolls.map((r:any) => (
+                              <tr key={r.id} className="border-t border-slate-800 text-slate-300">
+                                <td className="px-3 py-1.5 font-bold">#{r.roll_no ?? '—'}</td>
+                                <td className="px-3 py-1.5 font-mono text-slate-400">{r.lot_no ?? '—'}</td>
+                                <td className="px-3 py-1.5 text-right font-bold">{fmt(r.weight ?? 0,2)}</td>
+                                <td className="px-3 py-1.5">{r.machine_no ?? '—'}</td>
+                                <td className="px-3 py-1.5 text-slate-500">{r.shipped_at ? fmtDT(r.shipped_at) : '—'}</td>
+                                <td className="px-3 py-1.5 text-right">
+                                  <button onClick={() => setReturnModal(r)}
+                                    className="text-[11px] bg-amber-600/80 hover:bg-amber-600 text-white px-2 py-0.5 rounded">
+                                    รับคืน/แจ้ง NC
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </>)}
+
       </div>
 
       {/* ── Modal: ส่งกลับแผนกกรอ ───────────────────────────────────── */}
@@ -1347,9 +1561,183 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
         <ReturnToReworkModal
           roll={returnModal}
           onClose={() => setReturnModal(null)}
-          onDone={async () => { setReturnModal(null); await loadAll() }}
+          onDone={async () => { setReturnModal(null); setHistLoaded(false); await loadAll() }}
         />
       )}
+
+      {/* ── Modal: เพิ่มม้วนจากสต็อกมาแทนในใบเบิกเดิม ─────────────────── */}
+      {replaceGroup && (
+        <ReplaceRollModal
+          group={replaceGroup}
+          stock={stock}
+          stockLoading={!olderLoaded || olderLoading}
+          onClose={() => setReplaceGroup(null)}
+          onDone={async () => { setReplaceGroup(null); setHistLoaded(false); await loadAll() }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── หยิบม้วนจากสต็อกมาแทนม้วนที่รับคืน แล้วผูกเข้าใบเบิกเดิม (ship_doc_no เดียวกัน) ───
+function ReplaceRollModal({ group, stock, stockLoading, onClose, onDone }:
+  { group: any; stock: Roll[]; stockLoading?: boolean; onClose: () => void; onDone: () => void }) {
+  const [sel, setSel]     = useState<Set<string>>(new Set())
+  const [staff, setStaff] = useState<string>(group.by && group.by !== '—' ? group.by : '')
+  const [sameOnly, setSameOnly] = useState(true)
+  const [q, setQ] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  // เรียงเก่าก่อน (FIFO) — วันชั่ง/สร้างเก่าสุดขึ้นก่อน เพื่อระบายสต็อกเก่าออกไปแทน
+  const candidates = useMemo(() => stock.filter(r =>
+    (!sameOnly || (group.itemCode ? (r as any).item_code === group.itemCode : r.product_name === group.product)) &&
+    (!q || String(r.roll_no).includes(q) || (r.lot_no ?? '').toLowerCase().includes(q.toLowerCase()))
+  ).sort((a,b) => (a.created_at ?? '').localeCompare(b.created_at ?? '')
+    || (a.lot_no ?? '').localeCompare(b.lot_no ?? '') || (a.roll_no ?? 0) - (b.roll_no ?? 0)),
+    [stock, sameOnly, q, group])
+
+  // จัดกลุ่มตาม Lot (Lot เก่าขึ้นก่อน — เรียงตามม้วนแรกของ Lot) เพื่อใส่แถวคั่นในตาราง
+  const candByLot = useMemo(() => {
+    const m = new Map<string, { lot: string; rolls: Roll[] }>()
+    candidates.forEach(r => {
+      const lot = r.lot_no ?? '(ไม่ระบุ Lot)'
+      if (!m.has(lot)) m.set(lot, { lot, rolls: [] })
+      m.get(lot)!.rolls.push(r)
+    })
+    return Array.from(m.values())   // Map รักษาลำดับที่เจอ = FIFO ตาม candidates อยู่แล้ว
+  }, [candidates])
+
+  const picked = candidates.filter(r => sel.has(r.id))
+  const pickedKg = picked.reduce((s,r) => s + (r.weight ?? 0), 0)
+  function toggle(id: string) { setSel(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n }) }
+
+  async function save() {
+    if (!staff.trim()) { alert('กรอกชื่อผู้จัดส่ง'); return }
+    if (sel.size === 0) { alert('เลือกม้วนที่จะใส่แทนก่อน'); return }
+    const docLabel = group.docNo || `ใบเบิก ${group.at ? fmtDT(group.at) : ''}`
+    if (!confirm(`ยืนยันใส่ม้วนแทน ${sel.size} ม้วน · ${fmt(pickedKg)} Kgs. เข้า ${docLabel} ?`)) return
+    setSaving(true)
+    try {
+      // ผูกม้วนแทนเข้า "กลุ่มใบเบิกเดิม" —
+      //   ใบมีเลข DN → ใช้ ship_doc_no เดียวกัน
+      //   ใบไม่มีเลข (ข้อมูลเก่า) → จับกลุ่มด้วย shipped_at+ผู้เบิก จึงต้อง stamp เวลา/ผู้เบิกให้ตรงกลุ่มเดิม
+      const patch: any = { shipped: true, so_id: group.soId ?? null }
+      if (group.docNo) {
+        patch.ship_doc_no = group.docNo
+        patch.shipped_at  = new Date().toISOString()
+        patch.shipped_by  = staff.trim()
+      } else {
+        patch.shipped_at  = group.at || new Date().toISOString()   // เข้ากลุ่มเดิม (key = at+by)
+        patch.shipped_by  = group.by && group.by !== '—' ? group.by : staff.trim()
+      }
+      const { error } = await supabase.from('production_rolls').update(patch).in('id', Array.from(sel))
+      if (error) throw error
+      alert(`✓ ใส่ม้วนแทน ${sel.size} ม้วนเข้า ${docLabel} แล้ว\nอย่าลืมกด "ออกใบส่งแก้ยอด" เพื่อพิมพ์ใบที่ยอดถูกต้อง`)
+      onDone()
+    } catch (e: any) { alert('ไม่สำเร็จ: ' + (e?.message ?? e)) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-slate-900 border border-brand-600 rounded-2xl w-full max-w-4xl p-5 shadow-2xl flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-white font-bold text-base flex items-center gap-2"><Plus size={18} className="text-brand-400"/> เพิ่มม้วนแทน — {group.docNo || `ใบเบิก ${group.at ? fmtDT(group.at) : ''}`}</p>
+          <button onClick={onClose} className="text-slate-500 hover:text-white"><X size={18}/></button>
+        </div>
+        <div className="bg-slate-800/50 rounded-lg p-3 mb-3 text-xs flex flex-wrap gap-x-6 gap-y-0.5">
+          <p className="text-slate-400">สินค้า: <b className="text-white">{group.product}</b></p>
+          <p className="text-slate-400">ลูกค้า: <b className="text-white">{group.customer}</b></p>
+          {group.so && <p className="text-slate-400">SO: <b className="text-blue-300">{group.so}</b></p>}
+        </div>
+
+        <div className="flex items-center gap-2 mb-2">
+          <div className="flex-1 flex items-center gap-1.5 bg-slate-800 border border-slate-700 rounded-lg px-2.5">
+            <Search size={13} className="text-slate-500"/>
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder="ค้นเลขม้วน / Lot"
+              className="flex-1 bg-transparent py-2 text-sm text-white outline-none"/>
+          </div>
+          <label className="flex items-center gap-1.5 text-xs text-slate-300 whitespace-nowrap">
+            <input type="checkbox" checked={sameOnly} onChange={e => setSameOnly(e.target.checked)}/> เฉพาะสินค้าเดียวกัน
+          </label>
+        </div>
+
+        <p className="text-[11px] text-slate-500 mb-1.5">
+          เรียงเก่าก่อน (FIFO) · พบ {candidates.length} ม้วน · {candByLot.length} Lot
+          {stockLoading && <span className="text-amber-400 ml-2">· กำลังโหลดสต็อกเก่าเพิ่ม…</span>}
+        </p>
+        <div className="flex-1 overflow-y-auto border border-slate-800 rounded-lg">
+          {candidates.length === 0
+            ? <div className="text-slate-500 text-sm py-8 text-center">
+                {stockLoading ? 'กำลังโหลดสต็อก… (ม้วนเก่ากำลังตามมา)' : `ไม่พบม้วนในสต็อก ${sameOnly ? '(ลองปิด "เฉพาะสินค้าเดียวกัน")' : ''}`}
+              </div>
+            : (
+              <table className="w-full text-xs">
+                <thead className="bg-slate-800/80 text-slate-400 sticky top-0">
+                  <tr>
+                    <th className="px-3 py-2 w-8"></th>
+                    <th className="px-3 py-2 text-left">ม้วนที่</th>
+                    <th className="px-3 py-2 text-left">วันที่ (ชั่ง)</th>
+                    <th className="px-3 py-2 text-left">Lot</th>
+                    <th className="px-3 py-2 text-left">สินค้า</th>
+                    <th className="px-3 py-2 text-left">เครื่อง</th>
+                    <th className="px-3 py-2 text-right">นน.สุทธิ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {candByLot.map(lg => {
+                    const lotIds = lg.rolls.map(r => r.id)
+                    const allSel = lotIds.every(id => sel.has(id))
+                    const lotKg = lg.rolls.reduce((s,r)=>s+(r.weight??0),0)
+                    return (
+                      <Fragment key={lg.lot}>
+                        <tr className="bg-slate-800/60 border-t-2 border-slate-700">
+                          <td className="px-3 py-1.5 text-center">
+                            <input type="checkbox" checked={allSel} onChange={() => setSel(p => {
+                              const n = new Set(p); allSel ? lotIds.forEach(id => n.delete(id)) : lotIds.forEach(id => n.add(id)); return n
+                            })}/>
+                          </td>
+                          <td colSpan={6} className="px-3 py-1.5">
+                            <span className="font-mono font-bold text-amber-300">Lot {lg.lot}</span>
+                            <span className="text-slate-500 ml-2">· {lg.rolls.length} ม้วน · {fmt(lotKg,1)} kg</span>
+                            {labelPosOf(lg.rolls) && <span className="text-cyan-300 ml-2 font-semibold">· {labelPosOf(lg.rolls)}</span>}
+                            <span className="text-slate-600 ml-2 text-[11px]">(ติ๊กหัวแถวเพื่อเลือกทั้ง Lot)</span>
+                          </td>
+                        </tr>
+                        {lg.rolls.map(r => (
+                          <tr key={r.id} onClick={() => toggle(r.id)}
+                            className={`border-t border-slate-800 cursor-pointer ${sel.has(r.id) ? 'bg-brand-600/25' : 'hover:bg-slate-800/50'}`}>
+                            <td className="px-3 py-1.5 text-center"><input type="checkbox" readOnly checked={sel.has(r.id)}/></td>
+                            <td className="px-3 py-1.5 font-bold text-white">#{r.roll_no}</td>
+                            <td className="px-3 py-1.5 text-slate-400 whitespace-nowrap">{r.created_at ? fmtDT(r.created_at) : '—'}</td>
+                            <td className="px-3 py-1.5 font-mono text-slate-500">{r.lot_no}</td>
+                            <td className="px-3 py-1.5 text-slate-300 max-w-[220px] truncate">{r.product_name}</td>
+                            <td className="px-3 py-1.5 text-slate-400">{r.machine_no ?? '—'}</td>
+                            <td className="px-3 py-1.5 text-right font-bold text-brand-300">{fmt(r.weight ?? 0,2)}</td>
+                          </tr>
+                        ))}
+                      </Fragment>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
+        </div>
+
+        <label className="block text-xs text-slate-400 mt-3 mb-1">ชื่อผู้จัดส่ง *</label>
+        <input value={staff} onChange={e => setStaff(e.target.value)}
+          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-brand-500"/>
+
+        <div className="flex items-center justify-between mt-3">
+          <span className="text-xs text-slate-400">เลือก <b className="text-white">{picked.length}</b> ม้วน · <b className="text-brand-300">{fmt(pickedKg)}</b> kg</span>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-lg text-sm">ยกเลิก</button>
+            <button onClick={save} disabled={saving || sel.size === 0} className="bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-bold">
+              {saving ? 'บันทึก...' : 'ใส่แทนในใบนี้'}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -1367,10 +1755,12 @@ function ReturnToReworkModal({ roll, onClose, onDone }:
     if (!by.trim())     { alert('กรอกชื่อผู้แจ้ง'); return }
     setSaving(true)
 
+    const wasShipped = !!roll.shipped   // เคยเบิก/ส่งออกไปแล้ว → รับคืน
+
     // ── 1) บันทึก log (ม้วนออกจาก FG/คลัง → เข้า NC) ──
     const { error: logErr } = await supabase.from('roll_deletion_logs').insert({
       deleted_by:   by.trim(),
-      reason:       `[แจ้ง NC จากคลัง] ${reason.trim()}`,
+      reason:       `[${wasShipped ? 'รับคืนจากจัดส่ง → NC' : 'แจ้ง NC จากคลัง'}] ${reason.trim()}`,
       machine_no:   roll.machine_no, lot_no: roll.lot_no, roll_no: roll.roll_no,
       roll_type:    'good', weight: roll.weight, gross_weight: roll.gross_weight,
       core_weight:  roll.core_weight, length: roll.length,
@@ -1405,7 +1795,7 @@ function ReturnToReworkModal({ roll, onClose, onDone }:
     const { error: updErr } = await supabase.from('production_rolls').update({
       roll_type:       'bad',
       roll_no:         ncRollNo,
-      remark:          ncNote,
+      remark:          wasShipped ? `${ncNote} (รับคืนจากใบ ${roll.ship_doc_no ?? '—'})` : ncNote,
       inbound_type:    inboundType,
       review_status:   'pending_review',
       review_action:   null,
@@ -1415,6 +1805,8 @@ function ReturnToReworkModal({ roll, onClose, onDone }:
       transferred_by:  null,
       transferred_at:  null,
       transfer_doc_id: null,
+      // ถ้าเคยเบิก/ส่งออกไปแล้ว → ล้างสถานะจัดส่งให้หลุดจากใบเดิม (ยอดใบจะแก้ตอนออกใบใหม่)
+      ...(wasShipped ? { shipped: false, shipped_at: null, shipped_by: null, ship_doc_no: null, so_id: null } : {}),
     }).eq('id', roll.id)
     setSaving(false)
     if (updErr) { alert('บันทึกไม่สำเร็จ: ' + updErr.message); return }
@@ -1428,7 +1820,7 @@ function ReturnToReworkModal({ roll, onClose, onDone }:
     <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-slate-900 border border-amber-600 rounded-2xl w-full max-w-md p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <p className="text-white font-bold text-base flex items-center gap-2"><span className="text-xl">⚠</span> แจ้ง NC — ม้วนเสียในคลัง</p>
+          <p className="text-white font-bold text-base flex items-center gap-2"><span className="text-xl">⚠</span> {roll.shipped ? 'รับคืน — ม้วนเสียหลังส่ง → NC' : 'แจ้ง NC — ม้วนเสียในคลัง'}</p>
           <button onClick={onClose} className="text-slate-500 hover:text-white"><X size={18}/></button>
         </div>
 
@@ -1464,7 +1856,9 @@ function ReturnToReworkModal({ roll, onClose, onDone }:
           className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-amber-500"/>
 
         <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5 mt-3 text-xs text-amber-200">
-          💡 ม้วนนี้จะออกจากคลัง → เข้า <b>NC (รอพิจารณา)</b> ที่หน้า "พิจารณาม้วน" → ผจก ตัดสินว่า <b>ส่งกรอ / เศษเสีย / เก็บไว้</b>
+          {roll.shipped
+            ? <>💡 ม้วนนี้จะ<b>หลุดจากใบส่ง {roll.ship_doc_no ?? 'เดิม'}</b> → เข้า <b>NC (รอพิจารณา)</b> · อย่าลืมกด <b>"ออกใบส่งแก้ยอด"</b> ที่ประวัติเพื่อพิมพ์ใบใหม่ที่ยอดถูกต้อง</>
+            : <>💡 ม้วนนี้จะออกจากคลัง → เข้า <b>NC (รอพิจารณา)</b> ที่หน้า "พิจารณาม้วน" → ผจก ตัดสินว่า <b>ส่งกรอ / เศษเสีย / เก็บไว้</b></>}
         </div>
 
         <div className="flex gap-2 mt-4">

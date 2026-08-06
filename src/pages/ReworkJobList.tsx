@@ -1420,6 +1420,16 @@ function ReworkPendingPanel({ refreshKey }: { refreshKey: number }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [allCollapsed, setAllCollapsed] = useState(false)
   const [srcNo, setSrcNo] = useState<Record<string, number>>({})   // source_roll_id → เลขม้วนต้นทาง
+  const [prodName, setProdName] = useState<Record<string, string>>({})   // item_code → ชื่อสินค้ามาตรฐาน (products master)
+
+  // ชื่อสินค้ามาตรฐานจาก master — ใช้เป็นหัวกลุ่ม กันม้วนบางใบชื่อเพี้ยน (เช่นขาด X12)
+  useEffect(() => {
+    fetchProducts().then(ps => {
+      const m: Record<string, string> = {}
+      for (const p of ps) { const c = (p.item_code ?? '').trim(); if (c && p.product_name) m[c] = p.product_name }
+      setProdName(m)
+    }).catch(() => {})
+  }, [])
 
   async function load() {
     setLoading(true)
@@ -1480,7 +1490,7 @@ function ReworkPendingPanel({ refreshKey }: { refreshKey: number }) {
               <button onClick={() => setCollapsed(c => ({ ...c, [k]: open }))}
                 className="w-full flex items-center justify-between gap-2 px-2.5 py-2 bg-emerald-600/15 hover:bg-emerald-600/25 border-l-4 border-emerald-500 text-left sticky top-0 z-10">
                 <p className="text-emerald-100 text-xs font-black truncate">
-                  <span className="text-emerald-400">{open ? '▼' : '▶'}</span> {list[0].product_name || k}
+                  <span className="text-emerald-400">{open ? '▼' : '▶'}</span> {prodName[k] || list[0].product_name || k}
                   <span className="text-emerald-300/50 font-mono font-normal"> · {k}</span>
                 </p>
                 <span className="text-[10px] text-emerald-200 font-bold shrink-0 bg-emerald-900/40 px-1.5 py-0.5 rounded">{list.length} ม้วน · {fmt(gKg,1)}</span>

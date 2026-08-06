@@ -72,6 +72,7 @@ function rollToProfile(roll: any, size: 'long' | 'short' = 'long'): any {
     labelSize:   roll.label_size   ?? size,   // ใช้ขนาดใบที่เก็บกับม้วน (ถ้ามี) → รีปริ้นตรงเดิม
     headerText:  roll.header_text  ?? '',   // หัวใบ (ชื่อลูกค้า) ที่ใช้ตอนชั่ง → รีปริ้นให้ตรงเดิม
     blankHeader: roll.blank_header ?? false,
+    labelPosition: roll.label_position ?? '',
     section:     roll.section      ?? 'rewind',
     soNo:        roll.sale_order   ?? '',
     woNo:        roll.work_order   ?? '',
@@ -684,7 +685,8 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
       lot_no: snap.lotNo, length: snap.length, pcs: snap.pcs, core_weight: snap.coreWeight,
       inspector: snap.inspector, locked: snap.locked, planned_qty: snap.plannedQty,
       label_size: snap.labelSize, header_text: snap.headerText ?? '',
-      blank_header: snap.blankHeader ?? false, section: snap.section ?? 'blow',
+      blank_header: snap.blankHeader ?? false, label_position: (snap as any).labelPosition ?? '',
+      section: snap.section ?? 'blow',
       // ⚠ ต้องคืน WO/SO/วันส่ง/fresh_start จาก snapshot ด้วย ไม่งั้น profile ค้างค่าจากงานอื่นที่เพิ่งดู
       //   → ม้วนติด WO ผิด + เลขม้วนไม่รีเซ็ต (เด้งต่อจากม้วนเก่าใน lot)
       sale_order: (snap as any).soNo ?? '',
@@ -780,6 +782,7 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
             if ((r.work_order ?? '') !== (woMap[key] ?? '')) return     // เฉพาะ WO ปัจจุบันของเครื่องนี้
             if (!map[key]) map[key] = { done: 0, rolls: 0, badKg: 0, badRolls: 0 }
             map[key].done += r.weight ?? 0
+            map[key].rolls += 1                                       // นับจำนวนม้วนเดือนก่อนด้วย (ไม่งั้นโชว์ 0 ม้วนทั้งที่มียอด)
           })
         }
         setProgress(map)
@@ -814,6 +817,7 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
                 plannedQty: data.planned_qty ?? '',
                 labelSize: (data.label_size ?? 'long') as 'long'|'short',
                 headerText: data.header_text ?? '', blankHeader: data.blank_header ?? false,
+                labelPosition: (data.label_position ?? '') as ''|'head'|'side',
                 section: (data.section ?? 'blow') as 'blow'|'print'|'rewind',
                 soNo: data.sale_order ?? '', woNo: data.work_order ?? '', deliveryDate: data.delivery_date ?? '',
               }
@@ -1953,6 +1957,7 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
           labelSize:  (data.label_size   ?? 'long') as 'long'|'short',
           headerText:  data.header_text  ?? '',
           blankHeader: data.blank_header ?? false,
+          labelPosition: (data.label_position ?? '') as ''|'head'|'side',
           section:    (data.section      ?? 'blow') as 'blow'|'print'|'rewind',
           soNo:        data.sale_order   ?? '',
           woNo:        data.work_order   ?? '',
@@ -2163,7 +2168,7 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
     // ม้วนเสียที่เบิกมา = bad + reworking + สินค้าเดียวกัน
     //   กรอต่อ (mergeMode): รวมม้วนที่ยังอยู่ในคิว (ยังไม่เบิก) ด้วย → เลือกม้วนที่ 2 ได้แม้ยังไม่เบิก
     let q = supabase.from('production_rolls')
-      .select('id, lot_no, roll_no, weight, core_weight, length, pcs, work_order, sale_order, remark, inbound_type, product_name, customer, width_cm, width_unit, thick_mc, machine_no, review_action_reason, review_decision_by, new_system, rework_status, header_text, blank_header')
+      .select('id, lot_no, roll_no, weight, core_weight, length, pcs, work_order, sale_order, remark, inbound_type, product_name, customer, width_cm, width_unit, thick_mc, machine_no, review_action_reason, review_decision_by, new_system, rework_status, header_text, blank_header, label_position')
       .eq('roll_type', 'bad').eq('item_code', ic)
       .order('created_at', { ascending: true })
     q = mergeMode
@@ -2998,6 +3003,9 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         header_text:  (isRework && isGood && useSrc) ? (useSrc.header_text ?? '') : ((profile as any).headerText ?? ''),
         blank_header: (isRework && isGood && useSrc) ? (useSrc.blank_header ?? false) : ((profile as any).blankHeader ?? false),
         label_size:   (profile as any).labelSize ?? 'long',   // ✨ เก็บขนาดใบปะหน้า → ดึงงานเก่ากลับได้ครบ
+        // ✨ ตำแหน่งแปะป้าย (แปะหัว/ข้าง) — กำหนดที่ WO → ติดม้วน → โชว์บนใบส่ง
+        //    ม้วนกรอ → สืบทอดจากม้วนต้นทาง (เหมือน header_text)
+        label_position: (isRework && isGood && useSrc) ? (useSrc.label_position ?? '') : ((profile as any).labelPosition ?? ''),
         cust_address: (profile as any).custAddress ?? '',     // ✨ เก็บที่อยู่ลูกค้าติดม้วน → กู้กลับได้
         section:      profile.section ?? 'blow',
         width_cm:     profile.widthCm || null,

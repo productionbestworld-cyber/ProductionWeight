@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, Fragment } from 'react'
 import { supabase, fetchAll } from '../lib/supabase'
-import { Package, Plus, Truck, BarChart3, RefreshCw, Search, Printer, Download, X, CheckCircle2, ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
+import { Package, Plus, Truck, BarChart3, RefreshCw, Search, Printer, Download, X, ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 
 function fmt(n: number | null | undefined, d = 2) {
@@ -138,6 +138,167 @@ ${sortedGroups.map(([lot, items]) => {
   win.document.close()
 }
 
+// ── ใบกำกับน้ำหนัก (เลือกม้วนอิสระจากคลัง) ────────────────────────────────
+// พิมพ์อย่างเดียว — ไม่ตัดสต็อก ไม่แตะสถานะ shipped (เหมือน Export ใบกำกับน้ำหนักในแท็บจัดส่ง)
+// อ่านตัวเลขที่ผู้ใช้พิมพ์ — ต้องทนลูกน้ำคั่นหลัก เพราะทั้งหน้าโชว์เลขแบบ "12,000.0" (toLocaleString)
+// คนคลังจะพิมพ์ตามที่เห็น ถ้าใช้ parseFloat ตรง ๆ "12,000" จะกลายเป็น 12 → จัดของขาดไป 3 ตัวเลข
+function numOf(s: string): number {
+  const v = parseFloat(String(s ?? '').replace(/[,\s]/g, ''))
+  return isFinite(v) ? v : 0
+}
+// เลข SO ที่พิมพ์ที่เครื่องเป็น free text — กัน "SO-1234" / "so 1234" แตกเป็นคนละใบ
+function normSO(s: any): string {
+  return String(s ?? '').trim().replace(/\s+/g, ' ').toUpperCase()
+}
+function esc(s: any) {
+  return String(s ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c] as string))
+}
+// จัดกลุ่มม้วนตาม สินค้า + Lot (เรียงสินค้า → Lot → เลขม้วน)
+function groupForSlip(rolls: any[]) {
+  const map = new Map<string, { product: string; lot: string; wo: string; customer: string; rolls: any[] }>()
+  rolls.forEach(r => {
+    const k = `${r.product_name ?? '?'}__${r.lot_no ?? '?'}__${(r.work_order ?? '').trim()}`
+    if (!map.has(k)) map.set(k, { product: r.product_name ?? '—', lot: r.lot_no ?? '—',
+      wo: (r.work_order ?? '').trim(), customer: r.customer ?? '—', rolls: [] })
+    map.get(k)!.rolls.push(r)
+  })
+  const out = Array.from(map.values())
+  out.forEach(g => g.rolls.sort((a, b) => (a.roll_no ?? 0) - (b.roll_no ?? 0) || (a.created_at ?? '').localeCompare(b.created_at ?? '')))
+  return out.sort((a, b) => a.product.localeCompare(b.product) || a.lot.localeCompare(b.lot) || a.wo.localeCompare(b.wo))
+}
+
+function printWeightSlip(rolls: any[], staff: string, note: string) {
+  if (!rolls.length) return
+  const groups   = groupForSlip(rolls)
+  const totalNet = rolls.reduce((s, r) => s + (r.weight ?? 0), 0)
+  const totalCore= rolls.reduce((s, r) => s + (r.core_weight ?? 0), 0)
+  const custs    = Array.from(new Set(rolls.map(r => r.customer).filter(Boolean)))
+  const win = window.open('', '_blank', 'width=900,height=700')
+  if (!win) { alert('เบราว์เซอร์บล็อกป็อปอัพ — อนุญาต popup ของเว็บนี้ก่อนแล้วลองใหม่'); return }
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>ใบกำกับน้ำหนัก</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;background:#fff;padding:10mm}
+.head{text-align:center;border-bottom:2px solid #000;padding-bottom:3mm;margin-bottom:4mm}
+.head h1{font-size:13pt;font-weight:800}
+.head h2{font-size:18pt;font-weight:900;margin-top:2mm}
+.info{display:flex;justify-content:space-between;margin-bottom:4mm;font-size:10pt;gap:6mm}
+.info-row{margin-bottom:1mm}
+.info-row b{display:inline-block;min-width:26mm}
+.section-title{background:#003087;color:#fff;font-weight:700;padding:1.5mm 3mm;font-size:10pt}
+table{width:100%;border-collapse:collapse;margin-bottom:4mm}
+th,td{border:1px solid #aaa;padding:1.5mm 2.5mm;font-size:9.5pt}
+th{background:#f5f5f5;font-weight:700;text-align:left}
+.tot{background:#003087;color:#fff;font-weight:800}
+.sign{display:flex;justify-content:space-around;margin-top:15mm}
+.sign-box{flex:1;text-align:center}
+.sign-line{border-top:1px solid #000;margin-top:18mm;padding-top:1mm;font-size:9pt}
+tr{page-break-inside:avoid}
+@media print{@page{size:A4;margin:8mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style></head><body>
+<div class="head">
+  <h1>บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด</h1>
+  <h2>ใบกำกับน้ำหนัก</h2>
+  <p style="font-size:9pt;color:#555">WEIGHT LIST</p>
+</div>
+<div class="info">
+  <div>
+    <div class="info-row"><b>วันที่:</b> ${thaiDate()}</div>
+    <div class="info-row"><b>ลูกค้า:</b> ${esc(custs.join(', ') || '—')}</div>
+  </div>
+  <div>
+    <div class="info-row"><b>ผู้จัดของ:</b> ${esc(staff || '—')}</div>
+    <div class="info-row"><b>หมายเหตุ:</b> ${esc(note || '—')}</div>
+  </div>
+  <div>
+    <div class="info-row"><b>จำนวน:</b> ${rolls.length} ม้วน</div>
+    <div class="info-row"><b>น้ำหนักสุทธิรวม:</b> ${totalNet.toFixed(2)} Kgs.</div>
+  </div>
+</div>
+${groups.map(g => {
+  const subNet = g.rolls.reduce((s, r) => s + (r.weight ?? 0), 0)
+  const lp = labelPosOf(g.rolls)
+  return `
+  <div class="section-title">${esc(g.product)}　·　Lot: ${esc(g.lot)}${g.wo ? `　·　WO: ${esc(g.wo)}` : ''}${lp ? `　·　ป้าย: ${esc(lp.replace(/^[^ก-๙A-Za-z]+/, ''))}` : ''}</div>
+  <table>
+    <thead><tr>
+      <th style="width:6%">ลำดับ</th><th style="width:9%">ม้วนที่</th><th style="width:9%">เครื่อง</th>
+      <th style="width:14%">นน.เต็ม</th><th style="width:12%">นน.แกน</th><th style="width:16%">นน.สุทธิ (Kgs.)</th>
+      <th style="width:13%">ผู้ตรวจ</th><th>วันผลิต</th>
+    </tr></thead>
+    <tbody>
+      ${g.rolls.map((r, i) => `<tr>
+        <td style="text-align:center">${i + 1}</td>
+        <td style="text-align:center;font-weight:700">${r.roll_no ?? '—'}</td>
+        <td style="text-align:center">${esc(r.machine_no ?? '—')}</td>
+        <td style="text-align:right">${fmt((r.weight ?? 0) + (r.core_weight ?? 0))}</td>
+        <td style="text-align:right">${fmt(r.core_weight ?? 0)}</td>
+        <td style="text-align:right;font-weight:700">${fmt(r.weight ?? 0)}</td>
+        <td>${esc(r.inspector ?? '—')}</td>
+        <td>${r.created_at ? fmtDT(r.created_at) : '—'}</td>
+      </tr>`).join('')}
+      <tr class="tot">
+        <td colspan="5" style="text-align:right">รวม Lot ${esc(g.lot)}</td>
+        <td style="text-align:right">${subNet.toFixed(2)}</td>
+        <td colspan="2">${g.rolls.length} ม้วน</td>
+      </tr>
+    </tbody>
+  </table>`
+}).join('')}
+<table><tr class="tot" style="font-size:12.5pt">
+  <td colspan="4" style="text-align:right;padding:3mm">รวมทั้งสิ้น (แกน ${totalCore.toFixed(2)} Kgs.)</td>
+  <td style="text-align:right;padding:3mm">${totalNet.toFixed(2)} Kgs.</td>
+  <td style="text-align:center;padding:3mm;width:20%">${rolls.length} ม้วน</td>
+</tr></table>
+<div class="sign">
+  <div class="sign-box"><div class="sign-line"></div><div><b>${esc(staff || '...........................')}</b></div><div style="font-size:9pt;color:#555">ผู้จัดของ / ผู้ชั่ง</div></div>
+  <div class="sign-box"><div class="sign-line"></div><div>...........................</div><div style="font-size:9pt;color:#555">ผู้ตรวจสอบ</div></div>
+  <div class="sign-box"><div class="sign-line"></div><div>...........................</div><div style="font-size:9pt;color:#555">ผู้รับ</div></div>
+</div>
+<script>window.onload=()=>{setTimeout(()=>window.print(),400)}<\/script>
+</body></html>`)
+  win.document.close()
+}
+
+// Export ใบกำกับน้ำหนักเป็น Excel — คอลัมน์ชุดเดียวกับใบพิมพ์
+function exportWeightSlipExcel(rolls: any[], staff: string, note: string) {
+  if (!rolls.length) return
+  const groups   = groupForSlip(rolls)
+  const totalNet = rolls.reduce((s, r) => s + (r.weight ?? 0), 0)
+  const totalCore= rolls.reduce((s, r) => s + (r.core_weight ?? 0), 0)
+  const custs    = Array.from(new Set(rolls.map(r => r.customer).filter(Boolean)))
+  const aoa: any[][] = [
+    ['บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด'],
+    ['ใบกำกับน้ำหนัก'],
+    [],
+    ['วันที่ :', new Date().toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok' }), '', 'ผู้จัดของ :', staff || '', '', 'หมายเหตุ :', note || ''],
+    ['ลูกค้า :', custs.join(', '), '', 'จำนวน :', `${rolls.length} ม้วน`, '', 'นน.สุทธิรวม :', Number(totalNet.toFixed(2))],
+    [],
+  ]
+  groups.forEach(g => {
+    aoa.push([`${g.product} · Lot ${g.lot}${g.wo ? ` · WO ${g.wo}` : ''}`])
+    aoa.push(['ลำดับ','ม้วนที่','เครื่อง','นน.เต็ม (kg)','นน.แกน (kg)','นน.สุทธิ (kg)','ผู้ตรวจ','วันผลิต'])
+    g.rolls.forEach((r, i) => aoa.push([
+      i + 1, r.roll_no ?? '', r.machine_no ?? '',
+      Number(((r.weight ?? 0) + (r.core_weight ?? 0)).toFixed(2)),
+      Number((r.core_weight ?? 0).toFixed(2)),
+      Number((r.weight ?? 0).toFixed(2)),
+      r.inspector ?? '', r.created_at ? fmtDT(r.created_at) : '',
+    ]))
+    const subNet = g.rolls.reduce((s, r) => s + (r.weight ?? 0), 0)
+    aoa.push(['', `รวม ${g.rolls.length} ม้วน`, '', '', '', Number(subNet.toFixed(2)), '', ''])
+    aoa.push([])
+  })
+  aoa.push(['', 'รวมทั้งสิ้น', `${rolls.length} ม้วน`, '', Number(totalCore.toFixed(2)), Number(totalNet.toFixed(2)), '', ''])
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  ws['!cols'] = [{wch:7},{wch:9},{wch:9},{wch:14},{wch:14},{wch:16},{wch:13},{wch:18}]
+  ws['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:7} }, { s:{r:1,c:0}, e:{r:1,c:7} }]
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'ใบกำกับน้ำหนัก')
+  XLSX.writeFile(wb, `ใบกำกับน้ำหนัก_${new Date().toISOString().slice(0,10)}.xlsx`)
+}
+
 // ── Modal สร้าง SO ─────────────────────────────────────────────────────────
 function SOModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const [form, setForm] = useState({ so_no: '', customer: '', product_name: '', target_kg: '', note: '' })
@@ -198,7 +359,7 @@ const RETURN_TO_REWORK_TYPES = [
 ] as const
 
 // เลือกเฉพาะคอลัมน์ที่หน้านี้ใช้จริง (ลด Egress — เดิมดึง * ทุกคอลัมน์)
-const RCOLS = 'id,roll_no,roll_type,weight,gross_weight,core_weight,machine_no,lot_no,product_name,product_code,item_code,mat_code,customer,cust_code,cust_branch,inspector,created_at,transferred_at,transferred,shipped,shipped_at,shipped_by,ship_doc_no,so_id,sale_order,work_order,section,width_cm,thick_mc,width_unit,length,pcs,inbound_type,remark,rework_source_lot,rework_source_roll_id,review_status,label_position'
+const RCOLS = 'id,roll_no,roll_type,weight,gross_weight,core_weight,machine_no,lot_no,product_name,product_code,item_code,mat_code,customer,cust_code,cust_branch,inspector,created_at,transferred_at,transferred,shipped,shipped_at,shipped_by,ship_doc_no,so_id,sale_order,work_order,section,width_cm,thick_mc,width_unit,length,pcs,inbound_type,remark,rework_source_lot,rework_source_roll_id,review_status,label_position,new_system,rework_remark'
 const LABELPOS_TH: Record<string,string> = { head: '🔝 แปะหัว', side: '↔ แปะข้าง' }
 // สรุปตำแหน่งแปะป้ายของกลุ่มม้วน: ตรงกันหมด → ค่านั้น, ต่างกัน → "หลายแบบ", ไม่มี → ''
 function labelPosOf(rolls: any[]): string {
@@ -211,6 +372,21 @@ function labelPosOf(rolls: any[]): string {
 const stockQ = () => supabase.from('production_rolls').select(RCOLS)
   .eq('transferred', true).not('shipped', 'is', true)
   .order('created_at', { ascending: false }).order('id', { ascending: false })
+// เขียนสถานะจัดส่ง — เขียนเฉพาะม้วนที่ "ยังไม่ถูกส่ง" เท่านั้น
+//   กันเคสสองคนเปิดคลังพร้อมกัน หยิบม้วนเดียวกัน กดส่งทั้งคู่ → ม้วนเดียวไปโผล่สองใบ ยอดใบแรกผิดเงียบๆ
+//   .select('id') คืนเฉพาะแถวที่อัปเดตสำเร็จจริง → เอามานับเทียบได้ว่าโดนตัดหน้าไปกี่ม้วน
+//   เงื่อนไขต้องตรงกับนิยาม "ของที่อยู่ในคลัง" (stockQ + roll_type='good') ไม่ใช่แค่ยังไม่ถูกส่ง
+//   ไม่งั้นม้วนที่เพิ่งถูกแจ้ง NC ออกไป (roll_type='bad', transferred=false, shipped ยังเป็น false)
+//   ยังผ่านด่านนี้ได้ → ของเสียหลุดขึ้นใบส่งไปหาลูกค้า
+function shipRolls(ids: string[], at: string, by: string, docNo: string) {
+  return supabase.from('production_rolls')
+    .update({ shipped: true, shipped_at: at, shipped_by: by, ship_doc_no: docNo })
+    .in('id', ids)
+    .not('shipped', 'is', true)
+    .eq('transferred', true)
+    .eq('roll_type', 'good')
+    .select('id')
+}
 // เส้นแบ่ง "ใหม่/เก่า" = 7 วันล่าสุด (~4 พันม้วน ขึ้นหน้าได้ในไม่กี่วินาที)
 // ที่เหลืออีก 3 หมื่นกว่าม้วนตามมาเบื้องหลัง
 const RECENT_CUTOFF = new Date(Date.now() - 7 * 864e5).toISOString()
@@ -220,7 +396,6 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   const [rolls, setRolls] = useState<Roll[]>([])
   const [scrapRolls, setScrapRolls] = useState<any[]>([])
   const [ncRolls, setNcRolls] = useState<any[]>([])
-  const [sos, setSOs] = useState<SO[]>([])
   const [loading, setLoading] = useState(true)
   const [olderLoading, setOlderLoading] = useState(false)   // สต็อกเก่ากว่า 7 วันกำลังโหลด
   const [olderLoaded, setOlderLoaded]   = useState(false)
@@ -231,7 +406,6 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   const [histLoading, setHistLoading] = useState(false)
   const [histLoaded, setHistLoaded]   = useState(false)
   const [replaceGroup, setReplaceGroup] = useState<any | null>(null)  // ใบเบิกที่กำลังหาม้วนมาแทน
-  const [showSOModal, setShowSOModal] = useState(false)
 
   // stock filters
   // คลังเป็นข้อมูลร่วม — แสดง "ทั้งหมด" เป็นค่าเริ่มต้น (ไม่ filter ตาม dept)
@@ -244,9 +418,23 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   const [expandedLots, setExpandedLots] = useState<Set<string>>(new Set())
   const [stockCollapsedDays, setStockCollapsedDays] = useState<Set<string>>(new Set())   // วันโอนเข้าที่ยุบในสต็อก
 
+  // ── ใบกำกับน้ำหนัก (แท็บสต็อก) — ติ๊กม้วนอิสระข้ามสินค้า/ข้าม Lot แล้วพิมพ์ ──
+  //    พิมพ์อย่างเดียว ไม่ตัดสต็อก — ม้วนยังอยู่ในคลังจนกว่าจะไปกดจัดส่งจริง
+  //   เก็บ "ตัวม้วน" ไม่ใช่แค่ id — เพราะ loadAll/รีเฟรช จะยุบ rolls เหลือ 7 วันล่าสุด
+  //   ถ้าเก็บแค่ id แล้วไปหาใน stock ตอนพิมพ์ ม้วนเก่าที่ติ๊กไว้จะหายจากใบเงียบ ๆ ทั้งที่แถบยังนับให้
+  const [wsSel,   setWsSel]   = useState<Map<string, Roll>>(new Map())
+  const [wsStaff, setWsStaff] = useState('')
+  const [wsNote,  setWsNote]  = useState('')
+
   // shipment state
-  const [selectedSO, setSelectedSO] = useState<SO | null>(null)
+  const [selSoNo, setSelSoNo] = useState<string | null>(null)     // SO ที่เลือกในแท็บจัดส่ง (เลขจากม้วน ไม่ใช่ตาราง sales_orders)
   const [selectedRolls, setSelectedRolls] = useState<Set<string>>(new Set())
+  const [soTargetInput, setSoTargetInput] = useState('')          // เป้าจัดส่งรอบนี้ (เว้นว่าง = ยอดที่ยังค้างของ SO)
+  const [soOpenWO, setSoOpenWO] = useState<Set<string>>(new Set())
+  // เป้าจากแผน: WO → planned_qty (machine_profiles = งานบนเครื่องตอนนี้, job_summaries = งานที่ปิดแล้ว)
+  const [woTarget, setWoTarget] = useState<Map<string, number>>(new Map())
+  // SO → WO ที่ยังอยู่บนเครื่อง (ของยังไม่เข้าคลัง) เพื่อให้เป้าของ SO ครบทั้งใบ ไม่ใช่เฉพาะที่ผลิตเสร็จ
+  const [soPlanWOs, setSoPlanWOs] = useState<Map<string, Set<string>>>(new Map())
   const [returnModal, setReturnModal] = useState<any | null>(null)
   const [expandedRoll, setExpandedRoll] = useState<string | null>(null)
   const [shipStaff, setShipStaff] = useState('')
@@ -266,12 +454,13 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
     setLoading(true)
     setScrapLoaded(false)
     setOlderLoaded(false)
+    setHistLoaded(false)   // ต้องรีเซ็ตด้วย ไม่งั้นกดรีเฟรชแล้วประวัติ/ยอด "ส่งแล้ว" ของ SO ยังค้างของเก่า
+                           // (เห็นชัดเมื่อคนอื่นจัดส่งจากอีกเครื่อง — ใบของเขาจะไม่โผล่จนกว่าจะรีโหลดหน้า)
     // จังหวะ 1 — โหลดเฉพาะสต็อก 7 วันล่าสุด (~ไม่กี่พันม้วน) ให้หน้าขึ้นทันที
     //   สต็อกเก่ากว่านั้นสะสม 3-4 หมื่นม้วนและแทบไม่เปลี่ยน — ไม่ดึงอัตโนมัติแล้ว
     //   นับ "ยอดรวมทั้งหมด" ด้วย head count (ไม่ดึงแถว) เพื่อโชว์เลขจริงโดยไม่กินแบนด์วิดท์
-    const [rNew, { data: s }, nc, { count: totalN }] = await Promise.all([
+    const [rNew, nc, { count: totalN }] = await Promise.all([
       fetchAll(() => stockQ().gte('created_at', RECENT_CUTOFF)),
-      supabase.from('sales_orders').select('*').order('created_at', { ascending: false }),
       // ม้วนที่ถูกแจ้ง NC ออกจากคลัง และ "ยังรอ ผจก ตัดสิน" เท่านั้น
       fetchAll(() => supabase.from('production_rolls').select(RCOLS)
         .eq('roll_type', 'bad')
@@ -282,20 +471,56 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
         .eq('transferred', true).not('shipped', 'is', true).eq('roll_type', 'good'),
     ])
     setRolls((rNew ?? []) as Roll[])
-    setSOs((s ?? []) as SO[])
     setNcRolls(nc ?? [])
     setTotalStockN(totalN ?? null)
     setLoading(false)
 
-    // ม้วนที่ขายแล้วผูก SO — โหลดเฉพาะเมื่อมี SO จริง (ตอนนี้ยังไม่มีใครใช้ระบบขาย)
-    if ((s ?? []).length) {
-      const rShip = await fetchAll(() => supabase.from('production_rolls').select(RCOLS)
-        .eq('transferred', true).eq('shipped', true).not('so_id', 'is', null)
-        .order('created_at', { ascending: false }).order('id', { ascending: false }))
-      setRolls(prev => [...prev, ...(rShip ?? [])] as Roll[])
-    }
+    loadPlanTargets()               // เป้าจากแผน (ตารางเล็ก โหลดพื้นหลังได้)
+    if (wasFull) await loadOlderNow()  // คืนสภาพ "โหลดครบ" หลังรีเฟรช
+  }
 
-    if (wasFull) loadOlder()   // คืนสภาพ "โหลดครบ" หลังรีเฟรช
+  // ดึงสต็อกเก่าจริง ๆ (ไม่มี guard) — แยกออกมาเพราะ loadOlder() ที่ loadAll ปิดทับไว้
+  // ยังเห็น olderLoaded=true ของ render ก่อนรีเฟรช เลย return ทิ้งทันที ทำให้ "คืนสภาพโหลดครบ" ไม่เคยทำงาน
+  async function loadOlderNow() {
+    setOlderLoading(true)
+    const rOld = await fetchAll(() => stockQ().lt('created_at', RECENT_CUTOFF))
+    setRolls(prev => [...prev, ...(rOld ?? [])] as Roll[])
+    setOlderLoaded(true)
+    setOlderLoading(false)
+  }
+
+  // ── เป้าจากแผนการวางแผน — WO → planned_qty ────────────────────────────────
+  //   job_summaries มีแถวซ้ำต่อ WO (งานเดิมถูกปิดหลายรอบ) → ห้ามบวกทบ ใช้ค่าต่อ WO ค่าเดียว
+  //   งานที่ยังอยู่บนเครื่อง (machine_profiles) ถือว่าใหม่กว่า → ทับค่าจาก job_summaries
+  async function loadPlanTargets() {
+    const [{ data: mp }, js] = await Promise.all([
+      supabase.from('machine_profiles').select('machine_no, work_order, sale_order, planned_qty'),
+      // ต้อง .order() — fetchAll ยิงหลายหน้าพร้อมกันด้วย .range() ถ้าไม่เรียง Postgres ไม่รับประกันลำดับ
+      // ผลคือบางแถวมาซ้ำ บางแถวหายไปเลย → WO นั้นจะกลายเป็น "ไม่มีเป้าในแผน" แบบสุ่มทุกครั้งที่โหลด
+      fetchAll(() => supabase.from('job_summaries').select('work_order, planned_qty')
+        .order('work_order', { ascending: true }).order('closed_at', { ascending: true })),
+    ])
+    const m = new Map<string, number>()
+    const put = (wo: any, q: any, force = false) => {
+      const k = String(wo ?? '').trim()
+      const v = parseFloat(String(q ?? '')) || 0
+      if (!k || v <= 0) return
+      if (force || !m.has(k) || v > (m.get(k) ?? 0)) m.set(k, v)
+    }
+    ;(js ?? []).forEach((r: any) => put(r.work_order, r.planned_qty))
+    ;(mp ?? []).forEach((r: any) => put(r.work_order, r.planned_qty, true))
+    setWoTarget(m)
+
+    // WO ของแต่ละ SO ที่ยัง "อยู่บนเครื่อง" — ของยังไม่เข้าคลังจึงไม่มีม้วนให้จับกลุ่ม
+    // ถ้าไม่รวมตรงนี้ เป้าของ SO จะนับเฉพาะ WO ที่ผลิตเสร็จแล้ว → SO ขึ้น "ส่งครบ" ทั้งที่ยังผลิตไม่หมด
+    const s2w = new Map<string, Set<string>>()
+    ;(mp ?? []).forEach((r: any) => {
+      const so = normSO(r.sale_order), wo = String(r.work_order ?? '').trim()
+      if (!so || !wo) return
+      if (!s2w.has(so)) s2w.set(so, new Set())
+      s2w.get(so)!.add(wo)
+    })
+    setSoPlanWOs(s2w)
   }
   useEffect(() => { loadAll() }, [])
 
@@ -318,30 +543,29 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   // เศษ — โหลดตอนเปิดแท็บเศษเท่านั้น (3 พันกว่าแถว ไม่ต้องรอตั้งแต่เปิดหน้า)
   useEffect(() => {
     if (tab !== 'scrap' || scrapLoaded || scrapLoading) return
-    let alive = true
     setScrapLoading(true)
+    // ห้าม gate ผลลัพธ์ด้วยธง alive — ถ้าทิ้งผลเพราะสลับแท็บ scrapLoaded จะไม่ถูกตั้ง
+    // แต่ effect รอบใหม่ถูกกันด้วย scrapLoading ที่ยัง true อยู่ → กลับมาแท็บนี้แล้วค้าง "กำลังโหลด" ถาวร
+    // ข้อมูลชุดนี้ไม่ผูกกับแท็บ เก็บไว้เลยปลอดภัยกว่า
     fetchAll(() => supabase.from('production_rolls').select(RCOLS)
       .in('roll_type', ['scrap_clear','scrap_color','scrap_lump'])
       .order('created_at', { ascending: false }).order('id', { ascending: false }))
-      .then(sc => { if (!alive) return; setScrapRolls(sc ?? []); setScrapLoaded(true) })
-      // อย่า gate ด้วย alive — ไม่งั้นสลับแท็บระหว่างโหลดจะค้าง "กำลังโหลด" ถาวร (scrapLoading ค้าง true)
+      .then(sc => { setScrapRolls(sc ?? []); setScrapLoaded(true) })
       .finally(() => setScrapLoading(false))
-    return () => { alive = false }
-  }, [tab, scrapLoaded])
+  }, [tab, scrapLoaded, scrapLoading])
 
-  // ประวัติเบิก/จัดส่ง — โหลดตอนเปิดแท็บ (ม้วนที่ shipped แล้วทั้งหมด)
+  // ม้วนที่ส่งออกไปแล้ว — ใช้ทั้งแท็บประวัติ และคิดยอด "ส่งแล้ว" ของแต่ละ SO
   useEffect(() => {
-    if (tab !== 'history' || histLoaded || histLoading) return
-    let alive = true
+    if (!['history','so','ship'].includes(tab) || histLoaded || histLoading) return
     setHistLoading(true)
+    // เหตุผลเดียวกับแท็บเศษ — ห้ามทิ้งผลเมื่อสลับแท็บ ไม่งั้นค้าง "กำลังโหลด" ถาวร
+    // และแท็บ SO/จัดส่งจะเห็น "ส่งไปแล้ว 0" ทั้งที่จริงมีส่งไปแล้ว → เป้าที่เหลือผิด ส่งเกิน
     fetchAll(() => supabase.from('production_rolls').select(RCOLS)
       .eq('shipped', true)
       .order('shipped_at', { ascending: false }).order('id', { ascending: false }))
-      .then(h => { if (!alive) return; setHistRolls(h ?? []); setHistLoaded(true) })
-      // อย่า gate ด้วย alive — กันค้าง "กำลังโหลด" ถาวรเมื่อสลับแท็บระหว่างโหลด
+      .then(h => { setHistRolls(h ?? []); setHistLoaded(true) })
       .finally(() => setHistLoading(false))
-    return () => { alive = false }
-  }, [tab, histLoaded])
+  }, [tab, histLoaded, histLoading])
 
   // จัดกลุ่มประวัติเป็น "ใบเบิก" — ตามเลขใบ (ship_doc_no) ถ้าไม่มีก็ตาม shipped_at+ผู้เบิก
   const shipmentHistory = useMemo(() => {
@@ -363,7 +587,6 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   // กรอง roll_type='good' กันม้วนเศษ/กรอ (roll_no=0 หรือเลขซ้ำ) เล็ดลอดเข้าคลัง
   const goodRolls = useMemo(() => rolls.filter(r => ((r as any).roll_type ?? 'good') === 'good'), [rolls])
   const stock = useMemo(() => goodRolls.filter(r => !r.shipped), [goodRolls])
-  const shipped = useMemo(() => goodRolls.filter(r => r.shipped), [goodRolls])
 
   // filter stock
   // helper: สร้าง size label จาก width_cm × thick_mc (รองรับหน่วย mm)
@@ -433,6 +656,20 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
     return out
   }, [stockByLot])
 
+  // ── ม้วนที่ติ๊กไว้ทำใบกำกับน้ำหนัก (อิงสต็อกทั้งหมด ไม่ใช่เฉพาะที่กรองอยู่ — เปลี่ยนตัวกรองแล้วของที่เลือกไม่หาย) ──
+  const wsPicked   = useMemo(() => Array.from(wsSel.values()), [wsSel])
+  const wsPickedKg = useMemo(() => wsPicked.reduce((s, r) => s + (r.weight ?? 0), 0), [wsPicked])
+  function toggleWsRoll(r: Roll) {
+    setWsSel(p => { const n = new Map(p); n.has(r.id) ? n.delete(r.id) : n.set(r.id, r); return n })
+  }
+  function toggleWsGroup(rolls: Roll[]) {
+    setWsSel(p => {
+      const n = new Map(p)
+      rolls.every(r => n.has(r.id)) ? rolls.forEach(r => n.delete(r.id)) : rolls.forEach(r => n.set(r.id, r))
+      return n
+    })
+  }
+
   // ── เศษ (scrap) — เชื่อมจากงานผลิต/กรอ จัดกลุ่มตาม Lot/งาน ──
   const scrapByLot = useMemo(() => {
     const map = new Map<string, { lot: string; product: string; customer: string; machine: string; wo: string; so: string; rolls: any[] }>()
@@ -468,18 +705,70 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   const lots      = useMemo(() => Array.from(new Set(stock.map(r => r.lot_no).filter(Boolean))).sort(), [stock])
   const sizes     = useMemo(() => Array.from(new Set(stock.map(r => sizeLabel(r)).filter(Boolean))).sort(), [stock])
 
-  // available stock for shipment (ยังไม่ผูก SO อื่น หรือผูกกับ SO นี้อยู่แล้ว)
-  const availableForShip = useMemo(() =>
-    stock.filter(r => !r.so_id || r.so_id === selectedSO?.id)
-  , [stock, selectedSO])
+  // ── สรุปราย SO — อ่านเลข SO จากม้วนโดยตรง (ไม่ใช้ตาราง sales_orders ที่ต้องพิมพ์เอง) ──
+  //   1 SO กินได้หลาย WO และหลาย item (ข้อมูลจริงยืนยัน) → รวมทุกม้วนที่ sale_order ตรงกัน
+  //   เป้า = ผลรวม planned_qty ของ WO ที่อยู่ใน SO นั้น (นับ WO ไม่ซ้ำ)
+  type SOGroup = {
+    so: string; customer: string; customers: string[]; products: string[]; wos: string[]
+    stockRolls: Roll[]; stockKg: number; shipN: number; shipKg: number
+    targetKg: number; producedKg: number; pct: number; lastAt: string
+  }
+  const soGroups = useMemo<SOGroup[]>(() => {
+    const m = new Map<string, {
+      so: string; customers: Set<string>; products: Set<string>; wos: Set<string>
+      stockRolls: Roll[]; stockKg: number; shipN: number; shipKg: number; lastAt: string
+    }>()
+    const touch = (r: any) => {
+      const so = normSO(r.sale_order)
+      if (!so) return null
+      if (!m.has(so)) m.set(so, { so, customers: new Set(), products: new Set(), wos: new Set(),
+        stockRolls: [], stockKg: 0, shipN: 0, shipKg: 0, lastAt: '' })
+      const g = m.get(so)!
+      if (r.customer) g.customers.add(r.customer)
+      if (r.product_name) g.products.add(r.product_name)
+      const wo = String(r.work_order ?? '').trim()
+      if (wo) g.wos.add(wo)
+      const at = r.created_at ?? ''
+      if (at > g.lastAt) g.lastAt = at
+      return g
+    }
+    stock.forEach(r => { const g = touch(r); if (g) { g.stockRolls.push(r); g.stockKg += r.weight ?? 0 } })
+    histRolls.forEach(r => { const g = touch(r); if (g) { g.shipN++; g.shipKg += r.weight ?? 0 } })
 
-  // SO KPIs
-  const soStats = useMemo(() => sos.map(so => {
-    const soRolls = shipped.filter(r => r.so_id === so.id)
-    const shippedKg = soRolls.reduce((s, r) => s + (r.weight ?? 0), 0)
-    const pct = so.target_kg ? Math.min((shippedKg / so.target_kg) * 100, 100) : 0
-    return { ...so, shippedKg, shippedRolls: soRolls.length, pct }
-  }), [sos, shipped])
+    return Array.from(m.values()).map(g => {
+      // เป้า = ผลรวม planned_qty ของ WO ที่มีของอยู่ในคลัง/ส่งไปแล้ว + WO ของ SO นี้ที่ยังเดินอยู่บนเครื่อง
+      // (ถ้าไม่รวมของบนเครื่อง เป้าจะโตตามของที่ทยอยเข้าคลัง แล้ว SO จะขึ้น "ส่งครบ" ทั้งที่ยังผลิตไม่หมด)
+      const allWOs = new Set(g.wos)
+      ;(soPlanWOs.get(g.so) ?? new Set<string>()).forEach(wo => allWOs.add(wo))
+      const targetKg  = Array.from(allWOs).reduce((s, wo) => s + (woTarget.get(wo) ?? 0), 0)
+      const producedKg = g.stockKg + g.shipKg
+      const customers = Array.from(g.customers).sort()
+      return {
+        so: g.so, customer: customers[0] ?? '—', customers,
+        products: Array.from(g.products).sort(), wos: Array.from(allWOs).sort(),
+        stockRolls: g.stockRolls, stockKg: g.stockKg, shipN: g.shipN, shipKg: g.shipKg,
+        targetKg, producedKg, lastAt: g.lastAt,
+        pct: targetKg > 0 ? Math.min((g.shipKg / targetKg) * 100, 100) : 0,
+      }
+    }).sort((a, b) => b.lastAt.localeCompare(a.lastAt) || a.so.localeCompare(b.so))
+  }, [stock, histRolls, woTarget, soPlanWOs])
+
+  const selSO = useMemo(() => soGroups.find(g => g.so === selSoNo) ?? null, [soGroups, selSoNo])
+
+  // ม้วนของ SO ที่เลือก จัดกลุ่มตาม WO เรียง FIFO (WO เก่าก่อน)
+  const soWOs = useMemo(() => {
+    if (!selSO) return [] as { wo: string; rolls: Roll[]; kg: number; start: string; product: string }[]
+    const m = new Map<string, Roll[]>()
+    for (const r of selSO.stockRolls) {
+      const wo = String((r as any).work_order ?? '').trim() || '(ไม่ระบุ WO)'
+      ;(m.get(wo) ?? m.set(wo, []).get(wo)!).push(r)
+    }
+    return Array.from(m.entries()).map(([wo, rolls]) => {
+      const sorted = [...rolls].sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''))
+      return { wo, rolls: sorted, kg: sorted.reduce((s, r) => s + (r.weight ?? 0), 0),
+        start: sorted[0]?.created_at ?? '', product: sorted[0]?.product_name ?? '' }
+    }).sort((a, b) => a.start.localeCompare(b.start))
+  }, [selSO])
 
   function toggleLot(key: string) {
     setExpandedLots(p => { const n = new Set(p); n.has(key) ? n.delete(key) : n.add(key); return n })
@@ -487,43 +776,60 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   function toggleRoll(id: string) {
     setSelectedRolls(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
-  function toggleAllAvailable() {
-    const ids = availableForShip.map(r => r.id)
-    if (ids.every(id => selectedRolls.has(id))) setSelectedRolls(new Set())
-    else setSelectedRolls(new Set(ids))
+
+  const pickedRolls = useMemo(() => (selSO?.stockRolls ?? []).filter(r => selectedRolls.has(r.id)), [selSO, selectedRolls])
+  const pickedKg    = pickedRolls.reduce((s, r) => s + (r.weight ?? 0), 0)
+  // ยอดที่ SO นี้ยังค้างส่ง (เป้า − ที่ส่งไปแล้ว) — ใช้เป็นค่าตั้งต้นของช่องเป้ารอบนี้
+  const soRemainKg  = selSO ? Math.max(selSO.targetKg - selSO.shipKg, 0) : 0
+  const soTargetKg  = numOf(soTargetInput) || soRemainKg
+
+  // จัดอัตโนมัติ: หยิบม้วนเรียง FIFO (WO เก่าก่อน) จนถึง/เกินเป้าเล็กน้อย
+  function soAutoFill() {
+    // ถ้ายอด "ส่งไปแล้ว" ยังมาไม่ครบ soRemainKg จะเท่ากับเป้าทั้งใบ → จัดของซ้ำกับที่ส่งไปแล้ว
+    if (!histLoaded && !numOf(soTargetInput)) {
+      alert('ยังโหลดยอดที่ส่งไปแล้วไม่เสร็จ — รอสักครู่ หรือใส่เป้าจัดส่ง (kg) เองก่อน'); return
+    }
+    if (soTargetKg <= 0) { alert('SO นี้ไม่มีเป้าจากแผน — ใส่เป้าจัดส่ง (kg) เองก่อน'); return }
+    const flat = soWOs.flatMap(g => g.rolls)
+    const sel = new Set<string>(); let sum = 0
+    for (const r of flat) { if (sum >= soTargetKg) break; sel.add(r.id); sum += r.weight ?? 0 }
+    setSelectedRolls(sel)
+    setSoOpenWO(new Set(soWOs.filter(g => g.rolls.some(r => sel.has(r.id))).map(g => g.wo)))
   }
 
-  const pickedRolls = availableForShip.filter(r => selectedRolls.has(r.id))
-  const pickedKg   = pickedRolls.reduce((s, r) => s + (r.weight ?? 0), 0)
-
   async function handleShip() {
-    if (!selectedSO) { alert('เลือก SO ก่อน'); return }
+    if (!selSO) { alert('เลือก SO ก่อน'); return }
     if (!shipStaff.trim()) { alert('กรุณากรอกชื่อผู้จัดส่ง'); return }
-    if (selectedRolls.size === 0) { alert('เลือกม้วนที่จะส่งก่อน'); return }
-    if (!confirm(`ยืนยันจัดส่ง ${selectedRolls.size} ม้วน · ${fmt(pickedKg)} Kgs. ?\nSO: ${selectedSO.so_no}`)) return
+    // ยิงเฉพาะม้วนที่ "จะพิมพ์ลงใบจริง" (pickedRolls) ไม่ใช่ทุก id ที่ค้างใน selectedRolls
+    //   ระหว่างรีเฟรช rolls จะยุบเหลือ 7 วัน ทำให้ pickedRolls น้อยกว่า selectedRolls ชั่วคราว
+    //   ถ้ายิงตาม id ทั้งหมด ของจะถูกตัดสต็อกมากกว่าที่พิมพ์ในใบ → ม้วนออกจากคลังโดยไม่มีเอกสาร
+    if (pickedRolls.length === 0) { alert('เลือกม้วนที่จะส่งก่อน'); return }
+    if (!confirm(`ยืนยันจัดส่ง ${pickedRolls.length} ม้วน · ${fmt(pickedKg)} Kgs. ?\nSO: ${selSO.so}\nลูกค้า: ${selSO.customer}`)) return
 
     setShipping(true)
     try {
       const now   = new Date().toISOString()
       const docNo = `DN-${Date.now().toString().slice(-8)}`
-      const ids   = Array.from(selectedRolls)
+      const ids   = pickedRolls.map(r => r.id)
 
-      const { error } = await supabase.from('production_rolls').update({
-        so_id:       selectedSO.id,
-        shipped:     true,
-        shipped_at:  now,
-        shipped_by:  shipStaff,
-        ship_doc_no: docNo,
-      }).in('id', ids)
+      const { data: done, error } = await shipRolls(ids, now, shipStaff.trim(), docNo)
       if (error) throw error
+      const okIds = new Set((done ?? []).map((r: any) => r.id))
+      if (okIds.size === 0) {
+        alert('⚠ ม้วนที่เลือกถูกคนอื่นจัดส่งไปหมดแล้ว — ไม่ได้ออกใบ')
+        setSelectedRolls(new Set())   // ต้องล้าง ไม่งั้นแถบขวายังนับม้วนค้าง ปุ่มส่งยังกดได้ ยิงซ้ำได้ไม่จบ
+        await loadAll(); return
+      }
 
-      // update SO status
-      const allSoRolls = [...shipped.filter(r => r.so_id === selectedSO.id), ...pickedRolls]
-      const totalShipped = allSoRolls.reduce((s, r) => s + r.weight, 0)
-      const newStatus = selectedSO.target_kg && totalShipped >= selectedSO.target_kg ? 'shipped' : 'partial'
-      await supabase.from('sales_orders').update({ status: newStatus }).eq('id', selectedSO.id)
+      const sentRolls = pickedRolls.filter(r => okIds.has(r.id))
+      if (okIds.size < ids.length) {
+        alert(`⚠ มี ${ids.length - okIds.size} ม้วนถูกคนอื่นจัดส่งไปก่อนแล้ว\nใบนี้จะออกเฉพาะ ${okIds.size} ม้วนที่ส่งสำเร็จจริง`)
+      }
 
-      printDelivery(pickedRolls, selectedSO, shipStaff, docNo)
+      const soDoc = { id: '', so_no: selSO.so, customer: selSO.customer,
+        product_name: selSO.products.join(', '), target_kg: selSO.targetKg,
+        status: '', created_at: now, note: '' } as SO
+      printDelivery(sentRolls, soDoc, shipStaff.trim(), docNo)
       setSelectedRolls(new Set())
       await loadAll()
     } catch (e: any) {
@@ -580,12 +886,6 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
     XLSX.writeFile(wb, `stock_${lot}_${dateStr}.xlsx`)
   }
 
-  const statusBadge = (s: string) => {
-    if (s === 'shipped')  return 'bg-green-500/20 text-green-300'
-    if (s === 'partial')  return 'bg-amber-500/20 text-amber-300'
-    return 'bg-slate-700 text-slate-300'
-  }
-  const statusLabel = (s: string) => s === 'shipped' ? 'ส่งครบ' : s === 'partial' ? 'ส่งบางส่วน' : 'รอส่ง'
 
   // ── จัดส่งตาม Item ─────────────────────────────────────────────────────────
   // สต็อกพร้อมจัด = ม้วนดีในคลังที่ยังไม่ส่ง + ยังไม่ผูก SO อื่น
@@ -632,7 +932,7 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
   }
   // จัดอัตโนมัติ: หยิบม้วนเรียง FIFO (WO เก่าก่อน) จนถึง/เกินเป้าเล็กน้อย
   function delAutoFill() {
-    const target = parseFloat(delTarget) || 0
+    const target = numOf(delTarget)   // ทนลูกน้ำ — "12,000" ต้องได้ 12000 ไม่ใช่ 12
     if (target <= 0) { alert('ใส่เป้าจัดส่ง (kg) ก่อน'); return }
     const flat = delItemWOs.flatMap(g => g.rolls) // เรียง WO เก่า→ใหม่ แล้วในแต่ละ WO เก่า→ใหม่
     const sel = new Set<string>(); let sum = 0
@@ -679,19 +979,28 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
 
   async function handleShipDelivery() {
     if (!delStaff.trim()) { alert('กรุณากรอกชื่อผู้จัดส่ง'); return }
-    if (delSel.size === 0) { alert('เลือกม้วนที่จะส่งก่อน'); return }
-    if (!confirm(`ยืนยันจัดส่ง ${delSel.size} ม้วน · ${fmt(delPickedKg)} Kgs. ?\nสินค้า: ${selItemGroup?.product_name ?? ''}`)) return
+    // เหตุผลเดียวกับ handleShip — ยิงเฉพาะม้วนที่จะพิมพ์ลงใบจริง
+    if (delPicked.length === 0) { alert('เลือกม้วนที่จะส่งก่อน'); return }
+    if (!confirm(`ยืนยันจัดส่ง ${delPicked.length} ม้วน · ${fmt(delPickedKg)} Kgs. ?\nสินค้า: ${selItemGroup?.product_name ?? ''}`)) return
     setDelShipping(true)
     try {
       const now = new Date().toISOString()
       const docNo = `DN-${Date.now().toString().slice(-8)}`
-      const { error } = await supabase.from('production_rolls').update({
-        shipped: true, shipped_at: now, shipped_by: delStaff.trim(), ship_doc_no: docNo,
-      }).in('id', Array.from(delSel))
+      const ids = delPicked.map(r => r.id)
+      const { data: done, error } = await shipRolls(ids, now, delStaff.trim(), docNo)
       if (error) throw error
+      const okIds = new Set((done ?? []).map((r: any) => r.id))
+      if (okIds.size === 0) {
+        alert('⚠ ม้วนที่เลือกถูกคนอื่นจัดส่งไปหมดแล้ว — ไม่ได้ออกใบ')
+        setDelSel(new Set())
+        await loadAll(); return
+      }
+      if (okIds.size < ids.length) {
+        alert(`⚠ มี ${ids.length - okIds.size} ม้วนถูกคนอื่นจัดส่งไปก่อนแล้ว\nใบนี้จะออกเฉพาะ ${okIds.size} ม้วนที่ส่งสำเร็จจริง`)
+      }
       const so = { id: '', so_no: `ดีล ${delTarget || fmt(delPickedKg, 0)} kg`, customer: selItemGroup?.customer ?? '',
-        product_name: selItemGroup?.product_name ?? '', target_kg: parseFloat(delTarget) || 0, status: '', created_at: now, note: '' } as SO
-      printDelivery(delPicked, so, delStaff.trim(), docNo)
+        product_name: selItemGroup?.product_name ?? '', target_kg: numOf(delTarget), status: '', created_at: now, note: '' } as SO
+      printDelivery(delPicked.filter(r => okIds.has(r.id)), so, delStaff.trim(), docNo)
       setDelSel(new Set())
       await loadAll()
     } catch (e: any) { alert('จัดส่งไม่สำเร็จ: ' + (e?.message ?? e)) }
@@ -727,7 +1036,7 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
           {([
             { key:'stock', label:'สต็อกคงเหลือ', icon: BarChart3 },
             { key:'delivery', label:'จัดส่งตาม Item', icon: Truck },
-            { key:'so',    label:`Sales Orders (${sos.length})`, icon: Package },
+            { key:'so',    label: olderLoaded ? `Sales Orders (${soGroups.length})` : 'Sales Orders', icon: Package },
             { key:'ship',  label:'จัดส่ง (ตาม SO)', icon: Truck },
             { key:'scrap', label: scrapLoaded ? `เศษ (${scrapRolls.length})` : 'เศษ', icon: Trash2 },
             { key:'history', label:'ประวัติเบิก/จัดส่ง', icon: BarChart3 },
@@ -857,6 +1166,15 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                   )}
                   {/* group header */}
                   <div className="flex items-center justify-between px-5 py-3.5">
+                    {/* ติ๊กทั้งกลุ่ม → ใบกำกับน้ำหนัก */}
+                    <div onClick={() => toggleWsGroup(group.rolls)}
+                      title="เลือกทั้งกลุ่มเข้าใบกำกับน้ำหนัก"
+                      className={`w-5 h-5 mr-3 rounded border-2 flex items-center justify-center flex-shrink-0 cursor-pointer transition-all ${
+                        group.rolls.length > 0 && group.rolls.every(r => wsSel.has(r.id))
+                          ? 'bg-brand-500 border-brand-500'
+                          : group.rolls.some(r => wsSel.has(r.id)) ? 'bg-brand-500/30 border-brand-500' : 'border-slate-600 hover:border-slate-400'}`}>
+                      {group.rolls.some(r => wsSel.has(r.id)) && <span className="text-white text-[10px] font-black">{group.rolls.every(r => wsSel.has(r.id)) ? '✓' : '–'}</span>}
+                    </div>
                     <button onClick={() => toggleLot(key)} className="flex items-center gap-3 flex-1 text-left hover:opacity-80 transition-opacity">
                       {isOpen ? <ChevronDown size={16} className="text-slate-400"/> : <ChevronRight size={16} className="text-slate-400"/>}
                       <div>
@@ -895,6 +1213,7 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="bg-slate-800/30 text-[10px] text-slate-500 uppercase">
+                            <th className="px-3 py-2 w-9"></th>
                             {['ลำดับ','ม้วนที่','เครื่อง','นน.เต็ม','นน.สุทธิ (Kgs.)','ผู้ตรวจ','วันผลิต','รับโอนเมื่อ'].map(h=>(
                               <th key={h} className="px-4 py-2 text-left font-semibold tracking-wider">{h}</th>
                             ))}
@@ -914,6 +1233,7 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                             // ── ม้วนที่แจ้ง NC ออกไปแล้ว — แทรกในตาราง ขีดคร่อม ──
                             if (nc) return (
                               <tr key={`nc_${r.id}`} className="bg-rose-500/5 text-rose-300/70 line-through">
+                                <td className="px-3 py-2.5"></td>
                                 <td className="px-4 py-2.5 text-xs">{idx + 1}</td>
                                 <td className="px-4 py-2.5 font-mono font-bold">#{r.roll_no} <span className="no-underline inline-block ml-1 text-[9px] bg-rose-500/20 text-rose-300 px-1.5 py-0.5 rounded">⚠ NC</span></td>
                                 <td className="px-4 py-2.5"><span className="text-[10px] bg-rose-500/15 text-rose-300 font-bold px-1.5 py-0.5 rounded no-underline">{r.machine_no||'—'}</span></td>
@@ -930,7 +1250,14 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                             return (
                             <Fragment key={r.id}>
                             <tr onClick={() => setExpandedRoll(isOpen ? null : r.id)}
-                              className={`cursor-pointer ${rr.new_system ? 'bg-emerald-500/10 border-l-4 border-emerald-400' : ''} ${isOpen ? 'bg-slate-800/40' : 'hover:bg-slate-800/30'}`}>
+                              className={`cursor-pointer ${rr.new_system ? 'bg-emerald-500/10 border-l-4 border-emerald-400' : ''} ${wsSel.has(r.id) ? 'bg-brand-500/12' : isOpen ? 'bg-slate-800/40' : 'hover:bg-slate-800/30'}`}>
+                              {/* ติ๊กม้วนเข้าใบกำกับน้ำหนัก — กดตรงนี้ไม่กางรายละเอียด */}
+                              <td className="px-3 py-2.5" onClick={e => { e.stopPropagation(); toggleWsRoll(r) }}>
+                                <div className={`w-4 h-4 rounded border-2 flex items-center justify-center cursor-pointer transition-all ${
+                                  wsSel.has(r.id) ? 'bg-brand-500 border-brand-500' : 'border-slate-600 hover:border-slate-400'}`}>
+                                  {wsSel.has(r.id) && <span className="text-white text-[9px] font-black">✓</span>}
+                                </div>
+                              </td>
                               <td className="px-4 py-2.5 text-slate-500 text-xs">{idx + 1}</td>
                               <td className={`px-4 py-2.5 font-mono font-bold ${rr.new_system ? 'text-emerald-200' : 'text-white'}`}>{isOpen ? '▲' : '▼'} #{r.roll_no}
                                 {rr.new_system && <span className="ml-1.5 text-[9px] bg-emerald-500/25 text-emerald-200 px-1.5 py-0.5 rounded font-black">✨ ใหม่</span>}
@@ -946,7 +1273,7 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                             </tr>
                             {isOpen && (
                             <tr className="bg-slate-800/20">
-                              <td colSpan={8} className="px-4 pb-4 pt-1">
+                              <td colSpan={9} className="px-4 pb-4 pt-1">
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 text-xs mb-3">
                                   <div><span className="text-slate-500">สินค้า</span><p className="text-white font-semibold">{rr.product_name||'—'}</p></div>
                                   <div><span className="text-slate-500">รหัสสินค้า</span><p className="text-white font-semibold">{rr.product_code||'—'}</p></div>
@@ -975,7 +1302,7 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                         </tbody>
                         <tfoot>
                           <tr className="border-t border-slate-700 bg-slate-800/30">
-                            <td colSpan={3} className="px-4 py-2 text-slate-400 text-xs font-semibold">รวม {group.rolls.length} ม้วน</td>
+                            <td colSpan={5} className="px-4 py-2 text-slate-400 text-xs font-semibold">รวม {group.rolls.length} ม้วน</td>
                             <td className="px-4 py-2 text-green-300 font-black">{fmt(totalKg)}</td>
                             <td colSpan={3}></td>
                           </tr>
@@ -990,6 +1317,39 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
               )
             })}
           </div>
+
+          {/* ── แถบลอยล่าง: ม้วนที่ติ๊กไว้ → ออกใบกำกับน้ำหนัก (ไม่ตัดสต็อก) ── */}
+          {wsSel.size > 0 && (<>
+            <div className="h-24"/>{/* กันแถบลอยบังรายการล่างสุด */}
+            <div className="fixed bottom-0 left-0 right-0 z-30 bg-slate-900/95 backdrop-blur border-t-2 border-brand-500 shadow-2xl">
+              <div className="max-w-7xl mx-auto px-5 py-3 flex items-center gap-3 flex-wrap">
+                <div className="flex-shrink-0">
+                  <p className="text-[10px] text-slate-500">เลือกไว้ทำใบกำกับน้ำหนัก</p>
+                  <p className="text-white font-bold text-sm">
+                    <span className="text-brand-300 font-black text-lg">{wsSel.size}</span> ม้วน ·
+                    <span className="text-brand-300 font-black text-lg"> {fmt(wsPickedKg,1)}</span> <span className="text-slate-400 text-xs">Kgs.</span>
+                  </p>
+                </div>
+                <input value={wsStaff} onChange={e => setWsStaff(e.target.value)} placeholder="ชื่อผู้จัดของ"
+                  className="w-40 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-brand-500"/>
+                <input value={wsNote} onChange={e => setWsNote(e.target.value)} placeholder="หมายเหตุ (ถ้ามี)"
+                  className="w-44 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-brand-500"/>
+                <span className="text-[11px] text-amber-300/80">💡 พิมพ์อย่างเดียว — ม้วนยังอยู่ในคลัง ไม่ถูกตัดสต็อก</span>
+                <div className="ml-auto flex items-center gap-2">
+                  <button onClick={() => setWsSel(new Map())}
+                    className="text-slate-400 hover:text-white text-sm px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700">ล้าง</button>
+                  <button onClick={() => exportWeightSlipExcel(wsPicked, wsStaff.trim(), wsNote.trim())}
+                    className="flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-600 text-white text-sm px-4 py-2 rounded-xl font-bold">
+                    <Download size={14}/> Excel
+                  </button>
+                  <button onClick={() => printWeightSlip(wsPicked, wsStaff.trim(), wsNote.trim())}
+                    className="flex items-center gap-1.5 bg-brand-600 hover:bg-brand-500 text-white text-sm px-5 py-2.5 rounded-xl font-bold">
+                    <Printer size={15}/> ออกใบกำกับน้ำหนัก (A4)
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>)}
         </>)}
 
         {/* ══════════ TAB: จัดส่งตาม ITEM ═══════════════════════════════════ */}
@@ -1132,247 +1492,258 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
 
         {/* ══════════ TAB: SO ═════════════════════════════════════════════ */}
         {tab === 'so' && (<>
-          <div className="flex justify-end">
-            <button onClick={() => setShowSOModal(true)}
-              className="flex items-center gap-2 bg-brand-600 hover:bg-brand-500 text-white text-sm px-4 py-2 rounded-xl font-bold transition-colors">
-              <Plus size={15}/> สร้าง SO ใหม่
-            </button>
+          <div className="bg-slate-800/40 border border-slate-700 rounded-xl px-4 py-2.5 text-[11px] text-slate-400">
+            💡 SO อ่านจากเลขที่ติดมากับม้วนตอนตั้งงานที่เครื่อง — ไม่ต้องพิมพ์เพิ่ม ·
+            <b className="text-slate-300"> เป้า</b> ดึงจากแผน (planned_qty ของ WO ในสังกัด SO นั้น) ·
+            SO ที่ยังไม่มีเป้าในแผนจะขึ้น <b className="text-slate-300">"ไม่มีเป้าในแผน"</b>
           </div>
 
-          {showSOModal && <SOModal onClose={() => setShowSOModal(false)} onSaved={() => { setShowSOModal(false); loadAll() }}/>}
-
           <div className="space-y-3">
-            {soStats.length === 0
-              ? <div className="bg-slate-900 border border-slate-800 rounded-2xl py-16 text-center text-slate-500">ยังไม่มี SO</div>
-              : soStats.map(so => (
-              <div key={so.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <p className="text-brand-300 font-mono font-bold text-lg">{so.so_no}</p>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${statusBadge(so.status)}`}>{statusLabel(so.status)}</span>
+            {(!olderLoaded || !histLoaded)
+              ? <div className="text-slate-500 text-sm py-8 text-center">
+                  {!olderLoaded ? 'กำลังโหลดสต็อกทั้งหมด…' : 'กำลังโหลดยอดที่ส่งไปแล้ว…'}
+                  <p className="text-[11px] text-slate-600 mt-1">รอให้ครบก่อน ไม่งั้นยอด "ส่งไปแล้ว" กับ "ยังต้องส่งอีก" จะเพี้ยน</p>
+                </div>
+              : soGroups.length === 0
+              ? <div className="bg-slate-900 border border-slate-800 rounded-2xl py-16 text-center text-slate-500">ไม่มี SO ที่มีของอยู่ในคลัง</div>
+              : soGroups.map(g => {
+              const remain = Math.max(g.targetKg - g.shipKg, 0)
+              const done   = g.targetKg > 0 && g.shipKg >= g.targetKg
+              return (
+              <div key={g.so} className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                <div className="flex items-start justify-between mb-3 gap-4 flex-wrap">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                      <p className="text-brand-300 font-mono font-bold text-lg">{g.so}</p>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                        done ? 'bg-green-500/20 text-green-300' : g.shipKg > 0 ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-700 text-slate-300'}`}>
+                        {done ? 'ส่งครบ' : g.shipKg > 0 ? 'ส่งบางส่วน' : 'ยังไม่ส่ง'}
+                      </span>
+                      <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full">{g.wos.length} WO</span>
                     </div>
-                    <p className="text-white font-semibold">{so.customer}</p>
-                    <p className="text-slate-400 text-sm">{so.product_name || '—'}</p>
-                    {so.note && <p className="text-slate-500 text-xs mt-0.5">{so.note}</p>}
+                    <p className="text-white font-semibold">
+                      {g.customer}
+                      {g.customers.length > 1 && (
+                        <span className="ml-2 text-[10px] font-bold bg-rose-500/20 text-rose-300 px-2 py-0.5 rounded"
+                          title={`SO เลขนี้มีม้วนของหลายลูกค้าปนกัน: ${g.customers.join(' / ')}`}>
+                          ⚠ {g.customers.length} ลูกค้าปนกัน — เช็คเลข SO ที่หน้าเครื่อง
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-slate-400 text-sm">{g.products.join(' · ') || '—'}</p>
+                    <p className="text-slate-600 text-[10px] mt-1 font-mono">WO: {g.wos.join(', ') || '—'}</p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-slate-400 text-xs">{new Date(so.created_at).toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok' })}</p>
-                    <p className="text-white font-black text-xl mt-1">{fmt(so.shippedKg,1)} <span className="text-xs font-normal text-slate-400">Kgs. ส่งแล้ว</span></p>
-                    {so.target_kg > 0 && <p className="text-slate-500 text-xs">เป้า {fmt(so.target_kg,1)} Kgs. · {so.shippedRolls} ม้วน</p>}
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-slate-500 text-[10px]">เป้าจากแผน</p>
+                    <p className="text-white font-black text-xl">
+                      {g.targetKg > 0 ? <>{fmt(g.targetKg,1)} <span className="text-xs font-normal text-slate-400">Kgs.</span></>
+                        : <span className="text-amber-400 text-sm font-bold">ไม่มีเป้าในแผน</span>}
+                    </p>
                   </div>
                 </div>
-                {so.target_kg > 0 && (
-                  <div>
+
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                  <div className="bg-brand-500/10 border border-brand-500/20 rounded-xl px-4 py-2">
+                    <p className="text-slate-500 text-[10px]">คงเหลือในคลัง</p>
+                    <p className="text-brand-300 font-black text-lg">{fmt(g.stockKg,1)} <span className="text-xs font-normal text-slate-400">Kgs.</span></p>
+                    <p className="text-slate-500 text-[10px]">{g.stockRolls.length} ม้วน</p>
+                  </div>
+                  <div className="bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-2">
+                    <p className="text-slate-500 text-[10px]">ส่งไปแล้ว</p>
+                    <p className="text-green-300 font-black text-lg">{fmt(g.shipKg,1)} <span className="text-xs font-normal text-slate-400">Kgs.</span></p>
+                    <p className="text-slate-500 text-[10px]">{g.shipN} ม้วน</p>
+                  </div>
+                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-2">
+                    <p className="text-slate-500 text-[10px]">{g.targetKg > 0 ? 'ยังต้องส่งอีก' : 'ผลิตเข้าคลังแล้ว'}</p>
+                    <p className="text-amber-300 font-black text-lg">
+                      {fmt(g.targetKg > 0 ? remain : g.producedKg,1)} <span className="text-xs font-normal text-slate-400">Kgs.</span>
+                    </p>
+                    {g.targetKg > 0 && remain > g.stockKg &&
+                      <p className="text-rose-400 text-[10px]">⚠ ของในคลังไม่พอ ขาด {fmt(remain - g.stockKg,1)}</p>}
+                  </div>
+                </div>
+
+                {g.targetKg > 0 && (
+                  <div className="mb-3">
                     <div className="flex justify-between text-[10px] text-slate-500 mb-1">
-                      <span>ความคืบหน้า</span>
-                      <span>{so.pct.toFixed(1)}%</span>
+                      <span>ส่งแล้วเทียบเป้า</span>
+                      <span>{g.pct.toFixed(1)}%</span>
                     </div>
                     <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full transition-all ${so.pct >= 100 ? 'bg-green-500' : so.pct >= 50 ? 'bg-amber-500' : 'bg-brand-500'}`}
-                        style={{ width: `${so.pct}%` }}/>
+                      <div className={`h-full rounded-full transition-all ${g.pct >= 100 ? 'bg-green-500' : g.pct >= 50 ? 'bg-amber-500' : 'bg-brand-500'}`}
+                        style={{ width: `${g.pct}%` }}/>
                     </div>
                   </div>
                 )}
+
+                <button onClick={() => { setSelSoNo(g.so); setSelectedRolls(new Set()); setSoTargetInput(''); setSoOpenWO(new Set()); setTab('ship') }}
+                  disabled={g.stockRolls.length === 0}
+                  className="flex items-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm px-4 py-2 rounded-xl font-bold">
+                  <Truck size={15}/> จัดของ SO นี้
+                </button>
               </div>
-            ))}
+            )})}
           </div>
         </>)}
 
-        {/* ══════════ TAB: SHIP ═══════════════════════════════════════════ */}
+        {/* ══════════ TAB: SHIP (จัดส่งตาม SO) ═══════════════════════════ */}
         {tab === 'ship' && (
           <div className="flex gap-4 items-start">
 
-            {/* LEFT — SO selector + staff */}
-            <div className="w-72 flex-shrink-0 space-y-3">
-
-              {/* ชื่อผู้จัดส่ง */}
-              <div className={`rounded-2xl border p-4 ${shipStaff.trim() ? 'border-green-500/40 bg-green-500/5' : 'border-amber-500/40 bg-amber-500/5'}`}>
-                <p className="text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-2">
-                  <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center font-black ${shipStaff.trim() ? 'bg-green-500' : 'bg-amber-500'} text-white`}>1</span>
-                  <span className={shipStaff.trim() ? 'text-green-400' : 'text-amber-400'}>ชื่อผู้จัดส่ง</span>
-                </p>
-                <input value={shipStaff} onChange={e => setShipStaff(e.target.value)}
-                  placeholder="กรอกชื่อก่อนจัดส่ง..."
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-brand-500"/>
-                {shipStaff.trim() && <p className="text-green-400 text-xs mt-1.5 flex items-center gap-1"><CheckCircle2 size={11}/> พร้อมจัดส่ง</p>}
+            {/* ── ซ้าย: รายการ SO ที่มีของอยู่ในคลัง ── */}
+            <div className="w-72 flex-shrink-0 bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-800">
+                <p className="text-white font-semibold text-sm">📋 เลือก SO ที่จะจัดส่ง</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">เรียงงานใหม่สุดขึ้นก่อน</p>
               </div>
-
-              {/* เลือก SO */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full text-[10px] flex items-center justify-center font-black bg-brand-600 text-white">2</span>
-                  เลือก SO ที่จะส่ง
-                </p>
-                <div className="space-y-1.5 max-h-[50vh] overflow-y-auto">
-                  {sos.filter(s => s.status !== 'shipped').length === 0
-                    ? <p className="text-slate-600 text-sm">ไม่มี SO ที่รอส่ง</p>
-                    : sos.filter(s => s.status !== 'shipped').map(so => {
-                      const isSel = selectedSO?.id === so.id
-                      const stat = soStats.find(s => s.id === so.id)
-                      return (
-                        <button key={so.id} onClick={() => { setSelectedSO(so); setSelectedRolls(new Set()) }}
-                          className={`w-full text-left p-3 rounded-xl border transition-all ${isSel ? 'border-brand-500 bg-brand-500/15' : 'border-slate-700 hover:border-slate-500 hover:bg-slate-800/50'}`}>
-                          <div className="flex items-center justify-between mb-0.5">
-                            <span className="text-brand-300 font-mono font-bold text-xs">{so.so_no}</span>
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${statusBadge(so.status)}`}>{statusLabel(so.status)}</span>
-                          </div>
-                          <p className="text-white text-xs font-semibold truncate">{so.customer}</p>
-                          <p className="text-slate-500 text-[10px] truncate">{so.product_name || '—'}</p>
-                          {so.target_kg > 0 && stat && (
-                            <div className="mt-1.5 h-1 bg-slate-700 rounded-full overflow-hidden">
-                              <div className="h-full bg-brand-500 rounded-full" style={{ width: `${stat.pct}%` }}/>
-                            </div>
-                          )}
-                          {so.target_kg > 0 && stat && (
-                            <p className="text-slate-500 text-[10px] mt-0.5">ส่งแล้ว {fmt(stat.shippedKg,1)} / {fmt(so.target_kg,1)} Kgs.</p>
-                          )}
-                        </button>
-                      )
-                    })
-                  }
-                </div>
+              <div className="max-h-[72vh] overflow-y-auto divide-y divide-slate-800/50">
+                {(!olderLoaded || !histLoaded) ? <p className="text-slate-600 text-sm py-10 text-center">{!olderLoaded ? 'กำลังโหลดสต็อก…' : 'กำลังโหลดยอดที่ส่งไปแล้ว…'}</p>
+                : soGroups.length === 0 ? <p className="text-slate-600 text-sm py-10 text-center">ไม่มี SO ที่มีของในคลัง</p>
+                : soGroups.map(g => {
+                  const isSel = selSoNo === g.so
+                  const remain = Math.max(g.targetKg - g.shipKg, 0)
+                  return (
+                    <button key={g.so} onClick={() => { setSelSoNo(g.so); setSelectedRolls(new Set()); setSoTargetInput(''); setSoOpenWO(new Set()) }}
+                      className={`w-full text-left px-4 py-3 transition-colors ${isSel ? 'bg-brand-600/20 border-l-4 border-brand-500' : 'hover:bg-slate-800/50 border-l-4 border-transparent'}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-brand-300 font-mono font-bold text-xs">{g.so}</span>
+                        <span className="text-[9px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded">{g.wos.length} WO</span>
+                      </div>
+                      <p className="text-white text-xs font-semibold truncate mt-0.5">{g.customer}</p>
+                      <p className="text-slate-500 text-[10px] truncate">{g.products.join(' · ') || '—'}</p>
+                      <p className="text-[11px] mt-1">
+                        <span className="text-brand-300 font-black">{fmt(g.stockKg,1)}</span>
+                        <span className="text-slate-500"> kg ในคลัง · {g.stockRolls.length} ม้วน</span>
+                      </p>
+                      {g.targetKg > 0
+                        ? <p className="text-[10px] text-amber-400">ยังต้องส่งอีก {fmt(remain,1)} / {fmt(g.targetKg,1)} kg</p>
+                        : <p className="text-[10px] text-slate-600">ไม่มีเป้าในแผน</p>}
+                    </button>
+                  )
+                })}
               </div>
             </div>
 
-            {/* RIGHT — เลือกม้วน */}
-            <div className="flex-1 space-y-3">
-
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full text-[10px] flex items-center justify-center font-black bg-brand-600 text-white">3</span>
-                  เลือกม้วนที่จะส่ง
-                  {selectedSO && <span className="text-brand-300 normal-case font-normal">— {selectedSO.so_no}</span>}
-                </p>
-              </div>
-
-              {!selectedSO ? (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl py-20 text-center text-slate-500">
-                  เลือก SO ทางซ้ายก่อน
-                </div>
+            {/* ── กลาง: WO + ม้วนของ SO ที่เลือก ── */}
+            <div className="flex-1 min-w-0 space-y-3">
+              {!selSO ? (
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl py-20 text-center text-slate-500">เลือก SO ทางซ้ายก่อน</div>
               ) : (<>
-
-                {/* KPI strip */}
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="bg-slate-800/40 border border-slate-700 rounded-xl px-4 py-2.5">
-                    <p className="text-slate-500 text-[10px]">สต็อกพร้อมส่ง</p>
-                    <p className="text-white font-black text-lg">{availableForShip.length} <span className="text-xs font-normal text-slate-400">ม้วน</span></p>
-                    <p className="text-slate-400 text-[10px]">{fmt(availableForShip.reduce((s,r)=>s+(r.weight??0),0),1)} Kgs.</p>
+                {/* สรุป SO + เป้ารอบนี้ */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                  <div className="flex items-center gap-2 flex-wrap mb-3">
+                    <span className="text-brand-300 font-mono font-bold text-base">{selSO.so}</span>
+                    <span className="text-white text-sm">{selSO.customer}</span>
+                    <span className="text-slate-500 text-xs">· {selSO.products.join(' · ')}</span>
                   </div>
-                  <div className={`border rounded-xl px-4 py-2.5 transition-all ${selectedRolls.size > 0 ? 'bg-brand-500/15 border-brand-500/40' : 'bg-slate-800/40 border-slate-700'}`}>
-                    <p className="text-slate-500 text-[10px]">เลือกแล้ว</p>
-                    <p className="text-brand-300 font-black text-lg">{selectedRolls.size} <span className="text-xs font-normal text-slate-400">ม้วน</span></p>
-                    <p className="text-brand-400 text-[10px]">{fmt(pickedKg,1)} Kgs.</p>
-                  </div>
-                  {selectedSO.target_kg > 0 && (
-                    <div className="bg-slate-800/40 border border-slate-700 rounded-xl px-4 py-2.5">
-                      <p className="text-slate-500 text-[10px]">เป้า SO</p>
-                      <p className="text-amber-300 font-black text-lg">{fmt(selectedSO.target_kg,1)} <span className="text-xs font-normal text-slate-400">Kgs.</span></p>
-                      <p className="text-slate-500 text-[10px]">คงเหลือ {fmt(Math.max(selectedSO.target_kg - (soStats.find(s=>s.id===selectedSO.id)?.shippedKg??0) - pickedKg, 0),1)} Kgs.</p>
+                  <div className="flex items-end gap-3 flex-wrap">
+                    <div>
+                      <label className="block text-[10px] text-slate-500 mb-1">
+                        เป้าจัดส่งรอบนี้ (kg){selSO.targetKg > 0 && <span className="text-slate-600"> · ค้างอยู่ {fmt(soRemainKg,1)}</span>}
+                      </label>
+                      <input value={soTargetInput} onChange={e => setSoTargetInput(e.target.value)} inputMode="decimal"
+                        placeholder={selSO.targetKg > 0 ? fmt(soRemainKg,1) : 'ใส่เป้าเอง'}
+                        className="w-36 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-brand-500"/>
                     </div>
+                    <button onClick={soAutoFill} className="bg-brand-600 hover:bg-brand-500 text-white text-sm font-bold px-4 py-2 rounded-lg">⚡ จัดอัตโนมัติ (FIFO)</button>
+                    <button onClick={() => setSelectedRolls(new Set())} className="text-slate-400 hover:text-white text-sm px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700">ล้าง</button>
+                    <p className="text-[11px] text-slate-500 ml-auto">หยิบ WO เก่าก่อน · ถึง/เกินเป้าเล็กน้อยแล้วหยุด</p>
+                  </div>
+                  {selSO.targetKg === 0 && (
+                    <p className="text-[11px] text-amber-300/80 mt-2">⚠ SO นี้ไม่มี planned_qty ในแผน — ใส่เป้าเองก่อนกดจัดอัตโนมัติ หรือติ๊กม้วนเองได้</p>
                   )}
                 </div>
 
-                {/* Confirm bar */}
-                {selectedRolls.size > 0 && (
-                  <div className="rounded-2xl border border-brand-500/40 bg-brand-500/10 px-5 py-4 flex items-center justify-between">
-                    <div>
-                      <p className="text-white font-bold">จัดส่ง {selectedRolls.size} ม้วน · <span className="text-brand-300">{fmt(pickedKg)} Kgs.</span></p>
-                      <p className="text-slate-400 text-xs mt-0.5">ผู้จัดส่ง: <b className={shipStaff.trim() ? 'text-white' : 'text-red-400'}>{shipStaff.trim() || '⚠ ยังไม่ได้กรอกชื่อ'}</b></p>
-                    </div>
-                    <button onClick={handleShip} disabled={shipping || !shipStaff.trim()}
-                      className="flex items-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-40 text-white text-sm px-5 py-2.5 rounded-xl font-bold transition-colors">
-                      <Truck size={15}/> {shipping ? 'กำลังส่ง...' : 'ยืนยันจัดส่ง + พิมพ์ใบ'}
-                    </button>
-                  </div>
-                )}
-
-                {/* Roll list grouped by lot */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-                  <div className="px-4 py-2.5 border-b border-slate-800 bg-slate-800/20 flex items-center justify-between">
-                    <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-300 select-none">
-                      <input type="checkbox" onChange={toggleAllAvailable}
-                        checked={availableForShip.length > 0 && availableForShip.every(r => selectedRolls.has(r.id))}
-                        className="w-4 h-4 accent-brand-500"/>
-                      เลือกทั้งหมด ({availableForShip.length} ม้วน)
-                    </label>
-                    <p className="text-slate-500 text-xs">{fmt(availableForShip.reduce((s,r)=>s+(r.weight??0),0))} Kgs.</p>
-                  </div>
-
-                  {availableForShip.length === 0
-                    ? <div className="py-16 text-center text-slate-500 text-sm">ไม่มีม้วนในสต็อก</div>
-                    : (
-                    <div className="divide-y divide-slate-800/60">
-                      {availableForShip.map(r => {
-                        const isSel = selectedRolls.has(r.id)
-                        const isOpen = expandedRoll === r.id
-                        return (
-                          <div key={r.id} className={isOpen ? 'bg-slate-800/30' : ''}>
-                          <div
-                            className={`flex items-center gap-3 px-4 py-3 transition-colors ${isSel ? 'bg-brand-500/12' : 'hover:bg-slate-800/50'}`}>
-                            {/* ติ๊กเลือกม้วน (สำหรับจัดส่ง) */}
-                            <div onClick={() => toggleRoll(r.id)} className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all cursor-pointer ${isSel ? 'bg-brand-500 border-brand-500' : 'border-slate-600'}`}>
-                              {isSel && <span className="text-white text-[10px] font-black">✓</span>}
-                            </div>
-                            <span className="bg-brand-600 text-white font-black text-xs px-2 py-1 rounded-lg w-12 text-center flex-shrink-0">{r.machine_no||'?'}</span>
-                            {/* คลิกที่ม้วนเพื่อดูรายละเอียด */}
-                            <div onClick={() => setExpandedRoll(isOpen ? null : r.id)} className="flex-1 min-w-0 cursor-pointer">
-                              <div className="flex items-baseline gap-2 flex-wrap">
-                                <span className="font-mono font-black text-white">ม้วน #{r.roll_no}</span>
-                                {sizeLabel(r) && <span className="text-[9px] font-black bg-brand-500/20 text-brand-200 px-1 py-0.5 rounded">{sizeLabel(r)}</span>}
-                                <span className="text-slate-500 text-xs font-mono">Lot {r.lot_no}</span>
-                              </div>
-                              <p className="text-slate-500 text-xs truncate">{r.product_name||'—'}</p>
-                              <div className="flex items-center gap-1 flex-wrap text-[9px] mt-0.5">
-                                {(r as any).work_order && <span className="bg-amber-500/15 text-amber-300 px-1 py-0.5 rounded font-bold">WO {(r as any).work_order}</span>}
-                                {(r as any).sale_order && <span className="bg-blue-500/15 text-blue-300 px-1 py-0.5 rounded font-bold">SO {(r as any).sale_order}</span>}
-                              </div>
-                            </div>
-                            <div onClick={() => setExpandedRoll(isOpen ? null : r.id)} className="text-right flex-shrink-0 cursor-pointer">
-                              <p className="font-black text-lg text-brand-300 leading-none">{fmt(r.weight)}</p>
-                              <p className="text-slate-600 text-[10px]">Kgs. สุทธิ</p>
-                            </div>
-                            <button onClick={() => setExpandedRoll(isOpen ? null : r.id)}
-                              title="ดูรายละเอียด"
-                              className="flex-shrink-0 text-slate-400 hover:text-white text-xs w-6 text-center">
-                              {isOpen ? '▲' : '▼'}
-                            </button>
-                            <div className="text-right flex-shrink-0 w-14">
-                              <p className="text-slate-400 text-xs">{fmtDT(r.created_at).slice(0,5)}</p>
-                            </div>
-                          </div>
-
-                          {/* รายละเอียดม้วน + ปุ่มแจ้ง NC */}
-                          {isOpen && (() => { const rr = r as any; return (
-                            <div className="px-4 pb-4 pt-1 bg-slate-800/30 border-t border-slate-800/60">
-                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 text-xs mb-3">
-                                <div><span className="text-slate-500">เครื่อง</span><p className="text-white font-semibold">{r.machine_no||'—'}</p></div>
-                                <div><span className="text-slate-500">Lot</span><p className="text-white font-semibold font-mono">{r.lot_no||'—'}</p></div>
-                                <div><span className="text-slate-500">ม้วนที่</span><p className="text-white font-semibold">{r.roll_no||'—'}</p></div>
-                                <div><span className="text-slate-500">สินค้า</span><p className="text-white font-semibold">{r.product_name||'—'}</p></div>
-                                <div><span className="text-slate-500">รหัสสินค้า</span><p className="text-white font-semibold">{rr.product_code||'—'}</p></div>
-                                <div><span className="text-slate-500">ลูกค้า</span><p className="text-white font-semibold">{rr.customer||'—'}</p></div>
-                                <div><span className="text-slate-500">นน.เต็ม (Gross)</span><p className="text-white font-semibold">{fmt(rr.gross_weight)} Kg</p></div>
-                                <div><span className="text-slate-500">นน.แกน</span><p className="text-white font-semibold">{fmt(rr.core_weight)} Kg</p></div>
-                                <div><span className="text-slate-500">นน.สุทธิ</span><p className="text-brand-300 font-bold">{fmt(rr.weight)} Kg</p></div>
-                                <div><span className="text-slate-500">กว้าง</span><p className="text-white font-semibold">{rr.width_cm||'—'} cm</p></div>
-                                <div><span className="text-slate-500">หนา</span><p className="text-white font-semibold">{rr.thick_mc||'—'}</p></div>
-                                <div><span className="text-slate-500">ผู้ตรวจ</span><p className="text-white font-semibold">{rr.inspector||'—'}</p></div>
-                              </div>
-                              <button onClick={() => setReturnModal(r)}
-                                className="w-full text-sm bg-amber-600 hover:bg-amber-500 text-white px-4 py-2.5 rounded-xl font-bold">
-                                ⚠ แจ้ง NC — ม้วนเสีย/มีปัญหาในคลัง (รอ ผจก ตัดสิน)
+                {/* WO list */}
+                <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+                  {soWOs.map(g => {
+                    const allSel = g.rolls.every(r => selectedRolls.has(r.id))
+                    const selN = g.rolls.filter(r => selectedRolls.has(r.id)).length
+                    const open = soOpenWO.has(g.wo)
+                    return (
+                      <div key={g.wo} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-2 bg-slate-800/30 border-b border-slate-800">
+                          <button onClick={() => setSoOpenWO(p => { const n = new Set(p); n.has(g.wo) ? n.delete(g.wo) : n.add(g.wo); return n })}
+                            className="flex items-center gap-2 text-left hover:opacity-80 flex-wrap">
+                            <span className="text-slate-500 text-xs">{open ? '▼' : '▶'}</span>
+                            <span className="text-[11px] font-bold bg-amber-500/15 text-amber-300 px-2 py-0.5 rounded">WO {g.wo}</span>
+                            <span className="text-slate-400 text-xs">{g.rolls.length} ม้วน · {fmt(g.kg,1)} kg</span>
+                            <span className="text-slate-600 text-[10px]">{g.product}</span>
+                            {selN > 0 && <span className="text-[10px] font-bold bg-brand-500/20 text-brand-300 px-1.5 py-0.5 rounded">เลือก {selN}</span>}
+                          </button>
+                          <button onClick={() => setSelectedRolls(p => { const n = new Set(p); g.rolls.forEach(r => allSel ? n.delete(r.id) : n.add(r.id)); return n })}
+                            className="text-[11px] text-brand-300 hover:text-white whitespace-nowrap">{allSel ? 'เอาออกทั้ง WO' : 'เลือกทั้ง WO'}</button>
+                        </div>
+                        {open && (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 p-2">
+                          {g.rolls.map(r => {
+                            const on = selectedRolls.has(r.id)
+                            return (
+                              <button key={r.id} onClick={() => toggleRoll(r.id)}
+                                className={`flex items-center justify-between px-2.5 py-2 rounded-lg border text-xs transition-colors ${on ? 'bg-brand-500/20 border-brand-500/50' : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'}`}>
+                                <span className="flex items-center gap-1.5">
+                                  <span className={`w-4 h-4 rounded border flex items-center justify-center ${on ? 'bg-brand-500 border-brand-500' : 'border-slate-600'}`}>{on && <span className="text-white text-[9px] font-black">✓</span>}</span>
+                                  <span className="text-slate-300 font-mono">#{r.roll_no}</span>
+                                </span>
+                                <span className={`font-black ${on ? 'text-brand-200' : 'text-slate-300'}`}>{fmt(r.weight,1)}</span>
                               </button>
-                            </div>
-                          ) })()}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
+                            )
+                          })}
+                        </div>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               </>)}
             </div>
+
+            {/* ── ขวา: ที่เลือกไว้ + ยืนยัน ── */}
+            {selSO && (
+              <div className="w-72 flex-shrink-0 bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden sticky top-4">
+                <div className="px-4 py-3 border-b border-slate-800 bg-brand-600/10">
+                  <p className="text-white font-semibold text-sm">🚚 ม้วนที่จะส่ง</p>
+                  <p className="text-[11px] mt-1">
+                    <span className="text-brand-300 font-black text-lg">{fmt(pickedKg,1)}</span>
+                    <span className="text-slate-500"> / {soTargetKg > 0 ? fmt(soTargetKg,1) : '—'} kg · {selectedRolls.size} ม้วน</span>
+                  </p>
+                  {soTargetKg > 0 && (
+                    <p className={`text-[10px] ${pickedKg >= soTargetKg ? 'text-green-400' : 'text-amber-400'}`}>
+                      {pickedKg >= soTargetKg ? `✓ ถึงเป้าแล้ว (เกิน ${fmt(pickedKg - soTargetKg,1)} kg)` : `ขาดอีก ${fmt(soTargetKg - pickedKg,1)} kg`}
+                    </p>
+                  )}
+                </div>
+                <div className="max-h-[42vh] overflow-y-auto divide-y divide-slate-800/50">
+                  {pickedRolls.length === 0 ? <p className="text-slate-600 text-xs py-8 text-center">ยังไม่ได้เลือกม้วน</p>
+                  : pickedRolls.map(r => (
+                    <div key={r.id} className="flex items-center justify-between px-4 py-1.5 text-xs">
+                      <span className="text-slate-400">#{r.roll_no} <span className="text-slate-600">· WO {(r as any).work_order || '—'}</span></span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-300 font-bold">{fmt(r.weight,1)}</span>
+                        <button onClick={() => toggleRoll(r.id)} className="text-slate-600 hover:text-red-400">✕</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="p-3 border-t border-slate-800 space-y-2">
+                  <button onClick={() => printWeightSlip(pickedRolls, shipStaff.trim(), `SO ${selSO.so}`)} disabled={selectedRolls.size === 0}
+                    className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white text-sm px-4 py-2 rounded-xl font-bold">
+                    <Printer size={14}/> ใบกำกับน้ำหนัก (ยังไม่ตัดสต็อก)
+                  </button>
+                  <button onClick={() => exportWeightSlipExcel(pickedRolls, shipStaff.trim(), `SO ${selSO.so}`)} disabled={selectedRolls.size === 0}
+                    className="w-full flex items-center justify-center gap-2 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white text-sm px-4 py-2 rounded-xl font-bold">
+                    <Download size={14}/> Export Excel
+                  </button>
+                  <input value={shipStaff} onChange={e => setShipStaff(e.target.value)} placeholder="ชื่อผู้จัดส่ง *"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-brand-500"/>
+                  <button onClick={handleShip} disabled={shipping || selectedRolls.size === 0 || !shipStaff.trim()}
+                    className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-40 text-white text-sm px-4 py-2.5 rounded-xl font-bold">
+                    <Truck size={15}/> {shipping ? 'กำลังส่ง...' : 'ยืนยันจัดส่ง + พิมพ์ใบ'}
+                  </button>
+                  <p className="text-[10px] text-slate-500 text-center">กดแล้วม้วนจะถูกตัดออกจากคลังจริง</p>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1630,9 +2001,19 @@ function ReplaceRollModal({ group, stock, stockLoading, onClose, onDone }:
         patch.shipped_at  = group.at || new Date().toISOString()   // เข้ากลุ่มเดิม (key = at+by)
         patch.shipped_by  = group.by && group.by !== '—' ? group.by : staff.trim()
       }
-      const { error } = await supabase.from('production_rolls').update(patch).in('id', Array.from(sel))
+      // ด่านเดียวกับ shipRolls — รายการม้วนที่นี่มาจาก stock ในเครื่องซึ่งอาจเก่าหลายชั่วโมง
+      // ถ้าไม่กัน จะไปทับม้วนที่เครื่องอื่นส่งออกไปแล้ว (ดึงม้วนหลุดจากใบเดิมที่พิมพ์ให้ลูกค้าไปแล้ว)
+      const ids = Array.from(sel)
+      const { data: done, error } = await supabase.from('production_rolls').update(patch)
+        .in('id', ids)
+        .not('shipped', 'is', true)
+        .eq('transferred', true)
+        .eq('roll_type', 'good')
+        .select('id')
       if (error) throw error
-      alert(`✓ ใส่ม้วนแทน ${sel.size} ม้วนเข้า ${docLabel} แล้ว\nอย่าลืมกด "ออกใบส่งแก้ยอด" เพื่อพิมพ์ใบที่ยอดถูกต้อง`)
+      const okN = (done ?? []).length
+      if (okN === 0) { alert('⚠ ม้วนที่เลือกถูกจัดส่ง/แจ้ง NC ไปแล้วทั้งหมด — ไม่ได้ใส่แทน'); onDone(); return }
+      alert(`✓ ใส่ม้วนแทน ${okN} ม้วนเข้า ${docLabel} แล้ว${okN < ids.length ? `\n⚠ อีก ${ids.length - okN} ม้วนใส่ไม่ได้ (ถูกส่ง/แจ้ง NC ไปแล้ว)` : ''}\nอย่าลืมกด "ออกใบส่งแก้ยอด" เพื่อพิมพ์ใบที่ยอดถูกต้อง`)
       onDone()
     } catch (e: any) { alert('ไม่สำเร็จ: ' + (e?.message ?? e)) }
     finally { setSaving(false) }

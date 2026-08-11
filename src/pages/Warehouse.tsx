@@ -271,29 +271,30 @@ function exportWeightSlipExcel(rolls: any[], staff: string, note: string) {
     ['บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด'],
     ['ใบกำกับน้ำหนัก'],
     [],
-    ['วันที่ :', new Date().toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok' }), '', 'ผู้จัดของ :', staff || '', '', 'หมายเหตุ :', note || ''],
-    ['ลูกค้า :', custs.join(', '), '', 'จำนวน :', `${rolls.length} ม้วน`, '', 'นน.สุทธิรวม :', Number(totalNet.toFixed(2))],
+    ['วันที่ :', new Date().toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok' }), 'ผู้จัดของ :', staff || '', 'หมายเหตุ :', note || ''],
+    ['ลูกค้า :', custs.join(', '), 'จำนวน :', `${rolls.length} ม้วน`, 'นน.สุทธิรวม :', Number(totalNet.toFixed(2))],
     [],
   ]
   groups.forEach(g => {
     aoa.push([`${g.product} · Lot ${g.lot}${g.wo ? ` · WO ${g.wo}` : ''}`])
-    aoa.push(['ลำดับ','ม้วนที่','เครื่อง','นน.เต็ม (kg)','นน.แกน (kg)','นน.สุทธิ (kg)','ผู้ตรวจ','วันผลิต'])
+    aoa.push(['ลำดับ','ม้วนที่','นน.รวม (kg)','นน.แกน (kg)','นน.สุทธิ (kg)','วันผลิต'])
     g.rolls.forEach((r, i) => aoa.push([
-      i + 1, r.roll_no ?? '', r.machine_no ?? '',
+      i + 1, r.roll_no ?? '',
       Number(((r.weight ?? 0) + (r.core_weight ?? 0)).toFixed(2)),
       Number((r.core_weight ?? 0).toFixed(2)),
       Number((r.weight ?? 0).toFixed(2)),
-      r.inspector ?? '', r.created_at ? fmtDT(r.created_at) : '',
+      r.created_at ? fmtDT(r.created_at) : '',
     ]))
-    const subNet = g.rolls.reduce((s, r) => s + (r.weight ?? 0), 0)
-    aoa.push(['', `รวม ${g.rolls.length} ม้วน`, '', '', '', Number(subNet.toFixed(2)), '', ''])
+    const subNet  = g.rolls.reduce((s, r) => s + (r.weight ?? 0), 0)
+    const subCore = g.rolls.reduce((s, r) => s + (r.core_weight ?? 0), 0)
+    aoa.push(['รวม', `${g.rolls.length} ม้วน`, Number((subNet + subCore).toFixed(2)), Number(subCore.toFixed(2)), Number(subNet.toFixed(2)), ''])
     aoa.push([])
   })
-  aoa.push(['', 'รวมทั้งสิ้น', `${rolls.length} ม้วน`, '', Number(totalCore.toFixed(2)), Number(totalNet.toFixed(2)), '', ''])
+  aoa.push(['รวมทั้งสิ้น', `${rolls.length} ม้วน`, Number((totalNet + totalCore).toFixed(2)), Number(totalCore.toFixed(2)), Number(totalNet.toFixed(2)), ''])
 
   const ws = XLSX.utils.aoa_to_sheet(aoa)
-  ws['!cols'] = [{wch:7},{wch:9},{wch:9},{wch:14},{wch:14},{wch:16},{wch:13},{wch:18}]
-  ws['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:7} }, { s:{r:1,c:0}, e:{r:1,c:7} }]
+  ws['!cols'] = [{wch:8},{wch:10},{wch:14},{wch:14},{wch:15},{wch:18}]
+  ws['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:5} }, { s:{r:1,c:0}, e:{r:1,c:5} }]
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'ใบกำกับน้ำหนัก')
   XLSX.writeFile(wb, `ใบกำกับน้ำหนัก_${new Date().toISOString().slice(0,10)}.xlsx`)
@@ -952,26 +953,27 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
       ['บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด'],
       ['ใบกำกับน้ำหนัก (จัดส่ง)'],
       [],
-      ['สินค้า :', selItemGroup?.product_name ?? '', '', 'Item :', selItemGroup?.item_code ?? '', '', 'ขนาด :', selItemGroup?.size ?? ''],
-      ['ลูกค้า :', selItemGroup?.customer ?? '', '', 'เป้าจัดส่ง :', `${delTarget || '—'} kg`, '', 'ผู้จัดส่ง :', delStaff || ''],
-      ['จำนวน :', `${rolls.length} ม้วน`, '', 'น้ำหนักรวม (สุทธิ) :', `${delPickedKg.toFixed(2)} kg`, '', 'วันที่ :', new Date().toLocaleDateString('th-TH')],
+      ['สินค้า :', selItemGroup?.product_name ?? '', 'Item :', selItemGroup?.item_code ?? '', 'ขนาด :', selItemGroup?.size ?? ''],
+      ['ลูกค้า :', selItemGroup?.customer ?? '', 'เป้าจัดส่ง :', `${delTarget || '—'} kg`, 'ผู้จัดส่ง :', delStaff || ''],
+      ['จำนวน :', `${rolls.length} ม้วน`, 'น้ำหนักรวม (สุทธิ) :', `${delPickedKg.toFixed(2)} kg`, 'วันที่ :', new Date().toLocaleDateString('th-TH')],
       [],
-      ['ลำดับที่', 'นน.เต็ม (kg)', 'นน.แกน (kg)', 'นน.สุทธิ (kg)', 'ม้วนที่', 'WO', 'Lot', 'ผู้ตรวจ', 'วันผลิต'],
+      ['ลำดับ', 'ม้วนที่', 'นน.รวม (kg)', 'นน.แกน (kg)', 'นน.สุทธิ (kg)', 'วันผลิต'],
     ]
     const sumNet   = rolls.reduce((s, r) => s + (r.weight ?? 0), 0)
     const sumCore  = rolls.reduce((s, r) => s + (r.core_weight ?? 0), 0)
     const sumGross = sumNet + sumCore
     const dataRows = rolls.map((r, i) => [
       i + 1,
-      Number(((r.weight ?? 0) + (r.core_weight ?? 0)).toFixed(2)),  // เต็ม
+      r.roll_no,
+      Number(((r.weight ?? 0) + (r.core_weight ?? 0)).toFixed(2)),  // รวม = สุทธิ + แกน
       Number((r.core_weight ?? 0).toFixed(2)),                       // แกน
       Number((r.weight ?? 0).toFixed(2)),                            // สุทธิ
-      r.roll_no, (r as any).work_order ?? '', r.lot_no ?? '', r.inspector ?? '', fmtDT(r.created_at),
+      fmtDT(r.created_at),
     ])
-    dataRows.push(['รวม', Number(sumGross.toFixed(2)), Number(sumCore.toFixed(2)), Number(sumNet.toFixed(2)), `${rolls.length} ม้วน`, '', '', '', ''])
+    dataRows.push(['รวม', `${rolls.length} ม้วน`, Number(sumGross.toFixed(2)), Number(sumCore.toFixed(2)), Number(sumNet.toFixed(2)), ''])
     const ws = XLSX.utils.aoa_to_sheet([...header, ...dataRows])
-    ws['!cols'] = [{ wch: 8 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 8 }, { wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 18 }]
-    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 8 } }]
+    ws['!cols'] = [{ wch: 8 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 15 }, { wch: 18 }]
+    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } }]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'จัดส่ง')
     XLSX.writeFile(wb, `ใบกำกับน้ำหนัก_${(selItemGroup?.item_code ?? 'item')}_${dateStr}.xlsx`)

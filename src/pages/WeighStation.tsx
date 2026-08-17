@@ -99,20 +99,6 @@ export async function reprintRollLabel(roll: any, size: 'long' | 'short' = 'long
   await printLabel(p as MachineProfile, roll.roll_no ?? 0, roll.gross_weight ?? 0, roll.weight ?? 0, size, roll.roll_type ?? 'good', roll.remark ?? '', roll.id, roll.created_at ?? null)
 }
 
-// หัวใบปะหน้า (บรรทัดบนสุด)
-//   1) ค่าที่ตั้งไว้เอง (header_text ของม้วน/เครื่อง) — ม้วนกรอสืบทอดจากม้วนต้นทาง
-//   2) ถ้าว่าง + เป็นงานกรอ → ใช้ "ชื่อบริษัทลูกค้า"
-//   3) ไม่งั้น → ชื่อบริษัทเรา
-function labelHeaderName(p: any): string {
-  const set = (p?.headerText ?? '').trim()
-  if (set) return set
-  if ((p?.section ?? '') === 'rewind') {
-    const cust = (p?.custName ?? '').trim()
-    if (cust) return cust
-  }
-  return 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด'
-}
-
 async function buildLabelHtml(p: MachineProfile, rollNo: number, gross: number, net: number, size: 'long'|'short' = 'long', rollType: string = 'good', reason = '', rollId?: string, prodDate?: string | Date | null): Promise<{ innerHtml: string; W: number; H: number }> {
   const dec     = p.decimal
   // วันผลิต = วันที่ชั่งจริง (รีปริ้นใช้ created_at) · ถ้าไม่ส่งมา = วันนี้ (ตอนชั่ง)
@@ -155,7 +141,7 @@ async function buildLabelHtml(p: MachineProfile, rollNo: number, gross: number, 
                  ? `<span style="font-size:0.9em">SO <b>${p.soNo || '—'}</b>&nbsp;&nbsp;·&nbsp;&nbsp;WO <b>${p.woNo || '—'}</b>&nbsp;&nbsp;·&nbsp;&nbsp;รหัสสินค้า <b>${p.itemCode || '—'}</b></span>` +
                    (rollTypeLabelLong ? `&nbsp;&nbsp;[${rollTypeLabelLong}]` : '') +
                    (rollType === 'bad' && reason ? `&nbsp;&nbsp;<span style="color:#c00">เหตุผล: ${reason}</span>` : '')
-                 : labelHeaderName(p) +
+                 : (p.headerText?.trim() || 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด') +
                    (rollTypeLabelLong ? `&nbsp;&nbsp;[${rollTypeLabelLong}]` : ''),
     // 3-column header
     mat:         `Mat Code&nbsp;&nbsp;<b style="font-size:1.15em">${p.matCode}</b>`,
@@ -231,7 +217,7 @@ ${savedLayout.fields.map(renderLongField).join('\n')}
   // ใบสั้น — สร้างจาก LabelDesigner layout (เหมือนใบยาว → ปริ้น=หน้าแก้ไข, แก้ไขได้)
   // ═══════════════════════════════════════════════════════
   const shortLayout  = await loadShortLayout()
-  const shortHeader  = p.blankHeader ? '' : labelHeaderName(p)
+  const shortHeader  = p.blankHeader ? '' : ((p.headerText || '').trim() || 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด')
   const rollWord     = rollType.startsWith('scrap') ? 'ถุง' : rollType === 'bad' ? 'กรอ No.' : 'Roll No.'
   const shortFieldData: Record<string, string> = {
     header:    (rollType === 'bad')
@@ -320,7 +306,7 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
 
   <!-- Row 1: หัวกระดาษ -->
   <div class="title">
-    ${p.blankHeader ? '' : labelHeaderName(p)}
+    ${p.blankHeader ? '' : (p.headerText?.trim() || 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด')}
     ${rollType !== 'good' ? `<span style="font-size:8pt;font-weight:700;margin-left:3mm">[${rollTypeLabelLong}]</span>` : ''}
   </div>
   ${reason ? `<div style="font-size:7pt;color:#c00;text-align:center;line-height:1.2;margin-bottom:.3mm">เหตุผล: ${reason}</div>` : ''}
@@ -376,7 +362,7 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
   // ใบสั้น 76.2 × 76.2 mm (square) — รายละเอียดครบเหมือนใบยาว
   // หัวกระดาษ: ใช้ p.headerText (ว่าง = เว้น)
   // ═══════════════════════════════════════════════════════
-  const hdr = p.blankHeader ? '' : labelHeaderName(p)
+  const hdr = p.blankHeader ? '' : ((p.headerText || '').trim() || 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด')
   const rollTypeLabel = rollType === 'bad' ? 'กรอ' : rollType === 'scrap_clear' ? 'เศษใส' : rollType === 'scrap_color' ? 'เศษสี' : rollType === 'scrap_lump' ? 'เศษก้อน' : ''
   const shortHtml = `
 <style>
@@ -3182,7 +3168,9 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         const newList = [...(monthRolled ? [] : weighedRolls), data]
         setRollNo(nextRollNo(newList.filter((r:any) => r?.roll_type === 'good'), isRework))
         // print fire-and-forget (ไม่ await — ไม่บล็อก save flow)
-        printLabel({...profile, lotNo: effLot, length: lengthVal || profile.length, pcs: pcsVal || profile.pcs, inspector}, useRollNo, gross, saveWeight, (isRework ? 'short' : (profile.labelSize ?? 'long')),'good', '', data.id)
+        // หัวใบที่ปริ้น = หัวใบที่บันทึกลงม้วนจริง (ม้วนกรอสืบทอดจากม้วนต้นทาง) — เดิมใช้ของ profile
+        // ทำให้ม้วนกรอที่งานกรอไม่ได้ตั้งหัวใบ ปริ้นออกเป็น "เบสท์เวิลด์ฯ" ทั้งที่ในม้วนเก็บชื่อลูกค้าไว้
+        printLabel({...profile, lotNo: effLot, length: lengthVal || profile.length, pcs: pcsVal || profile.pcs, inspector, headerText: payload.header_text, blankHeader: payload.blank_header}, useRollNo, gross, saveWeight, (isRework ? 'short' : (profile.labelSize ?? 'long')),'good', '', data.id)
         // กรอต่อ: ม้วนต้นทางที่ 2 ถูกรวมเข้าม้วนนี้แล้ว → mark consumed (หลุดจากลิสต์ต้นทาง)
         if (useSrc2) {
           supabase.from('production_rolls')
@@ -4441,11 +4429,11 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
 
             {/* Reprint */}
             <div className="flex gap-2 px-5 pt-4 border-t border-slate-800">
-              <button onClick={() => printLabel({...profile, length: selectedRoll.length || profile.length, pcs: selectedRoll.pcs || profile.pcs, inspector: selectedRoll.inspector || profile.inspector}, selectedRoll.roll_no, selectedRoll.gross_weight??0, selectedRoll.weight??0, 'short', selectedRoll.roll_type, selectedRoll.remark??'', selectedRoll.id)}
+              <button onClick={() => printLabel({...profile, length: selectedRoll.length || profile.length, pcs: selectedRoll.pcs || profile.pcs, inspector: selectedRoll.inspector || profile.inspector, headerText: selectedRoll.header_text ?? profile.headerText, blankHeader: selectedRoll.blank_header ?? profile.blankHeader}, selectedRoll.roll_no, selectedRoll.gross_weight??0, selectedRoll.weight??0, 'short', selectedRoll.roll_type, selectedRoll.remark??'', selectedRoll.id)}
                 className="flex-1 flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white text-sm py-2.5 rounded-xl transition-colors">
                 <Printer size={14}/> ใบสั้น
               </button>
-              <button onClick={() => printLabel({...profile, length: selectedRoll.length || profile.length, pcs: selectedRoll.pcs || profile.pcs, inspector: selectedRoll.inspector || profile.inspector}, selectedRoll.roll_no, selectedRoll.gross_weight??0, selectedRoll.weight??0, 'long', selectedRoll.roll_type, selectedRoll.remark??'', selectedRoll.id)}
+              <button onClick={() => printLabel({...profile, length: selectedRoll.length || profile.length, pcs: selectedRoll.pcs || profile.pcs, inspector: selectedRoll.inspector || profile.inspector, headerText: selectedRoll.header_text ?? profile.headerText, blankHeader: selectedRoll.blank_header ?? profile.blankHeader}, selectedRoll.roll_no, selectedRoll.gross_weight??0, selectedRoll.weight??0, 'long', selectedRoll.roll_type, selectedRoll.remark??'', selectedRoll.id)}
                 className="flex-1 flex items-center justify-center gap-1.5 bg-brand-600 hover:bg-brand-700 text-white text-sm py-2.5 rounded-xl transition-colors font-semibold">
                 <Printer size={14}/> ใบยาว
               </button>

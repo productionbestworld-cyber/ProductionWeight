@@ -99,6 +99,20 @@ export async function reprintRollLabel(roll: any, size: 'long' | 'short' = 'long
   await printLabel(p as MachineProfile, roll.roll_no ?? 0, roll.gross_weight ?? 0, roll.weight ?? 0, size, roll.roll_type ?? 'good', roll.remark ?? '', roll.id, roll.created_at ?? null)
 }
 
+// หัวใบปะหน้า (บรรทัดบนสุด)
+//   1) ค่าที่ตั้งไว้เอง (header_text ของม้วน/เครื่อง) — ม้วนกรอสืบทอดจากม้วนต้นทาง
+//   2) ถ้าว่าง + เป็นงานกรอ → ใช้ "ชื่อบริษัทลูกค้า"
+//   3) ไม่งั้น → ชื่อบริษัทเรา
+function labelHeaderName(p: any): string {
+  const set = (p?.headerText ?? '').trim()
+  if (set) return set
+  if ((p?.section ?? '') === 'rewind') {
+    const cust = (p?.custName ?? '').trim()
+    if (cust) return cust
+  }
+  return 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด'
+}
+
 async function buildLabelHtml(p: MachineProfile, rollNo: number, gross: number, net: number, size: 'long'|'short' = 'long', rollType: string = 'good', reason = '', rollId?: string, prodDate?: string | Date | null): Promise<{ innerHtml: string; W: number; H: number }> {
   const dec     = p.decimal
   // วันผลิต = วันที่ชั่งจริง (รีปริ้นใช้ created_at) · ถ้าไม่ส่งมา = วันนี้ (ตอนชั่ง)
@@ -141,7 +155,7 @@ async function buildLabelHtml(p: MachineProfile, rollNo: number, gross: number, 
                  ? `<span style="font-size:0.9em">SO <b>${p.soNo || '—'}</b>&nbsp;&nbsp;·&nbsp;&nbsp;WO <b>${p.woNo || '—'}</b>&nbsp;&nbsp;·&nbsp;&nbsp;รหัสสินค้า <b>${p.itemCode || '—'}</b></span>` +
                    (rollTypeLabelLong ? `&nbsp;&nbsp;[${rollTypeLabelLong}]` : '') +
                    (rollType === 'bad' && reason ? `&nbsp;&nbsp;<span style="color:#c00">เหตุผล: ${reason}</span>` : '')
-                 : (p.headerText?.trim() || 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด') +
+                 : labelHeaderName(p) +
                    (rollTypeLabelLong ? `&nbsp;&nbsp;[${rollTypeLabelLong}]` : ''),
     // 3-column header
     mat:         `Mat Code&nbsp;&nbsp;<b style="font-size:1.15em">${p.matCode}</b>`,
@@ -217,7 +231,7 @@ ${savedLayout.fields.map(renderLongField).join('\n')}
   // ใบสั้น — สร้างจาก LabelDesigner layout (เหมือนใบยาว → ปริ้น=หน้าแก้ไข, แก้ไขได้)
   // ═══════════════════════════════════════════════════════
   const shortLayout  = await loadShortLayout()
-  const shortHeader  = p.blankHeader ? '' : ((p.headerText || '').trim() || 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด')
+  const shortHeader  = p.blankHeader ? '' : labelHeaderName(p)
   const rollWord     = rollType.startsWith('scrap') ? 'ถุง' : rollType === 'bad' ? 'กรอ No.' : 'Roll No.'
   const shortFieldData: Record<string, string> = {
     header:    (rollType === 'bad')
@@ -306,7 +320,7 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
 
   <!-- Row 1: หัวกระดาษ -->
   <div class="title">
-    ${p.blankHeader ? '' : (p.headerText?.trim() || 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด')}
+    ${p.blankHeader ? '' : labelHeaderName(p)}
     ${rollType !== 'good' ? `<span style="font-size:8pt;font-weight:700;margin-left:3mm">[${rollTypeLabelLong}]</span>` : ''}
   </div>
   ${reason ? `<div style="font-size:7pt;color:#c00;text-align:center;line-height:1.2;margin-bottom:.3mm">เหตุผล: ${reason}</div>` : ''}
@@ -362,7 +376,7 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
   // ใบสั้น 76.2 × 76.2 mm (square) — รายละเอียดครบเหมือนใบยาว
   // หัวกระดาษ: ใช้ p.headerText (ว่าง = เว้น)
   // ═══════════════════════════════════════════════════════
-  const hdr = p.blankHeader ? '' : ((p.headerText || '').trim() || 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด')
+  const hdr = p.blankHeader ? '' : labelHeaderName(p)
   const rollTypeLabel = rollType === 'bad' ? 'กรอ' : rollType === 'scrap_clear' ? 'เศษใส' : rollType === 'scrap_color' ? 'เศษสี' : rollType === 'scrap_lump' ? 'เศษก้อน' : ''
   const shortHtml = `
 <style>

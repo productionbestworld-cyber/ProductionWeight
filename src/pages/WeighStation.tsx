@@ -2097,6 +2097,13 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
   // กรอ: "รอบ" การกรอใน Lot+WO เดียวกัน — โชว์เลขม้วนเริ่ม 1 ใหม่ต่อรอบ (roll_no จริงยังต่อเนื่องกัน index ไม่ชน)
   const [reworkRound, setReworkRound]   = useState(1)
   const [reworkCause, setReworkCause]   = useState('')
+  // หัวใบปะหน้าม้วนกรอ — เลือกตอนชั่งได้ (จำค่าไว้ให้ม้วนถัดไป)
+  //   src = ตามม้วนต้นทาง (เดิม) · cust = ชื่อบริษัทลูกค้า · bwp = บริษัทเรา · blank = เว้นว่าง
+  const [hdrMode, setHdrMode] = useState<'src'|'cust'|'bwp'|'blank'>(
+    () => ((localStorage.getItem('bwp_rework_hdr_mode') as any) || 'src'))
+  const setHdrModeSaved = (m: 'src'|'cust'|'bwp'|'blank') => {
+    setHdrMode(m); try { localStorage.setItem('bwp_rework_hdr_mode', m) } catch {}
+  }
   const [reworkLen, setReworkLen]       = useState('')   // ความยาว(เมตร)งานกรอ — กรอกเองได้ (งานเก่าไม่ได้เก็บ length)
   const [masterLenState, setMasterLenState] = useState('') // ความยาวจาก master สินค้า (สำรองเมื่อต้นทางไม่มีค่า)
   const [reworkJobId, setReworkJobId]   = useState<string | null>(null)
@@ -2970,6 +2977,17 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         ? (String(useSrc?.pcs ?? '') || masterPcs || '')
         : (profile.pcs || masterPcs || '')
 
+      // ── หัวใบปะหน้า ──────────────────────────────────────────
+      //   ค่าตั้งต้น: ม้วนกรอ → สืบทอดจากม้วนต้นทาง · เป่า/พิมพ์ → ใช้ที่ตั้งกับเครื่อง
+      //   แผนกกรอเลือกทับได้ตอนชั่ง (hdrMode) — ใช้ทั้งที่บันทึกและที่พิมพ์ใบ
+      let hdrText  = (isRework && isGood && useSrc) ? (useSrc.header_text ?? '') : ((profile as any).headerText ?? '')
+      let hdrBlank = (isRework && isGood && useSrc) ? (useSrc.blank_header ?? false) : ((profile as any).blankHeader ?? false)
+      if (isRework) {
+        if      (hdrMode === 'cust')  { hdrText = (profile.custName ?? '').trim(); hdrBlank = false }
+        else if (hdrMode === 'bwp')   { hdrText = '';                              hdrBlank = false }
+        else if (hdrMode === 'blank') { hdrText = '';                              hdrBlank = true  }
+      }
+
       const payload = {
         job_id:       null,
         roll_no:      useRollNo,
@@ -3000,8 +3018,8 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         cust_branch:  (profile as any).custBranch ?? '',
         // ✨ หัวใบ (ชื่อลูกค้า): ม้วนกรอ → สืบทอดจากม้วนต้นทาง (งานเป่าตั้งหัวไว้ยังไง กรอต้องเป็นแบบนั้น)
         //    · งานเป่า/พิมพ์ปกติ → ใช้หัวที่ตั้งกับเครื่อง (profile)
-        header_text:  (isRework && isGood && useSrc) ? (useSrc.header_text ?? '') : ((profile as any).headerText ?? ''),
-        blank_header: (isRework && isGood && useSrc) ? (useSrc.blank_header ?? false) : ((profile as any).blankHeader ?? false),
+        header_text:  hdrText,
+        blank_header: hdrBlank,
         label_size:   (profile as any).labelSize ?? 'long',   // ✨ เก็บขนาดใบปะหน้า → ดึงงานเก่ากลับได้ครบ
         // ✨ ตำแหน่งแปะป้าย (แปะหัว/ข้าง) — กำหนดที่ WO → ติดม้วน → โชว์บนใบส่ง
         //    ม้วนกรอ → สืบทอดจากม้วนต้นทาง (เหมือน header_text)
@@ -3170,7 +3188,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         // print fire-and-forget (ไม่ await — ไม่บล็อก save flow)
         // หัวใบที่ปริ้น = หัวใบที่บันทึกลงม้วนจริง (ม้วนกรอสืบทอดจากม้วนต้นทาง) — เดิมใช้ของ profile
         // ทำให้ม้วนกรอที่งานกรอไม่ได้ตั้งหัวใบ ปริ้นออกเป็น "เบสท์เวิลด์ฯ" ทั้งที่ในม้วนเก็บชื่อลูกค้าไว้
-        printLabel({...profile, lotNo: effLot, length: lengthVal || profile.length, pcs: pcsVal || profile.pcs, inspector, headerText: payload.header_text, blankHeader: payload.blank_header}, useRollNo, gross, saveWeight, (isRework ? 'short' : (profile.labelSize ?? 'long')),'good', '', data.id)
+        printLabel({...profile, lotNo: effLot, length: lengthVal || profile.length, pcs: pcsVal || profile.pcs, inspector, headerText: hdrText, blankHeader: hdrBlank}, useRollNo, gross, saveWeight, (isRework ? 'short' : (profile.labelSize ?? 'long')),'good', '', data.id)
         // กรอต่อ: ม้วนต้นทางที่ 2 ถูกรวมเข้าม้วนนี้แล้ว → mark consumed (หลุดจากลิสต์ต้นทาง)
         if (useSrc2) {
           supabase.from('production_rolls')
@@ -3188,11 +3206,11 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       } else if (isBad) {
         const newList = [...(monthRolled ? [] : weighedRolls), data]
         setBadRollNo(nextRollNo(newList.filter((r:any) => r?.roll_type === 'bad')))
-        printLabel({...profile, lotNo: effLot, inspector}, useRollNo, gross, saveWeight, (isRework ? 'short' : (profile.labelSize ?? 'long')),'bad', badReason, data.id)
+        printLabel({...profile, lotNo: effLot, inspector, headerText: hdrText, blankHeader: hdrBlank}, useRollNo, gross, saveWeight, (isRework ? 'short' : (profile.labelSize ?? 'long')),'bad', badReason, data.id)
         setBadReason('')
       } else {
         // เศษ — ไม่มี roll_no ไม่นับม้วน พิมพ์ label แยก
-        printLabel({...profile, lotNo: effLot, inspector}, 0, gross, gross, (isRework ? 'short' : (profile.labelSize ?? 'long')),actualType, scrapReason, data.id)
+        printLabel({...profile, lotNo: effLot, inspector, headerText: hdrText, blankHeader: hdrBlank}, 0, gross, gross, (isRework ? 'short' : (profile.labelSize ?? 'long')),actualType, scrapReason, data.id)
         setScrapReason('')
       }
       // หลัง save: ถ้า simMode อยู่ → สุ่มค่าใหม่ให้พร้อมม้วนถัดไป, ถ้าไม่ → reset
@@ -3761,6 +3779,32 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                 placeholder="ติ๊กม้วนต้นทางด้านบน → สาเหตุจะเด้งมาเอง"
                 className="w-full bg-slate-800 border border-rose-500/40 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-rose-500 placeholder-slate-500" />
               <p className="text-[10px] text-rose-400/70 leading-tight">ดึงจากสาเหตุที่แผนกเป่าระบุตอนชั่งเป็นม้วนกรอ — แก้/เพิ่มได้ถ้าต่างจากเดิม</p>
+            </div>
+          )}
+
+          {isRework && (
+            <div className="space-y-1 order-last">
+              <p className="text-emerald-300 text-xs font-bold">🏷 หัวใบปะหน้า — เลือกว่าจะพิมพ์ชื่อบริษัทแบบไหน</p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {([
+                  { m: 'src',   t: 'ตามม้วนต้นทาง',  d: (selSrc?.blank_header ? '(เว้นว่าง)' : ((selSrc?.header_text ?? '').trim() || 'บริษัท เบสท์เวิลด์ฯ')) },
+                  { m: 'cust',  t: 'ชื่อลูกค้า',       d: (profile.custName ?? '').trim() || '— ไม่มีชื่อลูกค้า —' },
+                  { m: 'bwp',   t: 'บริษัทเรา',        d: 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด' },
+                  { m: 'blank', t: 'เว้นว่าง',         d: 'ไม่พิมพ์หัวใบ' },
+                ] as const).map(o => (
+                  <button key={o.m} type="button" onClick={() => setHdrModeSaved(o.m)}
+                    className={`text-left rounded-xl px-2.5 py-1.5 border transition-colors ${
+                      hdrMode === o.m
+                        ? 'bg-emerald-600/20 border-emerald-500 text-white'
+                        : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'}`}>
+                    <span className="block text-xs font-bold">{hdrMode === o.m ? '● ' : '○ '}{o.t}</span>
+                    <span className="block text-[10px] text-slate-400 truncate">{o.d}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-emerald-400/70 leading-tight">
+                ค่าเริ่มต้น "ตามม้วนต้นทาง" = หัวใบเดียวกับที่แผนกเป่าตั้งไว้ · เลือกแล้วระบบจำไว้ใช้กับม้วนถัดไป
+              </p>
             </div>
           )}
 

@@ -313,7 +313,7 @@ export default function App() {
     { key: 'nc',        label: 'NC (คลัง/QC)',   icon: AlertTriangle,   own: ['warehouse'], view: [] },
     { key: 'planning',  label: 'วางแผน',         icon: CalendarClock,   own: ['planning'], view: ['sales','purchase','blow'] },
     { key: 'history',   label: 'ประวัติผลิต',    icon: History,         own: ['planning'], view: ['blow','rewind'] },
-    { key: 'products',  label: 'คลังข้อมูล',     icon: Boxes,           own: ['purchase'], view: ['sales','planning'] },
+    { key: 'products',  label: 'คลังข้อมูล',     icon: Boxes,           own: ['purchase'], view: ['sales','planning','blow'] },
     { key: 'dashboard', label: 'Dashboard',      icon: LayoutDashboard, own: [], view: ['blow','rewind','warehouse','planning','sales'] },
     { key: 'combined',  label: 'รวมเทียบทั้งปี',  icon: LayoutDashboard, own: [], view: ['planning','sales'] },
     { key: 'rollsearch',label: 'ค้นหาม้วน',     icon: Search,          own: [], view: ['blow','rewind','warehouse','logistics','sales','planning'] },

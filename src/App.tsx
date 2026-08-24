@@ -8,7 +8,7 @@ import RollDetail from './pages/RollDetail'
 import Transfer from './pages/Transfer'
 import HistoryPage from './pages/History'
 import Warehouse from './pages/Warehouse'
-import Admin, { PinGate, DeptPinGate, isAdminUnlocked, isDeptUnlocked, lockAllDepts, lockAdmin, fetchSetting } from './pages/Admin'
+import Admin, { PinGate, DeptPinGate, isAdminUnlocked, isDeptUnlocked, lockAllDepts, lockAdmin, fetchSetting, ALL_DEPTS, type Dept as DeptType } from './pages/Admin'
 import ReviewQueue from './pages/ReviewQueue'
 import ProductsPage from './pages/Products'
 import Planning from './pages/Planning'
@@ -19,9 +19,48 @@ import RollSearch from './pages/RollSearch'
 import { APP_VERSION, APP_BUILD_DATE, CHANGELOG } from './version'
 
 type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings' | 'admin' | 'review' | 'nc' | 'products' | 'planning' | 'combined' | 'weighlog' | 'rollsearch'
-type Dept = 'blow' | 'print' | 'rewind'
+type Dept = DeptType
+
+// section ของ "ข้อมูล" (อยู่บนม้วน/เครื่อง) — คนละเรื่องกับแผนกที่ใช้ล็อกอิน
+// มีแค่แผนกผลิตเท่านั้นที่ผูกกับ section แผนกอื่น (ขาย/คลัง/ขนส่ง...) เห็นทุก section
+const sectionOf = (d: Dept): 'blow' | 'rewind' | undefined =>
+  d === 'blow' ? 'blow' : d === 'rewind' ? 'rewind' : undefined
 
 const DEPT_KEY = 'bwp_dept'
+
+// ── หน้าตาของแต่ละแผนก + หน้าหลักที่จะเข้าเมื่อล็อกอิน ─────────────────────
+const deptConfig: Record<Dept, {
+  emoji: string; label: string; sub: string
+  color: string; badge: string; border: string; bg: string
+}> = {
+  sales: { emoji: '💼', label: 'ขาย', sub: 'Sales',
+    color: 'bg-rose-600',   badge: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
+    border: 'border-rose-500/40 hover:border-rose-400 hover:shadow-rose-500/20', bg: 'bg-rose-500/5 hover:bg-rose-500/10' },
+  purchase: { emoji: '🛒', label: 'จัดซื้อ', sub: 'Purchasing',
+    color: 'bg-orange-600', badge: 'bg-orange-500/20 text-orange-300 border-orange-500/40',
+    border: 'border-orange-500/40 hover:border-orange-400 hover:shadow-orange-500/20', bg: 'bg-orange-500/5 hover:bg-orange-500/10' },
+  planning: { emoji: '📅', label: 'วางแผน', sub: 'Planning',
+    color: 'bg-purple-600', badge: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
+    border: 'border-purple-500/40 hover:border-purple-400 hover:shadow-purple-500/20', bg: 'bg-purple-500/5 hover:bg-purple-500/10' },
+  blow: { emoji: '🌬', label: 'ผลิต(เป่า)', sub: 'Blow Section',
+    color: 'bg-blue-600',   badge: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
+    border: 'border-blue-500/40 hover:border-blue-400 hover:shadow-blue-500/20', bg: 'bg-blue-500/5 hover:bg-blue-500/10' },
+  rewind: { emoji: '🔁', label: 'กรอ', sub: 'Rewind / Rework',
+    color: 'bg-green-700',  badge: 'bg-green-500/20 text-green-300 border-green-500/40',
+    border: 'border-green-500/40 hover:border-green-400 hover:shadow-green-500/20', bg: 'bg-green-500/5 hover:bg-green-500/10' },
+  warehouse: { emoji: '📦', label: 'คลัง', sub: 'Warehouse',
+    color: 'bg-cyan-700',   badge: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
+    border: 'border-cyan-500/40 hover:border-cyan-400 hover:shadow-cyan-500/20', bg: 'bg-cyan-500/5 hover:bg-cyan-500/10' },
+  logistics: { emoji: '🚚', label: 'ขนส่ง', sub: 'Logistics',
+    color: 'bg-amber-600',  badge: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+    border: 'border-amber-500/40 hover:border-amber-400 hover:shadow-amber-500/20', bg: 'bg-amber-500/5 hover:bg-amber-500/10' },
+}
+
+// หน้าแรกที่เห็นเมื่อเข้าแต่ละแผนก — ต้องเป็นหน้าที่แผนกนั้นมีสิทธิ์เสมอ
+const DEFAULT_PAGE: Record<Dept, Page> = {
+  sales: 'warehouse', purchase: 'products', planning: 'planning',
+  blow: 'weigh', rewind: 'weigh', warehouse: 'warehouse', logistics: 'warehouse',
+}
 
 // ── แถบข้อความประกาศวิ่ง — ทุกแผนกเห็น (แก้ข้อความที่หน้า Admin) ──────────────
 function AnnouncementBar() {
@@ -72,7 +111,7 @@ export default function App() {
       || window.location.hash.replace('#', '').toLowerCase() === 'dashboard'
       || path === '/dashboard'
     if (isDash) {
-      const d = sp.get('dept') as ('blow'|'print'|'rewind'|null)
+      const d = sp.get('dept') as ('blow'|'rewind'|null)
       return (
         <div className="min-h-screen bg-[#0a0f1e]">
           <div className="bg-slate-900 border-b border-slate-800 px-5 py-2.5 flex items-center justify-between">
@@ -146,10 +185,15 @@ export default function App() {
   }
 
   // dept persist ใน localStorage
-  const [dept, setDept] = useState<Dept>(() =>
-    (localStorage.getItem(DEPT_KEY) as Dept) ?? 'blow'
-  )
-  const [page, setPage]               = useState<Page>('weigh')
+  const [dept, setDept] = useState<Dept>(() => {
+    // ค่าเก่าที่เคยเก็บไว้อาจเป็น 'print' ที่เลิกใช้แล้ว หรือค่าที่ไม่รู้จัก → กลับไปที่ผลิต(เป่า)
+    const saved = localStorage.getItem(DEPT_KEY) as Dept | null
+    return saved && (ALL_DEPTS as readonly string[]).includes(saved) ? saved : 'blow'
+  })
+  const [page, setPage]               = useState<Page>(() => {
+    const saved = localStorage.getItem(DEPT_KEY) as Dept | null
+    return DEFAULT_PAGE[saved && (ALL_DEPTS as readonly string[]).includes(saved) ? saved : 'blow']
+  })
   const [weighKey, setWeighKey]       = useState(0)
   const [showDeptMenu, setShowDeptMenu] = useState(false)
   const [pinTarget, setPinTarget] = useState<Page | null>(null)  // หน้าที่ต้องใส่ PIN ก่อนเข้า
@@ -239,7 +283,7 @@ export default function App() {
     // ล็อกแผนกเก่าทั้งหมด แล้วบังคับ PIN ของแผนกใหม่
     lockAllDepts()
     if (isDeptUnlocked(d)) {
-      setDept(d); localStorage.setItem(DEPT_KEY, d); setPage('weigh')
+      setDept(d); localStorage.setItem(DEPT_KEY, d); setPage(DEFAULT_PAGE[d])
     } else {
       setPendingDept(d)
     }
@@ -254,28 +298,39 @@ export default function App() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  const deptConfig = {
-    blow:   { emoji: '🌬', label: 'ผลิต(เป่า)',    color: 'bg-blue-600',   badge: 'bg-blue-500/20 text-blue-300 border-blue-500/40',   sub: 'Blow Section' },
-    print:  { emoji: '🖨', label: 'ผลิต(พิมพ์)',  color: 'bg-purple-600', badge: 'bg-purple-500/20 text-purple-300 border-purple-500/40', sub: 'Print Section' },
-    rewind: { emoji: '🔁', label: 'กรอ(Rework)',  color: 'bg-green-700',  badge: 'bg-green-500/20 text-green-300 border-green-500/40',   sub: 'Rework Section' },
-  }
   const dc = deptConfig[dept]
 
-  const NAV = ([
-    { key: 'weigh',         label: 'ชั่งน้ำหนัก', icon: Scale,           depts: ['blow','print','rewind'] },
-    { key: 'rollsearch', label: 'ค้นหาม้วน',     icon: Search,          depts: ['blow','print','rewind'] },
-    { key: 'transfer',  label: 'โอนเข้าคลัง',   icon: Package,         depts: ['blow','print','rewind'] },
-    { key: 'warehouse', label: 'คลังสินค้า',    icon: WarehouseIcon,   depts: ['blow','print','rewind'] },
-    { key: 'dashboard', label: 'Dashboard',      icon: LayoutDashboard, depts: ['blow','print','rewind'] },
-    { key: 'combined',  label: 'รวมเทียบทั้งปี',  icon: LayoutDashboard, depts: ['blow','print','rewind'] },
-    { key: 'planning',  label: 'วางแผน',         icon: CalendarClock,   depts: ['blow','print','rewind'] },
-    { key: 'history',   label: 'ประวัติผลิต',    icon: History,         depts: ['blow','print','rewind'] },
-    { key: 'weighlog',  label: 'Log ชั่ง',       icon: ClipboardList,   depts: ['blow','print','rewind'] },
-    { key: 'products',  label: 'คลังข้อมูล',     icon: Boxes,           depts: ['blow','print','rewind'] },
-    { key: 'review',    label: 'พิจารณาม้วนกรอ', icon: Search,         depts: ['blow','print','rewind'] },
-    { key: 'nc',        label: 'NC (คลัง/QC)',   icon: AlertTriangle,   depts: ['blow','print','rewind'] },
-    { key: 'settings',  label: 'ตั้งค่าเครื่อง', icon: Settings,        depts: ['blow','print','rewind'] },
-  ] as const).filter(n => (n.depts as readonly string[]).includes(dept))
+  // เมนูของแต่ละแผนก — แยกเป็น "เจ้าของ" กับ "ผู้ดู"
+  //   own  = แผนกเจ้าของงาน แก้ข้อมูลได้เต็ม · หน้าที่เขียนข้อมูลได้มีเจ้าของแผนกเดียวเสมอ
+  //   view = แผนกที่จำเป็นต้องเห็นข้อมูล แต่แก้ไม่ได้ (ขึ้นป้าย 👁 ดู)
+  const navAll = ([
+    { key: 'weigh',     label: 'ชั่งน้ำหนัก',   icon: Scale,           own: ['blow','rewind'], view: [] },
+    { key: 'settings',  label: 'ตั้งค่าเครื่อง', icon: Settings,        own: ['blow','rewind'], view: [] },
+    { key: 'weighlog',  label: 'Log ชั่ง',       icon: ClipboardList,   own: ['blow','rewind'], view: [] },
+    { key: 'transfer',  label: 'โอนเข้าคลัง',   icon: Package,         own: ['blow','rewind'], view: ['warehouse'] },
+    { key: 'review',    label: 'พิจารณาม้วนกรอ', icon: Search,          own: ['rewind'], view: [] },
+    { key: 'warehouse', label: 'คลังสินค้า',    icon: WarehouseIcon,   own: ['warehouse'], view: ['sales','logistics','planning'] },
+    { key: 'nc',        label: 'NC (คลัง/QC)',   icon: AlertTriangle,   own: ['warehouse'], view: [] },
+    { key: 'planning',  label: 'วางแผน',         icon: CalendarClock,   own: ['planning'], view: ['sales','purchase','blow'] },
+    { key: 'history',   label: 'ประวัติผลิต',    icon: History,         own: ['planning'], view: ['blow','rewind'] },
+    { key: 'products',  label: 'คลังข้อมูล',     icon: Boxes,           own: ['purchase'], view: ['sales','planning'] },
+    { key: 'dashboard', label: 'Dashboard',      icon: LayoutDashboard, own: [], view: ['blow','rewind','warehouse','planning','sales'] },
+    { key: 'combined',  label: 'รวมเทียบทั้งปี',  icon: LayoutDashboard, own: [], view: ['planning','sales'] },
+    { key: 'rollsearch',label: 'ค้นหาม้วน',     icon: Search,          own: [], view: ['blow','rewind','warehouse','logistics','sales','planning'] },
+  ] as const)
+
+  const NAV = navAll
+    .filter(n => (n.own as readonly string[]).includes(dept) || (n.view as readonly string[]).includes(dept))
+    .map(n => ({ ...n, readOnly: !(n.own as readonly string[]).includes(dept) }))
+
+  // หน้าปัจจุบันเป็นแบบดูอย่างเดียวไหม — ส่งเข้าไปให้หน้านั้นซ่อนปุ่มที่แก้ข้อมูล
+  const pageReadOnly = NAV.find(n => n.key === page)?.readOnly ?? false
+
+  // ถ้าอยู่หน้าที่แผนกนี้ไม่มีสิทธิ์ (เช่น เปลี่ยนแผนกแล้วหน้าเดิมหายไป) → เด้งกลับหน้าหลักของแผนก
+  useEffect(() => {
+    const allowed = NAV.some(n => n.key === page)
+    if (!allowed && page !== 'admin') setPage(DEFAULT_PAGE[dept])
+  }, [dept, page])
 
   // หน้าที่ต้องล็อกด้วย PIN ผจก (เฉพาะ ผจก เข้าได้)
   const LOCKED_PAGES: Page[] = ['review', 'nc', 'admin']
@@ -289,7 +344,7 @@ export default function App() {
   if (showDeptSelect) {
     return (
       <div className="min-h-screen bg-[#0a0f1e] flex items-center justify-center p-4">
-        <div className="w-full max-w-lg">
+        <div className="w-full max-w-2xl">
           {/* Logo */}
           <div className="text-center mb-8">
             <img src="/logo.png" alt="BWP" className="w-20 h-20 rounded-full object-cover mx-auto mb-4 shadow-lg shadow-brand-600/30"/>
@@ -298,33 +353,24 @@ export default function App() {
           </div>
 
           {/* Department cards */}
-          <div className="space-y-3">
-            {(['blow','print','rewind'] as const).map(d => {
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {ALL_DEPTS.map(d => {
               const c = deptConfig[d]
-              const borderColors = {
-                blow: 'border-blue-500/40 hover:border-blue-400 hover:shadow-blue-500/20',
-                print: 'border-purple-500/40 hover:border-purple-400 hover:shadow-purple-500/20',
-                rewind: 'border-green-500/40 hover:border-green-400 hover:shadow-green-500/20',
-              }
-              const bgColors = {
-                blow: 'bg-blue-500/5 hover:bg-blue-500/10',
-                print: 'bg-purple-500/5 hover:bg-purple-500/10',
-                rewind: 'bg-green-500/5 hover:bg-green-500/10',
-              }
               return (
                 <button key={d}
                   onClick={() => {
                     setDept(d)
                     localStorage.setItem(DEPT_KEY, d)
+                    setPage(DEFAULT_PAGE[d])
                     setShowDeptGate(true) // ถามPINหลังเลือกแผนก (ยังไม่ปิดหน้าเลือก จนกว่าPINจะผ่าน)
                   }}
-                  className={`w-full flex items-center gap-4 px-6 py-5 rounded-2xl border-2 ${borderColors[d]} ${bgColors[d]} transition-all duration-200 hover:shadow-lg group`}>
-                  <span className="text-4xl group-hover:scale-110 transition-transform">{c.emoji}</span>
-                  <div className="text-left flex-1">
-                    <p className="text-white font-bold text-lg">{c.label}</p>
-                    <p className="text-slate-500 text-xs">{c.sub}</p>
+                  className={`w-full flex items-center gap-3 px-4 py-4 rounded-2xl border-2 ${c.border} ${c.bg} transition-all duration-200 hover:shadow-lg group`}>
+                  <span className="text-3xl group-hover:scale-110 transition-transform">{c.emoji}</span>
+                  <div className="text-left flex-1 min-w-0">
+                    <p className="text-white font-bold text-base truncate">{c.label}</p>
+                    <p className="text-slate-500 text-[11px] truncate">{c.sub}</p>
                   </div>
-                  <span className="text-slate-600 group-hover:text-slate-400 text-sm transition-colors">เข้าสู่ระบบ →</span>
+                  <span className="text-slate-600 group-hover:text-slate-400 text-lg transition-colors">→</span>
                 </button>
               )
             })}
@@ -368,9 +414,9 @@ export default function App() {
           {showDeptMenu && (
             <div className="absolute top-full left-0 mt-1.5 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-50 overflow-hidden w-52">
               <div className="px-3 py-2 border-b border-slate-800">
-                <p className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold">เลือกฝั่งการผลิต</p>
+                <p className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold">เลือกแผนก</p>
               </div>
-              {(['blow','print','rewind'] as const).map(d => {
+              {ALL_DEPTS.map(d => {
                 const c = deptConfig[d]
                 return (
                   <button key={d} onClick={() => switchDept(d)}
@@ -393,14 +439,16 @@ export default function App() {
 
         {/* Nav items */}
 
-        {NAV.map(({ key, label, icon: Icon }) => {
+        {NAV.map(({ key, label, icon: Icon, readOnly }) => {
           const badge = badges[key] ?? 0
           return (
           <button key={key} onClick={() => goPage(key)}
+            title={readOnly ? `${label} — ดูอย่างเดียว (เจ้าของงานคือแผนกอื่น)` : label}
             className={`relative flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-              page === key ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              page === key ? 'bg-brand-600 text-white' : readOnly ? 'text-slate-500 hover:text-slate-300 hover:bg-slate-800' : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}>
             <Icon size={14}/> <span className="hidden md:block">{label}</span>
+            {readOnly && <span className="text-[10px] opacity-70" title="ดูอย่างเดียว">👁</span>}
             {(key === 'review' || key === 'nc') && <span className="text-amber-400" title="เฉพาะ ผจก (ต้องใส่ PIN)">🔒</span>}
             {badge > 0 && (
               <span className={`ml-0.5 min-w-[18px] h-[18px] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-black text-white ${key==='nc' ? 'bg-purple-600' : 'bg-red-600'} ${page===key ? '' : 'animate-pulse'}`}>
@@ -442,19 +490,19 @@ export default function App() {
       <AnnouncementBar />
 
       <main className="flex-1 overflow-auto">
-        {page === 'weigh'     && <WeighStation key={weighKey} dept={dept} />}
-        {page === 'rollsearch'&& <RollSearch />}
-        {page === 'transfer'  && <Transfer dept={dept} />}
-        {page === 'warehouse' && <Warehouse dept={dept} />}
+        {page === 'weigh'     && <WeighStation key={weighKey} dept={sectionOf(dept)} />}
+        {page === 'rollsearch'&& <RollSearch readOnly={pageReadOnly} />}
+        {page === 'transfer'  && <Transfer dept={sectionOf(dept)} readOnly={pageReadOnly} />}
+        {page === 'warehouse' && <Warehouse dept={sectionOf(dept)} readOnly={pageReadOnly} />}
         {page === 'dashboard' && (
           <div>
             <div className="flex justify-end px-4 pt-3">
-              <a href={`/Dashboard?dept=${dept}`} target="_blank" rel="noopener noreferrer"
+              <a href={`/Dashboard?dept=${sectionOf(dept) ?? ''}`} target="_blank" rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg px-3 py-1.5">
                 🔗 เปิดแดชบอร์ดแยกหน้าต่าง
               </a>
             </div>
-            <Dashboard dept={dept} />
+            <Dashboard dept={sectionOf(dept)} readOnly={pageReadOnly} />
           </div>
         )}
         {page === 'combined'  && (
@@ -468,13 +516,13 @@ export default function App() {
             <CombinedDashboard />
           </div>
         )}
-        {page === 'planning'  && <Planning dept={dept} />}
-        {page === 'history'   && <HistoryPage dept={dept} />}
+        {page === 'planning'  && <Planning dept={sectionOf(dept)} />}
+        {page === 'history'   && <HistoryPage dept={sectionOf(dept)} />}
         {page === 'weighlog'  && <WeighLog />}
-        {page === 'products'  && <ProductsPage />}
-        {page === 'review'    && <ReviewQueue dept={dept} mode="prod" />}
-        {page === 'nc'        && <ReviewQueue dept={dept} mode="nc" />}
-        {page === 'settings'  && <MachineSettings dept={dept} />}
+        {page === 'products'  && <ProductsPage readOnly={pageReadOnly} />}
+        {page === 'review'    && <ReviewQueue dept={sectionOf(dept)} mode="prod" />}
+        {page === 'nc'        && <ReviewQueue dept={sectionOf(dept)} mode="nc" />}
+        {page === 'settings'  && <MachineSettings dept={sectionOf(dept)} />}
         {page === 'admin'     && <Admin dept={dept} />}
       </main>
 

@@ -110,6 +110,8 @@ export default function ReworkInbox({ onJumpToMachine }: { onJumpToMachine?: (ma
             thick_mc: r.thick_mc ?? '', cust_code: r.cust_code ?? '', cust_name: r.customer ?? '',
             cust_branch: r.cust_branch ?? '', core_weight: ((r.core_weight ?? '').toString().trim() || '1.25'), decimal_places: 2,
             planned_qty: rollKg.toString(), inspector: withdrawBy.trim(), label_size: 'long',
+            // ✨ หัวใบของผลิต ติดมากับงานกรอ → ใบที่ปริ้นจากกรอ หัวบริษัทเหมือนใบผลิต
+            header_text: r.header_text ?? '', blank_header: r.blank_header ?? false,
             source: 'from_production', source_roll_id: r.id, source_lot_no: (r.lot_no ?? '').trim(),
             source_roll_count: 1, source_defect_reason: r.remark ?? '',
             status: 'active', created_by: withdrawBy.trim(), created_at: now,
@@ -741,6 +743,9 @@ function ReceiveModal({ roll, onClose }: { roll: any; onClose: () => void }) {
         planned_qty:   rollKg.toString(),
         inspector:     by.trim(),
         label_size:    'long',
+        // ✨ หัวใบของผลิต ติดมากับงานกรอ → ใบที่ปริ้นจากกรอ หัวบริษัทเหมือนใบผลิต
+        header_text:   roll.header_text  ?? '',
+        blank_header:  roll.blank_header ?? false,
         source:        'from_production',
         source_roll_id: roll.id,
         source_lot_no:  srcLot,                   // Lot ต้นทาง — ใช้รวมม้วน Lot เดียวกัน

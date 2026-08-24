@@ -392,7 +392,8 @@ function shipRolls(ids: string[], at: string, by: string, docNo: string) {
 // ที่เหลืออีก 3 หมื่นกว่าม้วนตามมาเบื้องหลัง
 const RECENT_CUTOFF = new Date(Date.now() - 7 * 864e5).toISOString()
 
-export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
+export default function Warehouse({ dept, readOnly = false }: { dept?: 'blow'|'rewind'; readOnly?: boolean }) {
+  // readOnly = แผนกนี้ไม่ใช่เจ้าของงานคลัง (ขาย/ขนส่ง/วางแผน) → ดูได้ แต่แก้/ตัดสต็อกไม่ได้
   const [tab, setTab] = useState<Tab>('stock')
   const [rolls, setRolls] = useState<Roll[]>([])
   const [scrapRolls, setScrapRolls] = useState<any[]>([])
@@ -1028,9 +1029,17 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
               )}
             </p>
           </div>
-          <button onClick={loadAll} disabled={loading} className="flex items-center gap-1.5 text-slate-400 hover:text-white disabled:opacity-50 text-xs bg-slate-800 px-3 py-1.5 rounded-lg">
-            <RefreshCw size={12} className={loading ? 'animate-spin' : ''}/> รีเฟรช
-          </button>
+          <div className="flex items-center gap-2">
+            {readOnly && (
+              <span className="flex items-center gap-1.5 text-[11px] font-bold bg-slate-800 border border-slate-600 text-slate-300 px-3 py-1.5 rounded-lg"
+                title="แผนกนี้ดูข้อมูลคลังได้ แต่จัดส่ง/แจ้ง NC ไม่ได้ — เจ้าของงานคือแผนกคลัง">
+                👁 ดูอย่างเดียว
+              </span>
+            )}
+            <button onClick={loadAll} disabled={loading} className="flex items-center gap-1.5 text-slate-400 hover:text-white disabled:opacity-50 text-xs bg-slate-800 px-3 py-1.5 rounded-lg">
+              <RefreshCw size={12} className={loading ? 'animate-spin' : ''}/> รีเฟรช
+            </button>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -1042,7 +1051,7 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
             { key:'ship',  label:'จัดส่ง (ตาม SO)', icon: Truck },
             { key:'scrap', label: scrapLoaded ? `เศษ (${scrapRolls.length})` : 'เศษ', icon: Trash2 },
             { key:'history', label:'ประวัติเบิก/จัดส่ง', icon: BarChart3 },
-          ] as const).map(t => (
+          ] as const).filter(t => !readOnly || !['delivery','ship'].includes(t.key)).map(t => (
             <button key={t.key} onClick={() => setTab(t.key)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 tab === t.key ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'
@@ -1078,9 +1087,9 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
             {dept ? (
               <div className="self-end pb-0.5">
                 <span className={`text-xs font-bold px-3 py-2 rounded-xl border ${
-                  dept==='blow' ? 'bg-blue-500/15 text-blue-300 border-blue-500/30' : 'bg-purple-500/15 text-purple-300 border-purple-500/30'
+                  dept==='blow' ? 'bg-blue-500/15 text-blue-300 border-blue-500/30' : 'bg-green-500/15 text-green-300 border-green-500/30'
                 }`}>
-                  {dept==='blow' ? '🌬 ผลิต(เป่า)' : dept==='print' ? '🖨 ผลิต(พิมพ์)' : '🔁 กรอ(Rework)'}
+                  {dept==='blow' ? '🌬 ผลิต(เป่า)' : '🔁 กรอ'}
                 </span>
               </div>
             ) : (
@@ -1291,10 +1300,14 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                                     ↩ <b>ม้วนนี้เคยถูกแจ้ง NC แล้วคืนกลับคลัง</b> — {rr.remark}
                                   </div>
                                 )}
+                                {readOnly ? (
+                                  <p className="text-[11px] text-slate-500">👁 ดูอย่างเดียว — แจ้ง NC ได้เฉพาะแผนกคลัง</p>
+                                ) : (
                                 <button onClick={(e) => { e.stopPropagation(); setReturnModal(r) }}
                                   className="text-sm bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded-xl font-bold">
                                   ⚠ แจ้ง NC — ม้วนเสีย/มีปัญหาในคลัง (รอ ผจก ตัดสิน)
                                 </button>
+                                )}
                               </td>
                             </tr>
                             )}
@@ -1578,11 +1591,13 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                   </div>
                 )}
 
+                {!readOnly && (
                 <button onClick={() => { setSelSoNo(g.so); setSelectedRolls(new Set()); setSoTargetInput(''); setSoOpenWO(new Set()); setTab('ship') }}
                   disabled={g.stockRolls.length === 0}
                   className="flex items-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm px-4 py-2 rounded-xl font-bold">
                   <Truck size={15}/> จัดของ SO นี้
                 </button>
+                )}
               </div>
             )})}
           </div>
@@ -1882,10 +1897,12 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                         className="flex items-center gap-1 text-[11px] bg-amber-600/80 hover:bg-amber-600 text-white px-2 py-1 rounded">
                         <Printer size={12}/> ออกใบส่งแก้ยอด
                       </button>
+                      {!readOnly && (
                       <button onClick={() => { loadOlder(); setReplaceGroup(g) }}
                         className="flex items-center gap-1 text-[11px] bg-brand-600/80 hover:bg-brand-600 text-white px-2 py-1 rounded">
                         <Plus size={12}/> เพิ่มม้วนแทน
                       </button>
+                      )}
                     </div>
                     {isOpen && (
                       <div className="overflow-x-auto border-t border-slate-800">
@@ -1909,10 +1926,12 @@ export default function Warehouse({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                                 <td className="px-3 py-1.5">{r.machine_no ?? '—'}</td>
                                 <td className="px-3 py-1.5 text-slate-500">{r.shipped_at ? fmtDT(r.shipped_at) : '—'}</td>
                                 <td className="px-3 py-1.5 text-right">
+                                  {readOnly ? <span className="text-slate-600 text-[11px]">—</span> : (
                                   <button onClick={() => setReturnModal(r)}
                                     className="text-[11px] bg-amber-600/80 hover:bg-amber-600 text-white px-2 py-0.5 rounded">
                                     รับคืน/แจ้ง NC
                                   </button>
+                                  )}
                                 </td>
                               </tr>
                             ))}

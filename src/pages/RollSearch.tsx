@@ -91,7 +91,7 @@ function parseQuery(raw: string): { f: Filters; chips: [string, string][] } {
   return { f, chips }
 }
 
-export default function RollSearch() {
+export default function RollSearch({ readOnly = false }: { readOnly?: boolean } = {}) {
   const [input, setInput] = useState('')
   const [chips, setChips] = useState<[string, string][]>([])
   const [rolls, setRolls] = useState<Roll[]>([])
@@ -415,7 +415,7 @@ export default function RollSearch() {
             {/* ── ลบม้วน (ชั่งผิด/งานผิด) ── */}
             <div className="px-5 py-3 border-t border-slate-800">
               {!delMode ? (
-                <button onClick={() => setDelMode(true)}
+                <button hidden={readOnly} onClick={() => setDelMode(true)}
                   className="w-full text-red-300 hover:text-white text-xs font-bold bg-red-500/10 hover:bg-red-600 border border-red-500/40 rounded-lg py-2">
                   🗑 ลบม้วนนี้ (ชั่งผิด / งานผิด)
                 </button>

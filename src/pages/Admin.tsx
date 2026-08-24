@@ -5,7 +5,9 @@ import { exportSheetsToExcel } from '../lib/exportExcel'
 import Products from './Products'
 import LabelDesigner from './LabelDesigner'
 
-type Dept = 'blow' | 'print' | 'rewind'
+// แผนก = โปรไฟล์ผู้ใช้ที่ใช้ล็อกอิน (คนละเรื่องกับ section ของข้อมูล blow/rewind ที่อยู่บนม้วน)
+export type Dept = 'sales' | 'purchase' | 'planning' | 'blow' | 'rewind' | 'warehouse' | 'logistics'
+export const ALL_DEPTS = ['sales','purchase','planning','blow','rewind','warehouse','logistics'] as const
 
 // ─── Backup ทั้งฐานข้อมูลเป็น Excel (หลายชีต) ─────────────────────────────────
 const BACKUP_TABLES: { table: string; sheet: string }[] = [
@@ -55,9 +57,22 @@ function rowsToAoa(rows: any[]): any[][] {
   return aoa
 }
 
-const PIN_DEFAULTS = { admin_pin:'9999', pin_blow:'1111', pin_print:'2222', pin_rewind:'3333' } as const
-const DEPT_KEYS    = { blow:'pin_blow', print:'pin_print', rewind:'pin_rewind' } as const
-const DEPT_LABELS  = { blow:'ผลิต(เป่า)', print:'ผลิต(พิมพ์)', rewind:'กรอ(Rework)' } as const
+const PIN_DEFAULTS = {
+  admin_pin:'9999',
+  pin_sales:'4444', pin_purchase:'5555', pin_planning:'6666',
+  pin_blow:'1111',  pin_rewind:'3333',
+  pin_warehouse:'7777', pin_logistics:'8888',
+} as const
+const DEPT_KEYS = {
+  sales:'pin_sales', purchase:'pin_purchase', planning:'pin_planning',
+  blow:'pin_blow', rewind:'pin_rewind',
+  warehouse:'pin_warehouse', logistics:'pin_logistics',
+} as const
+export const DEPT_LABELS = {
+  sales:'ขาย', purchase:'จัดซื้อ', planning:'วางแผน',
+  blow:'ผลิต(เป่า)', rewind:'กรอ',
+  warehouse:'คลัง', logistics:'ขนส่ง',
+} as const
 
 // ─── ดึง/บันทึก PIN ─────────────────────────────────────────────────────────
 export async function fetchPin(key: keyof typeof PIN_DEFAULTS): Promise<string> {
@@ -100,7 +115,7 @@ export function isAdminUnlocked() { return sessionStorage.getItem(adminSess) ===
 export function unlockAdmin()     {
   sessionStorage.setItem(adminSess, '1')
   // 🔑 Admin = master key — ปลดล็อกทุกแผนกอัตโนมัติ
-  ;(['blow','print','rewind'] as const).forEach(d => sessionStorage.setItem(deptSess(d), '1'))
+  ;ALL_DEPTS.forEach(d => sessionStorage.setItem(deptSess(d), '1'))
 }
 export function lockAdmin()       { sessionStorage.removeItem(adminSess) }
 
@@ -111,7 +126,7 @@ export function isDeptUnlocked(d: Dept) {
 export function unlockDept(d: Dept)     { sessionStorage.setItem(deptSess(d), '1') }
 export function lockDept(d: Dept)       { sessionStorage.removeItem(deptSess(d)) }
 export function lockAllDepts() {
-  (['blow','print','rewind'] as const).forEach(lockDept)
+  ALL_DEPTS.forEach(lockDept)
 }
 
 // ─── Generic PIN Gate ───────────────────────────────────────────────────────
@@ -210,7 +225,7 @@ export function DeptPinGate({ dept, onUnlock, onClose }: {
 // ─── Main Admin Page ─────────────────────────────────────────────────────────
 type Tab = 'labels' | 'pin'
 
-export default function Admin({ dept: _dept }: { dept?: 'blow'|'print'|'rewind' }) {
+export default function Admin({ dept: _dept }: { dept?: Dept }) {
   const [tab, setTab] = useState<Tab>('labels')
   const [backingUp, setBackingUp] = useState(false)
   const [backupMsg, setBackupMsg] = useState('')
@@ -304,9 +319,13 @@ function PinManager() {
 
       <div className="space-y-3">
         <PinChangeCard pinKey="admin_pin" label="🔒 Admin PIN"           color="amber" show={show}/>
-        <PinChangeCard pinKey="pin_blow"  label="🌬 ผลิต(เป่า) — PIN"   color="blue"  show={show}/>
-        <PinChangeCard pinKey="pin_print" label="🖨 ผลิต(พิมพ์) — PIN" color="purple" show={show}/>
-        <PinChangeCard pinKey="pin_rewind" label="🔁 กรอ(Rework) — PIN" color="green" show={show}/>
+        <PinChangeCard pinKey="pin_sales"     label="💼 ขาย — PIN"        color="rose"   show={show}/>
+        <PinChangeCard pinKey="pin_purchase"  label="🛒 จัดซื้อ — PIN"    color="orange" show={show}/>
+        <PinChangeCard pinKey="pin_planning"  label="📅 วางแผน — PIN"     color="purple" show={show}/>
+        <PinChangeCard pinKey="pin_blow"      label="🌬 ผลิต(เป่า) — PIN" color="blue"   show={show}/>
+        <PinChangeCard pinKey="pin_rewind"    label="🔁 กรอ — PIN"        color="green"  show={show}/>
+        <PinChangeCard pinKey="pin_warehouse" label="📦 คลัง — PIN"       color="cyan"   show={show}/>
+        <PinChangeCard pinKey="pin_logistics" label="🚚 ขนส่ง — PIN"      color="amber"  show={show}/>
       </div>
 
       <div className="mt-6">
@@ -402,9 +421,9 @@ function FeatureFlagCard({ flagKey, label, desc }: { flagKey: string; label: str
 }
 
 function PinChangeCard({ pinKey, label, color, show }: {
-  pinKey: 'admin_pin' | 'pin_blow' | 'pin_print' | 'pin_rewind'
+  pinKey: keyof typeof PIN_DEFAULTS
   label: string
-  color: 'amber' | 'blue' | 'purple' | 'green'
+  color: 'amber' | 'blue' | 'purple' | 'green' | 'rose' | 'cyan' | 'orange'
   show: boolean
 }) {
   const [current,  setCurrent]  = useState('')
@@ -423,6 +442,9 @@ function PinChangeCard({ pinKey, label, color, show }: {
     blue:   'border-blue-500/30 bg-blue-500/5',
     purple: 'border-purple-500/30 bg-purple-500/5',
     green:  'border-green-500/30 bg-green-500/5',
+    rose:   'border-rose-500/30 bg-rose-500/5',
+    cyan:   'border-cyan-500/30 bg-cyan-500/5',
+    orange: 'border-orange-500/30 bg-orange-500/5',
   }[color]
 
   async function save() {

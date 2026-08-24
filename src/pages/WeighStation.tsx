@@ -46,6 +46,59 @@ function rolloverLotNo(lot: string, machine: string): string {
   return `${yy}${mc}${m[2]}${mm}`
 }
 
+// ── หัวใบ/ข้อมูลลูกค้า ของงานผลิตต้นทาง (ใช้ให้ใบของ "กรอ" เหมือนใบของ "ผลิต" เป๊ะ) ──────
+//   ม้วนกรอต้องพิมพ์หัวบริษัท + รายละเอียดลูกค้าเหมือนม้วนผลิตต้นทาง
+//   1) เอาจากม้วนต้นทางก่อน (ถ้าเก็บไว้)
+//   2) งานเก่าที่ม้วนต้นทางยังไม่มีหัวใบ → สืบจากม้วนผลิตใบอื่นของสินค้า/WO เดียวกัน
+export type ProdIdentity = {
+  header_text: string; blank_header: boolean
+  cust_code: string; cust_branch: string; cust_address: string; label_position: string
+}
+const _identCache: Record<string, ProdIdentity | null> = {}
+export async function resolveProdIdentity(src: any): Promise<ProdIdentity | null> {
+  if (!src) return null
+  const pick = (r: any): ProdIdentity => ({
+    header_text:  r.header_text  ?? '',
+    blank_header: r.blank_header ?? false,
+    cust_code:    r.cust_code    ?? '',
+    cust_branch:  r.cust_branch  ?? '',
+    cust_address: r.cust_address ?? '',
+    label_position: r.label_position ?? '',
+  })
+  // ม้วนต้นทางเก็บหัวใบไว้แล้ว (หรือสั่ง "เว้นหัวว่าง" ไว้) → ใช้ค่านั้นเลย
+  if ((src.header_text ?? '').trim() || src.blank_header) return pick(src)
+  const ic = (src.item_code ?? '').trim()
+  const wo = (src.work_order ?? '').trim()
+  if (!ic && !wo) return src.id ? pick(src) : null
+  const key = `${ic}__${wo}`
+  if (key in _identCache) return _identCache[key] ?? (src.id ? pick(src) : null)
+  try {
+    // ขอบเขต: มี WO → เฉพาะ WO นั้น · ไม่มี WO → ทั้งสินค้า
+    //   ⚠ ห้ามถอยจาก WO ไปทั้งสินค้า — คนละ WO ตั้งหัวใบไม่เหมือนกัน
+    //   ⚠ ดูเฉพาะ "ม้วนดี" (ใบสินค้าจริง) — ม้วนเสีย/เศษบางใบถูกชั่งตอนเครื่องเปลี่ยนงานไปแล้ว
+    //      หัวใบจะเป็นของงานถัดไป (outlier) ถ้าเอามาใช้จะได้หัวผิด
+    //   ⚠ ใช้ "หัวที่ใบผลิตส่วนใหญ่ใช้จริง" (mode) ไม่ใช่ใบล่าสุด — กันใบหลงเพียงใบเดียว
+    const scope = (q: any) => wo ? q.eq('work_order', wo) : q.eq('item_code', ic)
+    const { data } = await scope(supabase.from('production_rolls')
+      .select('header_text, blank_header, cust_code, cust_branch, cust_address, label_position')
+      .neq('section', 'rewind').eq('roll_type', 'good').limit(1000))
+    let found: ProdIdentity | null = null
+    if (data && data.length) {
+      const tally = new Map<string, { n: number; row: any }>()
+      for (const r of data as any[]) {
+        const k = ((r.header_text ?? '').trim()) + (r.blank_header ? '|BLANK' : '')
+        const t = tally.get(k) ?? { n: 0, row: r }
+        t.n++; tally.set(k, t)
+      }
+      const top = [...tally.values()].sort((a, b) => b.n - a.n)[0]
+      // ส่วนใหญ่ไม่ได้ตั้งหัวใบ → ผลิตก็ปริ้นหัว default → กรอ default ตาม (ไม่ต้องสืบต่อ)
+      found = ((top.row.header_text ?? '').trim() || top.row.blank_header) ? pick(top.row) : null
+    }
+    _identCache[key] = found
+    return found ?? (src.id ? pick(src) : null)
+  } catch { return src.id ? pick(src) : null }
+}
+
 // ── Print Label ───────────────────────────────────────────────────────────────
 // รีปริ้นใบปะหน้าจาก record ม้วนที่บันทึกไว้แล้ว (สร้าง profile จากข้อมูลม้วน) — ใช้จากหน้าอื่นได้
 // แปลงแถว production_rolls → MachineProfile สำหรับปริ้นใบ (ใช้ร่วมทั้งรีปริ้นเดี่ยว/รวม)
@@ -94,7 +147,20 @@ async function machineDecimal(machineNo: string): Promise<number> {
 
 export async function reprintRollLabel(roll: any, size: 'long' | 'short' = 'long') {
   const p = rollToProfile(roll, size)
-  p.decimal = await machineDecimal(roll.machine_no ?? '')   // ทศนิยมตามเครื่อง (BL02/BL04 = 1)
+  p.decimal = await machineDecimal(roll.machine_no ?? '')
+  // ม้วนกรอของงานเก่า (ยังไม่ได้เก็บหัวใบติดม้วน) → สืบหัวใบ/ลูกค้า จากฝั่งผลิต ให้ใบเหมือนกัน
+  const isRw = (roll.section === 'rewind') || !!roll.rework_source_roll_id
+  if (isRw && !(roll.header_text ?? '').trim() && !roll.blank_header) {
+    const id = await resolveProdIdentity(roll)
+    if (id) {
+      p.headerText  = id.header_text
+      p.blankHeader = id.blank_header
+      p.custCode    = p.custCode    || id.cust_code
+      p.custBranch  = p.custBranch  || id.cust_branch
+      p.custAddress = p.custAddress || id.cust_address
+      p.labelPosition = p.labelPosition || id.label_position
+    }
+  }   // ทศนิยมตามเครื่อง (BL02/BL04 = 1)
   // รีปริ้น: ใช้ "วันที่ชั่งจริง" (created_at ของม้วน) เป็น MFG ไม่ใช่วันที่รีปริ้น
   await printLabel(p as MachineProfile, roll.roll_no ?? 0, roll.gross_weight ?? 0, roll.weight ?? 0, size, roll.roll_type ?? 'good', roll.remark ?? '', roll.id, roll.created_at ?? null)
 }
@@ -643,7 +709,7 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
   profiles: MachineProfile[]
   onSelect: (p: MachineProfile) => void
   onProfileUpdated: () => void
-  dept?: 'blow' | 'print' | 'rewind'
+  dept?: 'blow' | 'rewind'
 }) {
   const [editing, setEditing]   = useState<MachineProfile | null>(null)
   const [progress, setProgress] = useState<Record<string, { done: number; rolls: number; badKg: number; badRolls: number }>>({})
@@ -836,10 +902,9 @@ function MachinePicker({ profiles, onSelect, onProfileUpdated, dept }: {
               {dept && (
                 <span className={`text-sm font-bold px-3 py-1 rounded-full ${
                   dept==='blow'   ? 'bg-blue-500/20 text-blue-300' :
-                  dept==='print'  ? 'bg-purple-500/20 text-purple-300' :
                                     'bg-green-500/20 text-green-300'
                 }`}>
-                  {dept==='blow' ? '🌬 ผลิต(เป่า)' : dept==='print' ? '🖨 ผลิต(พิมพ์)' : '🔁 กรอ(Rework)'}
+                  {dept==='blow' ? '🌬 ผลิต(เป่า)' : '🔁 กรอ'}
                 </span>
               )}
             </h1>
@@ -1173,7 +1238,7 @@ function ItemCodePicker({ value, products, onChange, onPick }: {
 
 // ── Resume Closed Job Modal — ดึงงานที่ปิดไปแล้วกลับมาทำต่อ ──────────────────
 function ResumeClosedJobModal({ dept, machines, onClose, onResumed }: {
-  dept?: 'blow' | 'print' | 'rewind'
+  dept?: 'blow' | 'rewind'
   machines: MachineProfile[]
   onClose: () => void
   onResumed: () => void
@@ -2936,6 +3001,10 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         ? { text: manualSrcText.trim(), kg: parseFloat(manualSrcKg) || 0 } : null
       // กรอต่อ: ม้วนต้นทางที่ 2 (รวม 2 ม้วน → ออก 1 ม้วน)
       const useSrc2 = (isRework && isGood && selSrc && selSrc2) ? selSrc2 : null
+      // ✨ ม้วนกรอ: หัวใบ + รายละเอียดลูกค้า ต้องเหมือนใบของผลิต (สืบจากม้วนต้นทาง · ไม่มีก็สืบจาก WO/สินค้า)
+      const inh = (isRework && isGood)
+        ? await resolveProdIdentity(useSrc ?? { item_code: profile.itemCode, work_order: profile.woNo ?? '' })
+        : null
       const srcKg  = useSrc ? ((useSrc.weight ?? 0) + (useSrc2 ? (useSrc2.weight ?? 0) : 0)) : useManual ? useManual.kg : 0
       const cumKg  = useSrc ? (useSrc2 ? saveWeight : ((srcProg[useSrc.id] ?? 0) + saveWeight)) : saveWeight
       const scrapKg = Math.max(0, srcKg - cumKg)
@@ -2980,8 +3049,9 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       // ── หัวใบปะหน้า ──────────────────────────────────────────
       //   ค่าตั้งต้น: ม้วนกรอ → สืบทอดจากม้วนต้นทาง · เป่า/พิมพ์ → ใช้ที่ตั้งกับเครื่อง
       //   แผนกกรอเลือกทับได้ตอนชั่ง (hdrMode) — ใช้ทั้งที่บันทึกและที่พิมพ์ใบ
-      let hdrText  = (isRework && isGood && useSrc) ? (useSrc.header_text ?? '') : ((profile as any).headerText ?? '')
-      let hdrBlank = (isRework && isGood && useSrc) ? (useSrc.blank_header ?? false) : ((profile as any).blankHeader ?? false)
+      //   โหมด 'src' = "ตามงานผลิต": เอาจากม้วนต้นทาง · ต้นทางไม่มี → สืบจากใบผลิตของ WO/สินค้าเดียวกัน (inh)
+      let hdrText  = inh ? inh.header_text  : ((profile as any).headerText ?? '')
+      let hdrBlank = inh ? inh.blank_header : ((profile as any).blankHeader ?? false)
       if (isRework) {
         if      (hdrMode === 'cust')  { hdrText = (profile.custName ?? '').trim(); hdrBlank = false }
         else if (hdrMode === 'bwp')   { hdrText = '';                              hdrBlank = false }
@@ -3014,8 +3084,9 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         mat_code:     profile.matCode     ?? '',
         product_name: profile.productName,
         customer:     profile.custName,
-        cust_code:    (profile as any).custCode ?? '',   // ✨ เก็บรหัสลูกค้า → รีปริ้นรู้ลูกค้า 08 = มี EXP
-        cust_branch:  (profile as any).custBranch ?? '',
+        // ✨ รหัส/สาขา/ที่อยู่ลูกค้า: ม้วนกรอสืบจากผลิต (เช่น ลูกค้า 08 = ใบต้องมี EXP เหมือนกัน)
+        cust_code:    (inh && inh.cust_code)   ? inh.cust_code   : ((profile as any).custCode ?? ''),
+        cust_branch:  (inh && inh.cust_branch) ? inh.cust_branch : ((profile as any).custBranch ?? ''),
         // ✨ หัวใบ (ชื่อลูกค้า): ม้วนกรอ → สืบทอดจากม้วนต้นทาง (งานเป่าตั้งหัวไว้ยังไง กรอต้องเป็นแบบนั้น)
         //    · งานเป่า/พิมพ์ปกติ → ใช้หัวที่ตั้งกับเครื่อง (profile)
         header_text:  hdrText,
@@ -3023,8 +3094,8 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         label_size:   (profile as any).labelSize ?? 'long',   // ✨ เก็บขนาดใบปะหน้า → ดึงงานเก่ากลับได้ครบ
         // ✨ ตำแหน่งแปะป้าย (แปะหัว/ข้าง) — กำหนดที่ WO → ติดม้วน → โชว์บนใบส่ง
         //    ม้วนกรอ → สืบทอดจากม้วนต้นทาง (เหมือน header_text)
-        label_position: (isRework && isGood && useSrc) ? (useSrc.label_position ?? '') : ((profile as any).labelPosition ?? ''),
-        cust_address: (profile as any).custAddress ?? '',     // ✨ เก็บที่อยู่ลูกค้าติดม้วน → กู้กลับได้
+        label_position: (inh && inh.label_position) ? inh.label_position : ((profile as any).labelPosition ?? ''),
+        cust_address: (inh && inh.cust_address) ? inh.cust_address : ((profile as any).custAddress ?? ''),
         section:      profile.section ?? 'blow',
         width_cm:     profile.widthCm || null,
         width_unit:   profile.widthUnit ?? 'cm',
@@ -3186,9 +3257,11 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         const newList = [...(monthRolled ? [] : weighedRolls), data]
         setRollNo(nextRollNo(newList.filter((r:any) => r?.roll_type === 'good'), isRework))
         // print fire-and-forget (ไม่ await — ไม่บล็อก save flow)
-        // หัวใบที่ปริ้น = หัวใบที่บันทึกลงม้วนจริง (ม้วนกรอสืบทอดจากม้วนต้นทาง) — เดิมใช้ของ profile
-        // ทำให้ม้วนกรอที่งานกรอไม่ได้ตั้งหัวใบ ปริ้นออกเป็น "เบสท์เวิลด์ฯ" ทั้งที่ในม้วนเก็บชื่อลูกค้าไว้
-        printLabel({...profile, lotNo: effLot, length: lengthVal || profile.length, pcs: pcsVal || profile.pcs, inspector, headerText: hdrText, blankHeader: hdrBlank}, useRollNo, gross, saveWeight, (isRework ? 'short' : (profile.labelSize ?? 'long')),'good', '', data.id)
+        // หัวใบ + รายละเอียดลูกค้าที่ปริ้น = ค่าที่บันทึกลงม้วนจริง (ม้วนกรอ = ตามงานผลิต)
+        //   เดิมใช้ของ profile (เครื่องกรอ) → ใบแรกที่ปริ้นตอนชั่งเป็น "เบสท์เวิลด์ฯ" ไม่ตรงกับใบผลิต
+        printLabel({...profile, lotNo: effLot, length: lengthVal || profile.length, pcs: pcsVal || profile.pcs, inspector,
+          headerText: payload.header_text, blankHeader: payload.blank_header,
+          custCode: payload.cust_code, custBranch: payload.cust_branch, custAddress: payload.cust_address}, useRollNo, gross, saveWeight, (isRework ? 'short' : (profile.labelSize ?? 'long')),'good', '', data.id)
         // กรอต่อ: ม้วนต้นทางที่ 2 ถูกรวมเข้าม้วนนี้แล้ว → mark consumed (หลุดจากลิสต์ต้นทาง)
         if (useSrc2) {
           supabase.from('production_rolls')
@@ -4473,11 +4546,11 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
 
             {/* Reprint */}
             <div className="flex gap-2 px-5 pt-4 border-t border-slate-800">
-              <button onClick={() => printLabel({...profile, length: selectedRoll.length || profile.length, pcs: selectedRoll.pcs || profile.pcs, inspector: selectedRoll.inspector || profile.inspector, headerText: selectedRoll.header_text ?? profile.headerText, blankHeader: selectedRoll.blank_header ?? profile.blankHeader}, selectedRoll.roll_no, selectedRoll.gross_weight??0, selectedRoll.weight??0, 'short', selectedRoll.roll_type, selectedRoll.remark??'', selectedRoll.id)}
+              <button onClick={() => reprintRollLabel(selectedRoll, 'short')}
                 className="flex-1 flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white text-sm py-2.5 rounded-xl transition-colors">
                 <Printer size={14}/> ใบสั้น
               </button>
-              <button onClick={() => printLabel({...profile, length: selectedRoll.length || profile.length, pcs: selectedRoll.pcs || profile.pcs, inspector: selectedRoll.inspector || profile.inspector, headerText: selectedRoll.header_text ?? profile.headerText, blankHeader: selectedRoll.blank_header ?? profile.blankHeader}, selectedRoll.roll_no, selectedRoll.gross_weight??0, selectedRoll.weight??0, 'long', selectedRoll.roll_type, selectedRoll.remark??'', selectedRoll.id)}
+              <button onClick={() => reprintRollLabel(selectedRoll, 'long')}
                 className="flex-1 flex items-center justify-center gap-1.5 bg-brand-600 hover:bg-brand-700 text-white text-sm py-2.5 rounded-xl transition-colors font-semibold">
                 <Printer size={14}/> ใบยาว
               </button>
@@ -4550,7 +4623,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
   )
 }
 
-export default function WeighStation({ dept }: { dept?: 'blow' | 'print' | 'rewind' }) {
+export default function WeighStation({ dept }: { dept?: 'blow' | 'rewind' }) {
   const [selected, setSelected] = useState<MachineProfile | null>(null)
   const [profiles, setProfiles] = useState<MachineProfile[]>(loadProfiles())
   const [jumpHistory, setJumpHistory] = useState(0)   // บั๊มพ์ → สั่งรายการงานสลับไปแท็บ "ประวัติกรอ" หลังชั่งเสร็จ

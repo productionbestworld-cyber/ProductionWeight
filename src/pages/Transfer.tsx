@@ -365,7 +365,7 @@ function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString('th-TH', { timeZone:'Asia/Bangkok', hour: '2-digit', minute: '2-digit' })
 }
 
-export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
+export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'rewind'; readOnly?: boolean }) {
   const [rolls,       setRolls]       = useState<any[]>([])
   const [docs,        setDocs]        = useState<any[]>([])
   const [tab,         setTab]         = useState<'transfer'|'history'>('transfer')
@@ -1223,11 +1223,16 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                     className="flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-600 text-white text-xs px-3 py-2 rounded-xl font-bold">
                     <Download size={12}/> Excel
                   </button>
+                  {readOnly ? (
+                    <span className="text-[11px] font-bold bg-slate-800 border border-slate-600 text-slate-300 px-3 py-2 rounded-xl"
+                      title="แผนกนี้ดูรายการโอนได้ แต่กดโอนไม่ได้ — เจ้าของงานคือแผนกผลิต">👁 ดูอย่างเดียว</span>
+                  ) : (
                   <button onClick={handleTransfer} disabled={saving || !staff.trim()}
                     className="flex items-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm px-5 py-2 rounded-xl font-bold transition-colors">
                     <ArrowRightFromLine size={14}/>
                     {saving ? 'กำลังโอน...' : typeFilter==='bad' ? 'ยืนยันโอนไปกรอ' : 'ยืนยันโอนเข้าคลัง'}
                   </button>
+                  )}
                 </div>
               </div>
             )}
@@ -1386,7 +1391,7 @@ export default function Transfer({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
                           className="text-sm text-slate-500 hover:text-brand-300 px-2 py-1 rounded hover:bg-slate-800 transition-colors flex-shrink-0">📋</button>
 
                         {/* undo */}
-                        {isDone && (
+                        {isDone && !readOnly && (
                           <button onClick={(e) => { e.stopPropagation(); undoTransfer(r.id) }}
                             className="text-[10px] text-slate-600 hover:text-red-400 px-2 py-1 rounded hover:bg-slate-800 transition-colors flex-shrink-0">
                             ↶

@@ -64,7 +64,7 @@ function rollOrigin(r: Roll): { label: string; sub: string; cls: string } {
 const DEPT_LABEL: Record<string,string> = { blow:'เป่า', print:'พิมพ์', rewind:'กรอ' }
 
 // mode: 'prod' = พิจารณาม้วนกรอ (ผลิตประเมินว่ากรอไม่ได้) · 'nc' = NC จริง (คลัง/QC)
-export default function ReviewQueue({ dept, mode = 'prod' }: { dept?: 'blow'|'print'|'rewind'; mode?: 'prod'|'nc' }) {
+export default function ReviewQueue({ dept, mode = 'prod' }: { dept?: 'blow'|'rewind'; mode?: 'prod'|'nc' }) {
   const isNC = mode === 'nc'
   const [allRolls, setAllRolls] = useState<Roll[]>([])
   const [loading, setLoading] = useState(true)

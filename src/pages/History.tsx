@@ -14,7 +14,7 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok', day:'2-digit', month:'2-digit', year:'numeric' })
 }
 
-export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
+export default function History({ dept }: { dept?: 'blow'|'rewind' }) {
   const [summaries, setSummaries] = useState<any[]>([])
   const [loading,   setLoading]   = useState(true)
   const [selected,  setSelected]  = useState<any|null>(null)
@@ -184,8 +184,8 @@ export default function History({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
               <HistoryIcon size={22} className="text-brand-400" /> ประวัติการผลิต
               {dept && (
                 <span className={`text-sm font-bold px-2.5 py-0.5 rounded-full border ${
-                  dept==='blow' ? 'bg-blue-500/15 text-blue-300 border-blue-500/30' : dept==='print' ? 'bg-purple-500/15 text-purple-300 border-purple-500/30' : 'bg-green-500/15 text-green-300 border-green-500/30'
-                }`}>{dept==='blow' ? '🌬 ผลิต(เป่า)' : dept==='print' ? '🖨 ผลิต(พิมพ์)' : '🔁 กรอ(Rework)'}</span>
+                  dept==='blow' ? 'bg-blue-500/15 text-blue-300 border-blue-500/30' : 'bg-green-500/15 text-green-300 border-green-500/30'
+                }`}>{dept==='blow' ? '🌬 ผลิต(เป่า)' : '🔁 กรอ'}</span>
               )}
             </h1>
             <p className="text-slate-400 text-xs mt-0.5">งานที่ปิดแล้ว — ข้อมูลถาวร</p>

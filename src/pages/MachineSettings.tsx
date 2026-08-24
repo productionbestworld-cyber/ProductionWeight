@@ -615,7 +615,7 @@ function EditModal({ p, products, onChange, onAutoFill, onRemove, onClose, onPro
 }
 
 // ─── Main Settings Page ───────────────────────────────────────────────────────
-export default function MachineSettings({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
+export default function MachineSettings({ dept }: { dept?: 'blow'|'rewind' }) {
   const [profiles,     setProfiles]     = useState<MachineProfile[]>([])
   const [products,     setProducts]     = useState<Product[]>([])
   const [saved,        setSaved]        = useState(false)

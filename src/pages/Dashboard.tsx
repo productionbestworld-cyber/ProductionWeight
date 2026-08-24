@@ -116,7 +116,7 @@ function CustomTooltip({ active, payload, label }: any) {
   )
 }
 
-export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) {
+export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'rewind'; readOnly?: boolean }) {
   const [rolls,   setRolls]   = useState<Roll[]>([])
   const [jobs,    setJobs]    = useState<any[]>([])
   const [transfers, setTransfers] = useState<any[]>([])
@@ -589,7 +589,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
               </div>
             </div>
             <div className="flex items-center gap-2 self-end">
-              <button onClick={() => setShowImport(true)}
+              <button hidden={readOnly} onClick={() => setShowImport(true)}
                 className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors">
                 <Upload size={12}/> นำเข้ายอดผลิต (Excel)
               </button>
@@ -878,7 +878,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                           <td className="px-3 py-2 font-bold text-amber-700">{num(r.weight,2)} kg</td>
                           <td className="px-3 py-2 text-xs text-gray-600 max-w-[220px]">{r.remark||'—'}</td>
                           <td className="px-3 py-2">
-                            <button onClick={()=>setCtrlDecideRoll(r)} className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold">ตัดสิน →</button>
+                            <button hidden={readOnly} onClick={()=>setCtrlDecideRoll(r)} className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold">ตัดสิน →</button>
                           </td>
                         </tr>
                       ))}
@@ -910,7 +910,7 @@ export default function Dashboard({ dept }: { dept?: 'blow'|'print'|'rewind' }) 
                           <td className="px-3 py-2"><span className="bg-indigo-100 text-indigo-700 font-bold text-xs px-2 py-0.5 rounded">{j.machine_no||'—'}</span></td>
                           <td className="px-3 py-2 text-gray-500 text-xs">{j.created_at ? new Date(j.created_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—'}</td>
                           <td className="px-3 py-2">
-                            <button onClick={()=>setCtrlCloseJob(j)} className="bg-rose-500 hover:bg-rose-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold">ปิดงาน ✕</button>
+                            <button hidden={readOnly} onClick={()=>setCtrlCloseJob(j)} className="bg-rose-500 hover:bg-rose-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold">ปิดงาน ✕</button>
                           </td>
                         </tr>
                       ))}

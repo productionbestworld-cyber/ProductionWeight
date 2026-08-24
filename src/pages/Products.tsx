@@ -1,9 +1,14 @@
-import { useEffect, useState, useMemo, useRef } from 'react'
+import { useEffect, useState, useMemo, useRef, createContext, useContext } from 'react'
 import { Plus, Trash2, Search, Upload, Download, X, Edit3, RefreshCw, Building2, Boxes, ChevronRight, FileSpreadsheet } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import * as XLSX from 'xlsx'
 import { exportToExcel } from '../lib/exportExcel'
 import { reprintRollLabel } from './WeighStation'
+
+// ── โหมดดูอย่างเดียว — แผนกที่ไม่ใช่เจ้าของคลังข้อมูล (ขาย/วางแผน) ดูได้แต่แก้ไม่ได้ ──
+// ส่งผ่าน context เพราะปุ่มแก้ไขกระจายอยู่หลาย component ย่อยในไฟล์นี้
+const ReadOnlyCtx = createContext(false)
+const useRO = () => useContext(ReadOnlyCtx)
 
 // ── ทดสอบใบปะหน้า (สั้น/ยาว) จากข้อมูลสินค้า — ไม่ต้องมีงานจริง ──
 // ใช้ค่าน้ำหนักตัวอย่าง · cust_code ส่งไปด้วย → ลูกค้า 08 จะเห็น EXP
@@ -185,7 +190,7 @@ export async function backfillCustomer(custName?: string, custCode?: string): Pr
 // ─── Main Page ───────────────────────────────────────────────────────────────
 type Tab = 'customers' | 'products'
 
-export default function ProductsPage() {
+export default function ProductsPage({ readOnly = false }: { readOnly?: boolean } = {}) {
   const [tab, setTab] = useState<Tab>('customers')
   const [customers, setCustomers] = useState<Customer[]>([])
   const [products,  setProducts]  = useState<Product[]>([])
@@ -208,6 +213,7 @@ export default function ProductsPage() {
   }, [products])
 
   return (
+    <ReadOnlyCtx.Provider value={readOnly}>
     <div className="p-4 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
@@ -258,6 +264,7 @@ export default function ProductsPage() {
         />
       )}
     </div>
+    </ReadOnlyCtx.Provider>
   )
 }
 
@@ -270,6 +277,7 @@ function CustomersTab({ customers, products, countByCust, loading, onSelect, onC
   onSelect: (c: Customer) => void
   onChanged: () => void
 }) {
+  const ro = useRO()
   const [q, setQ] = useState('')
   const [editing, setEditing] = useState<Customer | null>(null)
 
@@ -341,7 +349,7 @@ function CustomersTab({ customers, products, countByCust, loading, onSelect, onC
           className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg flex items-center gap-1.5 text-sm font-bold whitespace-nowrap">
           📥 Export Excel
         </button>
-        <button onClick={() => setEditing(EMPTY_CUST)}
+        <button hidden={ro} onClick={() => setEditing(EMPTY_CUST)}
           className="bg-brand-600 hover:bg-brand-500 text-white px-4 py-2 rounded-lg flex items-center gap-1.5 text-sm font-bold whitespace-nowrap">
           <Plus size={14}/> เพิ่มลูกค้า
         </button>
@@ -402,6 +410,7 @@ function CustomersTab({ customers, products, countByCust, loading, onSelect, onC
 
 // ─── Customer Edit Modal ─────────────────────────────────────────────────────
 function CustomerEditModal({ customer, onClose }: { customer: Customer; onClose: () => void }) {
+  const ro = useRO()
   const [c, setC] = useState<Customer>(customer)
   const [saving, setSaving] = useState(false)
   const isNew = !customer.id
@@ -439,7 +448,7 @@ function CustomerEditModal({ customer, onClose }: { customer: Customer; onClose:
         </div>
         <div className="px-5 py-3 border-t border-slate-800 flex gap-2">
           {!isNew && (
-            <button onClick={remove} className="text-red-400 hover:text-red-300 px-3 py-2 text-sm">ลบ</button>
+            <button hidden={ro} onClick={remove} className="text-red-400 hover:text-red-300 px-3 py-2 text-sm">ลบ</button>
           )}
           <button onClick={save} disabled={saving}
             className="flex-1 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white py-2.5 rounded-xl font-bold text-sm">
@@ -458,6 +467,7 @@ function CustomerDetailModal({ customer, products, customers, onClose }: {
   customers: Customer[]
   onClose:   () => void
 }) {
+  const ro = useRO()
   const [editProd, setEditProd] = useState<Product | null>(null)
   const [editCust, setEditCust] = useState(false)
   const [refresh, setRefresh]   = useState(0) // trigger re-fetch from parent
@@ -480,7 +490,7 @@ function CustomerDetailModal({ customer, products, customers, onClose }: {
               <p className="text-white font-bold text-lg">{customer.cust_name}</p>
             </div>
             <div className="flex items-center gap-2 ml-3">
-              <button onClick={() => setEditCust(true)} className="text-slate-400 hover:text-brand-400 p-2">
+              <button hidden={ro} onClick={() => setEditCust(true)} className="text-slate-400 hover:text-brand-400 p-2">
                 <Edit3 size={16}/>
               </button>
               <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={18}/></button>
@@ -492,7 +502,7 @@ function CustomerDetailModal({ customer, products, customers, onClose }: {
         <div className="px-5 py-4 flex-1 overflow-y-auto">
           <div className="flex items-center justify-between mb-3">
             <p className="text-white font-bold">📦 Item Code ({products.length})</p>
-            <button onClick={() => setEditProd({ ...EMPTY_PROD, cust_code: customer.cust_code })}
+            <button hidden={ro} onClick={() => setEditProd({ ...EMPTY_PROD, cust_code: customer.cust_code })}
               className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 font-bold">
               <Plus size={12}/> เพิ่ม item
             </button>
@@ -522,7 +532,7 @@ function CustomerDetailModal({ customer, products, customers, onClose }: {
                           className="text-[11px] font-bold bg-brand-500/15 text-brand-300 hover:bg-brand-500/25 rounded px-1.5 py-1 mr-1">🏷️ยาว</button>
                         <button onClick={() => previewProductLabel(p, 'short')} title="ทดสอบใบสั้น"
                           className="text-[11px] font-bold bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 rounded px-1.5 py-1 mr-1">สั้น</button>
-                        <button onClick={() => setEditProd(p)} className="text-slate-400 hover:text-brand-400 p-1.5">
+                        <button hidden={ro} onClick={() => setEditProd(p)} className="text-slate-400 hover:text-brand-400 p-1.5">
                           <Edit3 size={13}/>
                         </button>
                         <button onClick={() => removeProduct(p)} className="text-slate-400 hover:text-red-400 p-1.5">
@@ -551,6 +561,7 @@ function ProductsTab({ products, customers, loading, onChanged }: {
   loading: boolean
   onChanged: () => void
 }) {
+  const ro = useRO()
   const [q, setQ] = useState('')
   const [editing, setEditing] = useState<Product | null>(null)
   const [showImport, setShowImport] = useState(false)
@@ -602,10 +613,10 @@ function ProductsTab({ products, customers, loading, onChanged }: {
         <button onClick={exportCSV} className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-2 rounded-lg flex items-center gap-1.5 text-sm">
           <Download size={14}/> Export
         </button>
-        <button onClick={() => setShowImport(true)} className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-lg flex items-center gap-1.5 text-sm font-bold">
+        <button hidden={ro} onClick={() => setShowImport(true)} className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-lg flex items-center gap-1.5 text-sm font-bold">
           <Upload size={14}/> นำเข้า Excel
         </button>
-        <button onClick={() => setEditing(EMPTY_PROD)} className="bg-brand-600 hover:bg-brand-500 text-white px-4 py-2 rounded-lg flex items-center gap-1.5 text-sm font-bold">
+        <button hidden={ro} onClick={() => setEditing(EMPTY_PROD)} className="bg-brand-600 hover:bg-brand-500 text-white px-4 py-2 rounded-lg flex items-center gap-1.5 text-sm font-bold">
           <Plus size={14}/> เพิ่ม Item
         </button>
       </div>
@@ -649,7 +660,7 @@ function ProductsTab({ products, customers, loading, onChanged }: {
                     className="text-[11px] font-bold bg-brand-500/15 text-brand-300 hover:bg-brand-500/25 rounded px-1.5 py-1 mr-1">🏷️ยาว</button>
                   <button onClick={() => previewProductLabel(p, 'short')} title="ทดสอบใบสั้น"
                     className="text-[11px] font-bold bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 rounded px-1.5 py-1 mr-1">สั้น</button>
-                  <button onClick={() => setEditing(p)} className="text-slate-400 hover:text-brand-400 p-1.5"><Edit3 size={14}/></button>
+                  <button hidden={ro} onClick={() => setEditing(p)} className="text-slate-400 hover:text-brand-400 p-1.5"><Edit3 size={14}/></button>
                   <button onClick={() => remove(p)} className="text-slate-400 hover:text-red-400 p-1.5"><Trash2 size={14}/></button>
                 </td>
               </tr>

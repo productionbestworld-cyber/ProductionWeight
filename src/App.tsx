@@ -321,7 +321,8 @@ export default function App() {
 
   const NAV = navAll
     .filter(n => (n.own as readonly string[]).includes(dept) || (n.view as readonly string[]).includes(dept))
-    .map(n => ({ ...n, readOnly: !(n.own as readonly string[]).includes(dept) }))
+    // คลังข้อมูล: เปิดให้ทุกแผนกแก้ไขได้ (ไม่ใช่ดูอย่างเดียว)
+    .map(n => ({ ...n, readOnly: n.key === 'products' ? false : !(n.own as readonly string[]).includes(dept) }))
 
   // หน้าปัจจุบันเป็นแบบดูอย่างเดียวไหม — ส่งเข้าไปให้หน้านั้นซ่อนปุ่มที่แก้ข้อมูล
   const pageReadOnly = NAV.find(n => n.key === page)?.readOnly ?? false

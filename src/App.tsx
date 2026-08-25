@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Scale, LayoutDashboard, Settings, Package, History, Warehouse as WarehouseIcon, ChevronDown, Wifi, WifiOff, AlertTriangle, Lock, Search, Boxes, CalendarClock, ClipboardList } from 'lucide-react'
+import { Scale, LayoutDashboard, Settings, Package, History, Warehouse as WarehouseIcon, ChevronDown, Wifi, WifiOff, AlertTriangle, Lock, Search, Boxes, CalendarClock, ClipboardList, Factory } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import WeighStation from './pages/WeighStation'
 import Dashboard from './pages/Dashboard'
@@ -16,9 +16,10 @@ import CombinedDashboard from './pages/CombinedDashboard'
 import OwnerDashboard from './pages/OwnerDashboard'
 import WeighLog from './pages/WeighLog'
 import RollSearch from './pages/RollSearch'
+import ProductionDashboard from './pages/ProductionDashboard'
 import { APP_VERSION, APP_BUILD_DATE, CHANGELOG } from './version'
 
-type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings' | 'admin' | 'review' | 'nc' | 'products' | 'planning' | 'combined' | 'weighlog' | 'rollsearch'
+type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings' | 'admin' | 'review' | 'nc' | 'products' | 'planning' | 'combined' | 'weighlog' | 'rollsearch' | 'proddash'
 type Dept = DeptType
 
 // section ของ "ข้อมูล" (อยู่บนม้วน/เครื่อง) — คนละเรื่องกับแผนกที่ใช้ล็อกอิน
@@ -174,6 +175,16 @@ export default function App() {
     if (isWeighLog) return <WeighLog />
   }
 
+  // ── ลิงก์แยก: แดชบอร์ดผลิต — ...?proddash=1 หรือ /proddash ──
+  {
+    const sp = new URLSearchParams(window.location.search)
+    const path = window.location.pathname.replace(/\/+$/, '').toLowerCase()
+    const isProdDash = sp.get('proddash') !== null
+      || window.location.hash.replace('#', '').toLowerCase() === 'proddash'
+      || path === '/proddash'
+    if (isProdDash) return <ProductionDashboard />
+  }
+
   // ── ลิงก์แยก: ค้นหาม้วน — ...?rollsearch=1 หรือ /rollsearch ──
   {
     const sp = new URLSearchParams(window.location.search)
@@ -314,6 +325,7 @@ export default function App() {
     { key: 'planning',  label: 'วางแผน',         icon: CalendarClock,   own: ['planning'], view: ['sales','purchase','blow'] },
     { key: 'history',   label: 'ประวัติผลิต',    icon: History,         own: ['planning'], view: ['blow','rewind'] },
     { key: 'products',  label: 'คลังข้อมูล',     icon: Boxes,           own: ['purchase'], view: ['sales','planning','blow'] },
+    { key: 'proddash',  label: 'แดชบอร์ดผลิต',  icon: Factory,         own: [], view: ['blow'] },
     { key: 'dashboard', label: 'Dashboard',      icon: LayoutDashboard, own: [], view: ['blow','rewind','warehouse','planning','sales'] },
     { key: 'combined',  label: 'รวมเทียบทั้งปี',  icon: LayoutDashboard, own: [], view: ['planning','sales'] },
     { key: 'rollsearch',label: 'ค้นหาม้วน',     icon: Search,          own: [], view: ['blow','rewind','warehouse','logistics','sales','planning'] },
@@ -520,6 +532,17 @@ export default function App() {
         {page === 'planning'  && <Planning dept={sectionOf(dept)} />}
         {page === 'history'   && <HistoryPage dept={sectionOf(dept)} />}
         {page === 'weighlog'  && <WeighLog />}
+        {page === 'proddash'  && (
+          <div>
+            <div className="flex justify-end px-4 pt-3">
+              <a href="/proddash" target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg px-3 py-1.5">
+                🔗 เปิดแยกหน้าต่าง
+              </a>
+            </div>
+            <ProductionDashboard />
+          </div>
+        )}
         {page === 'products'  && <ProductsPage readOnly={pageReadOnly} />}
         {page === 'review'    && <ReviewQueue dept={sectionOf(dept)} mode="prod" />}
         {page === 'nc'        && <ReviewQueue dept={sectionOf(dept)} mode="nc" />}

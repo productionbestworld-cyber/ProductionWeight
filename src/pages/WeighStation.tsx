@@ -3646,83 +3646,8 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
               accent="red" placeholder="เลือกเหตุผลเศษเสีย (จำเป็น)..." />
           )}
 
-          {/* ผลิตเป่า: ม้วนนี้มาจากกรอ — เอามาชั่งต่อเลขผลิต (ลูกค้าเห็นเป็นม้วนใหม่) */}
-          {!isRework && isBlowProd && isGood && (
-            <div className="space-y-1.5 bg-slate-900 border border-emerald-500/30 rounded-xl p-2.5 order-last">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input type="checkbox" checked={fromRework}
-                  onChange={e => { setFromRework(e.target.checked); if (!e.target.checked) { setRwSel(null); setRwManual(false); setRwManualText(''); setRwManualKg(''); setRwSearch('') } }}
-                  className="w-4 h-4 accent-emerald-500 shrink-0" />
-                <span className="text-emerald-300 text-xs font-bold">🔁 ม้วนนี้มาจากกรอ (ชั่งต่อเลขผลิต — ลูกค้าเห็นเป็นม้วนใหม่)</span>
-              </label>
-              {fromRework && (
-                <>
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-[10px] text-emerald-300/80 leading-tight flex-1">
-                      ⚠ ระบุที่มาม้วนที่กรอมา (บังคับ) — ม้วนออกเลข/Lot ต่อเนื่องของเครื่องนี้ แต่ระบบไม่นับซ้ำในยอดผลิต
-                    </p>
-                    <button type="button" onClick={() => { setRwManual(v => { const nv = !v; if (nv) setRwSel(null); return nv }) }}
-                      className={`text-[10px] px-2 py-1 rounded font-bold shrink-0 ${rwManual ? 'bg-amber-600 text-white' : 'bg-slate-800 text-amber-300 border border-amber-500/40 hover:bg-amber-500/15'}`}>
-                      {rwManual ? '✓ ม้วนนอกระบบ' : '➕ ม้วนนอกระบบ'}
-                    </button>
-                  </div>
-                  {rwManual ? (
-                    <div className="space-y-1.5 bg-slate-800/60 border border-amber-500/30 rounded-lg p-2">
-                      <p className="text-[10px] text-amber-300/90 leading-tight">ม้วนต้นทางไม่มีในระบบ — พิมพ์ที่มา + น้ำหนักที่หยิบมา (ที่มาบังคับกรอก)</p>
-                      <input value={rwManualText} onChange={e => setRwManualText(e.target.value)}
-                        placeholder="ที่มา เช่น Lot กรอ / งานเก่า / ม้วนจากที่อื่น (จำเป็น)"
-                        className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-white placeholder:text-slate-500" />
-                      <input value={rwManualKg} onChange={e => setRwManualKg(e.target.value)} inputMode="decimal"
-                        placeholder="หยิบมากี่โล (ไม่บังคับ — ใส่เพื่อคิดเศษกรอ)"
-                        className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-white placeholder:text-slate-500" />
-                    </div>
-                  ) : (
-                    <>
-                    <input value={rwSearch} onChange={e => setRwSearch(e.target.value)}
-                      placeholder="🔎 ค้นหา — เลขม้วน / Lot / WO / สินค้า / ลูกค้า / เหตุผล"
-                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-white placeholder:text-slate-500" />
-                    <div className="space-y-1 max-h-[45vh] overflow-y-auto">
-                      {rwSrcRolls.filter(s => {
-                        const q = rwSearch.trim().toLowerCase()
-                        if (!q) return true
-                        return q.split(/\s+/).every(term =>
-                          [s.roll_no, s.lot_no, s.work_order, s.sale_order, s.product_name, s.customer, s.remark]
-                            .map(v => String(v ?? '').toLowerCase()).join(' ').includes(term))
-                      }).map(s => {
-                        const sel = rwSel?.id === s.id
-                        return (
-                          <button key={s.id} onClick={() => setRwSel(sel ? null : s)}
-                            className={`w-full text-left rounded-lg px-2.5 py-1.5 border transition-colors ${sel ? 'bg-emerald-500/20 border-emerald-500' : 'bg-slate-800 border-slate-700 hover:border-emerald-500/50'}`}>
-                            <span className="text-xs font-bold text-white flex items-center gap-1.5 flex-wrap">
-                              <span className="shrink-0">{sel ? '☑' : '☐'}</span>
-                              {s.work_order && <span className="text-sm font-black bg-amber-500/25 text-amber-100 border border-amber-400/40 px-2 py-0.5 rounded whitespace-nowrap">WO {s.work_order}</span>}
-                              <span className="text-slate-300 font-mono">Lot {s.lot_no} #{s.roll_no}</span>
-                              <span className="text-[10px] text-slate-300">· หยิบมา <b className="text-orange-300">{fmt(s.weight,dec)}</b></span>
-                              {(!s.rework_status || s.rework_status === 'pending') && <span className="text-[9px] bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded whitespace-nowrap">🆕 ยังไม่เบิก</span>}
-                            </span>
-                            {(s.product_name || s.customer) && <p className="text-[9px] text-slate-400 mt-0.5 truncate">{s.product_name}{s.customer ? ` · ${s.customer}` : ''}</p>}
-                            {s.remark && <p className="text-[9px] text-rose-300/90 mt-0.5 leading-tight" title={s.remark}>⚠ เหตุผล: {s.remark}</p>}
-                          </button>
-                        )
-                      })}
-                      {rwSrcRolls.length === 0 && (
-                        <p className="text-[10px] text-slate-500 px-1">ไม่มีม้วนเสียรอกรอของสินค้านี้ในระบบ — ถ้ากรอมาจากม้วนนอกระบบ กด "➕ ม้วนนอกระบบ" ด้านบน</p>
-                      )}
-                      {rwSrcRolls.length > 0 && rwSearch.trim() && rwSrcRolls.filter(s => {
-                        const q = rwSearch.trim().toLowerCase()
-                        return q.split(/\s+/).every(term =>
-                          [s.roll_no, s.lot_no, s.work_order, s.sale_order, s.product_name, s.customer, s.remark]
-                            .map(v => String(v ?? '').toLowerCase()).join(' ').includes(term))
-                      }).length === 0 && (
-                        <p className="text-[10px] text-slate-500 px-1">ไม่พบม้วนที่ตรงกับ "{rwSearch}"</p>
-                      )}
-                    </div>
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          )}
+          {/* ผลิตเป่า "มาจากกรอ" ถูกถอดออก — งานกรอให้ไปชั่ง/โอนที่แผนกกรอ (คนละ Lot กันอยู่แล้ว)
+              แผนกเป่าจึงไม่มีตัวเลือกนี้ · fromRework คงเป็น false เสมอ ไม่มีการเขียน is_rewound/rework_source */}
 
           {/* แผนกกรอ: เลือกม้วนต้นทางที่กำลังกรอ (ติ๊กก่อนชั่ง) */}
           {isRework && isGood && (

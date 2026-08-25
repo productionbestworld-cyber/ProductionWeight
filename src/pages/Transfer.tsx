@@ -1122,9 +1122,6 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
                         {(j as any).newSystem && (
                           <span className="inline-block text-[10px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-400/50 px-1.5 py-0.5 rounded mb-1 mr-1">✨ ชุดระบบใหม่</span>
                         )}
-                        {(j as any).fromOutside && (
-                          <span className="inline-block text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40 px-1.5 py-0.5 rounded mb-1">📤 กรอนอกระบบ</span>
-                        )}
                         {/* ลูกค้า (เด่นรอง) */}
                         <p className="text-white text-xs font-bold leading-tight truncate">👥 {j.customer || '—'}</p>
                         <p className="text-slate-400 text-[10px] mt-0.5 truncate">{j.product || '—'}</p>

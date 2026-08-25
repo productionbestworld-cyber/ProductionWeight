@@ -19,6 +19,13 @@ export function fmtSize(
   if (opts?.noUnit) return `${w}${sep}${t}`
   return `${w}${u}${sep}${t}mc`
 }
+// ปี(พ.ศ. 2 หลัก) + เดือน 2 หลัก ตาม "เวลาไทย" เสมอ — ใช้ตอนสร้าง Lot อัตโนมัติ
+//   กัน Lot เพี้ยนเดือนถ้าเครื่องชั่งตั้ง timezone ไม่ใช่ ICT (ให้ตรงกับ logic เลื่อนเดือนใน WeighStation)
+export function thaiYM(d: Date = new Date()): { yy: string; mm: string } {
+  const p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit' }).formatToParts(d)
+  const g = (t: string) => p.find(x => x.type === t)?.value ?? ''
+  return { yy: String((parseInt(g('year')) + 543) % 100).padStart(2, '0'), mm: g('month') }
+}
 // แปลงค่าเมื่อสลับหน่วย: cm↔mm
 export function convertWidth(value: string, from: 'cm'|'mm', to: 'cm'|'mm'): string {
   if (from === to) return value
@@ -459,8 +466,7 @@ function EditModal({ p, products, onChange, onAutoFill, onRemove, onClose, onPro
                 onChange={e => onChange('lotNo', e.target.value)}
                 onFocus={() => {
                   if ((p.lotNo ?? '').trim()) return
-                  const yy = String((new Date().getFullYear() + 543) % 100).padStart(2, '0')
-                  const mm = String(new Date().getMonth() + 1).padStart(2, '0')
+                  const { yy, mm } = thaiYM()
                   const mc = (p.machine_no ?? '').toUpperCase()
                   // บล็อกเฉพาะตอน "ไม่มีตัวเลขในรหัสลูกค้าเลย" — รหัส 00 นับว่ามี → เจนได้
                   const digits = (p.custCode ?? '').replace(/\D/g, '')
@@ -526,8 +532,7 @@ function EditModal({ p, products, onChange, onAutoFill, onRemove, onClose, onPro
               <input value={(p.custCode as string) ?? ''} onChange={e => {
                   const newCode = e.target.value.slice(0,3)
                   // เช็คก่อนว่า lot เดิมเป็น auto-gen ของ custCode เก่าหรือไม่
-                  const yy = String((new Date().getFullYear() + 543) % 100).padStart(2,'0')
-                  const mm = String(new Date().getMonth() + 1).padStart(2,'0')
+                  const { yy, mm } = thaiYM()
                   const mc = (p.machine_no ?? '').toUpperCase()
                   const oldDigits = (p.custCode ?? '').replace(/\D/g,'')
                   const oldCc = oldDigits.padStart(4,'0').slice(-4)

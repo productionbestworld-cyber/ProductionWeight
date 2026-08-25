@@ -2198,30 +2198,10 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
   const [manualSrcText, setManualSrcText] = useState('')   // ที่มา (พิมพ์เอง)
   const [manualSrcKg, setManualSrcKg]     = useState('')   // หยิบมากี่โล
 
-  // ── ผลิตเป่า: ม้วนที่กรอเสร็จแล้ว เอามาชั่งที่ "เครื่องผลิตที่เดินอยู่" ──
-  //   เลข/Lot ต่อเนื่องของเครื่องนี้ → ลูกค้าเห็นเป็นม้วนใหม่ (ไม่เห็น Lot กรอ)
-  //   is_rewound=true → แดชบอร์ดตัดออกจาก "FG ครั้งแรก" (กันนับซ้ำ) แต่ยังนับเป็นผลงานกรอ
-  //   กันติ๊กมั่ว: ต้องเลือกม้วนเสียต้นทางจริงจากคิว ถึงจะเซฟได้ (ดู guard ตอนบันทึก)
-  const isBlowProd = (profile.section ?? 'blow') === 'blow'
-  const [fromRework, setFromRework]   = useState(false)     // ติ๊ก "ม้วนนี้มาจากกรอ"
-  const [rwSrcRolls, setRwSrcRolls]   = useState<any[]>([]) // ม้วนเสียของสินค้านี้ที่รอกรอ/กำลังกรอ
-  const [rwSel, setRwSel]             = useState<any | null>(null) // ม้วนต้นทางที่เลือก
-  // ม้วนต้นทาง "นอกระบบ" (กรอมาจากม้วนที่ไม่มีในระบบ) → พิมพ์ที่มา+น้ำหนักเอง
-  const [rwManual, setRwManual]         = useState(false)
-  const [rwManualText, setRwManualText] = useState('')
-  const [rwManualKg, setRwManualKg]     = useState('')
-  const [rwSearch, setRwSearch]         = useState('')   // ค้นหาม้วนต้นทาง (เลขม้วน/Lot/WO/สินค้า/ลูกค้า/เหตุผล)
-  async function loadRwSrcRolls() {
-    const ic = (profile.itemCode ?? '').trim()
-    if (!ic) { setRwSrcRolls([]); return }
-    const { data } = await supabase.from('production_rolls')
-      .select('id, lot_no, roll_no, weight, core_weight, work_order, sale_order, remark, product_name, customer, width_cm, width_unit, thick_mc, machine_no, inbound_type, rework_status')
-      .eq('roll_type', 'bad').eq('item_code', ic)
-      .or('rework_status.eq.reworking,rework_status.is.null,rework_status.eq.pending')
-      .order('created_at', { ascending: true })
-    setRwSrcRolls(data ?? [])
-  }
-  useEffect(() => { if (fromRework && isBlowProd) loadRwSrcRolls() }, [fromRework, isBlowProd, profile.itemCode])  // eslint-disable-line react-hooks/exhaustive-deps
+  // ── ผลิตเป่าไม่มีกรอ ──
+  //   ฟีเจอร์ "ม้วนเป่ามาจากกรอ" (fromRework/is_rewound) ถูกถอดออกทั้งหมด
+  //   งานกรอทำ/โอนที่แผนกกรอ (section='rewind') โดยตรง คนละ Lot กันอยู่แล้ว
+  //   ม้วนเป่าจึงเขียน is_rewound=false, rework_source_*=null เสมอ
 
   async function loadSrcRolls() {
     if (!isRework) return
@@ -2952,11 +2932,6 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       alert('ม้วนต้นทางนี้กรอครบแล้ว — เลือกม้วนอื่น หรือกด "🗑 เศษทั้งม้วน"'); return
     }
     if (isGood && isRework && !reworkCause.trim()) { alert('กรุณาระบุสาเหตุที่ม้วนนี้เสีย / มาจากอะไร'); return }
-    // ผลิตเป่า + ติ๊ก "มาจากกรอ" → บังคับระบุที่มา (เลือกม้วนในระบบ หรือพิมพ์ที่มานอกระบบ) — กันติ๊กมั่ว
-    if (isGood && isBlowProd && fromRework && !rwSel && !(rwManual && rwManualText.trim())) {
-      alert('ติ๊ก "ม้วนนี้มาจากกรอ" แล้ว — กรุณาเลือกม้วนต้นทางในระบบ หรือกด "➕ ม้วนนอกระบบ" แล้วพิมพ์ที่มา'); return
-    }
-
     setSaving(true)
     try {
       const actualType = isScrap ? scrapSub : weighType
@@ -2990,13 +2965,6 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         : (isBad ? badRollNo : isGood ? rollNo : 0)
       // หมายเหตุม้วนกรอ: หยิบม้วนต้นทางมากี่โล ชั่งได้กี่โล เศษกี่โล
       const useSrc = (isRework && isGood && selSrc) ? selSrc : null
-      // ผลิตเป่า: ม้วนต้นทางที่กรอมา (แยกจากโหมดกรอ) — ม้วนออกเลข/Lot/WO ของเครื่องนี้ตามปกติ
-      const rwOn = !isRework && isGood && isBlowProd && fromRework
-      const rwUseSrc = (rwOn && rwSel) ? rwSel : null
-      // ม้วนต้นทางนอกระบบ (พิมพ์ที่มาเอง) — is_rewound เหมือนกัน แต่ไม่มีม้วนต้นทางให้ปิด
-      const rwUseManual = (rwOn && !rwSel && rwManual && rwManualText.trim())
-        ? { text: rwManualText.trim(), kg: parseFloat(rwManualKg) || 0 } : null
-      const rwIsRewound = !!(rwUseSrc || rwUseManual)
       const useManual = (isRework && isGood && manualMode && manualSrcText.trim())
         ? { text: manualSrcText.trim(), kg: parseFloat(manualSrcKg) || 0 } : null
       // กรอต่อ: ม้วนต้นทางที่ 2 (รวม 2 ม้วน → ออก 1 ม้วน)
@@ -3019,13 +2987,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       const reworkRemark = (isRework && isGood)
         ? [reworkNote, reworkCause.trim() ? `เหตุผล: ${reworkCause.trim()}` : ''].filter(Boolean).join(' · ')
         : reworkNote
-      // ผลิตเป่า: หมายเหตุบอกชัดว่าม้วนนี้มาจากกรอ (โชว์บนหน้าชั่ง/คลัง/รีปริ้น — ลูกค้าไม่เห็น)
-      const blowReworkNote = rwUseSrc
-        ? `🔁 มาจากกรอ Lot ${rwUseSrc.lot_no} #${rwUseSrc.roll_no} · หยิบมา ${fmt(rwUseSrc.weight ?? 0, dec)} · ชั่งได้ ${fmt(saveWeight, dec)} Kg`
-        : rwUseManual
-        ? `🔁 มาจากกรอ (นอกระบบ) ${rwUseManual.text}${rwUseManual.kg ? ` · หยิบมา ${fmt(rwUseManual.kg, dec)}` : ''} · ชั่งได้ ${fmt(saveWeight, dec)} Kg`
-        : ''
-      const rollRemark = isBad ? badReason : isScrap ? scrapReason : (blowReworkNote || reworkRemark || null)
+      const rollRemark = isBad ? badReason : isScrap ? scrapReason : (reworkRemark || null)
       // อ้างอิง WO/SO: ม้วนในระบบ → ตามต้นทาง · ม้วนนอกระบบ → ออกเป็น Lot/ออเดอร์ที่กำลังชั่ง
       const useWo = useSrc ? (useSrc.work_order ?? profile.woNo ?? '') : (profile.woNo ?? '')
       const useSo = useSrc ? (useSrc.sale_order ?? profile.soNo ?? '') : (profile.soNo ?? '')
@@ -3074,11 +3036,11 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         lot_no:       effLot,
         sale_order:   useSo,
         work_order:   useWo,
-        rework_source_roll_id: useSrc ? useSrc.id : (rwUseSrc ? rwUseSrc.id : null),
-        rework_source_lot:     useSrc ? useSrc.lot_no : (rwUseSrc ? rwUseSrc.lot_no : (rwUseManual ? rwUseManual.text : (useManual ? useManual.text : null))),
-        rework_source_weight:  (useSrc || useManual) ? srcKg : (rwUseSrc ? (rwUseSrc.weight ?? null) : (rwUseManual ? (rwUseManual.kg || null) : null)),
+        rework_source_roll_id: useSrc ? useSrc.id : null,
+        rework_source_lot:     useSrc ? useSrc.lot_no : (useManual ? useManual.text : null),
+        rework_source_weight:  (useSrc || useManual) ? srcKg : null,
         rework_batch:          isRework ? reworkRound : null,
-        is_rewound:            rwIsRewound,   // ผลิตเป่า: ม้วนนี้มาจากกรอ → กันแดชบอร์ดนับซ้ำ
+        is_rewound:            false,   // แผนกเป่าไม่มีกรอ · งานกรออยู่ที่ section='rewind'
         item_code:    profile.itemCode    ?? '',
         product_code: profile.productCode ?? '',
         mat_code:     profile.matCode     ?? '',
@@ -3164,18 +3126,6 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         setSelSrc(null)
         setSrcRolls(prev => prev.filter(x => x.id !== useSrc.id))
       }
-      // ผลิตเป่า (มาจากกรอ): ปิดม้วนต้นทางเป็น reworked → หายจากคิว กันหยิบซ้ำ
-      if (rwUseSrc && inserted) {
-        const sc = Math.max(0, (rwUseSrc.weight ?? 0) - saveWeight)
-        await supabase.from('production_rolls').update({
-          rework_status: 'reworked',
-          rework_remark: `กรอเสร็จ (ชั่งที่เครื่องผลิต ${profile.machine_no}) · หยิบมา ${fmt(rwUseSrc.weight,dec)} · ชั่งได้ ${fmt(saveWeight,dec)} · เศษ ${fmt(sc,dec)} Kg → ออกม้วน Lot ${effLot} #${useRollNo}`,
-        }).eq('id', rwUseSrc.id)
-        setRwSel(null)
-        setRwSrcRolls(prev => prev.filter(x => x.id !== rwUseSrc.id))
-      }
-      // ผลิตเป่า (มาจากกรอ นอกระบบ): เคลียร์ที่มา/น้ำหนักสำหรับม้วนถัดไป
-      if (rwUseManual && inserted) { setRwManualText(''); setRwManualKg('') }
       // ปิดงาน + เด้งออกอัตโนมัติ — ทำทุกครั้งที่ชั่งม้วนกรอสำเร็จ (แม้ไม่ได้ติ๊กม้วนต้นทาง)
       //   เงื่อนไข: งานนี้ไม่มีม้วนต้นทางที่ยัง "reworking" เหลือ → ถือว่าจบ
       if (isRework && isGood && inserted && reworkJobId) {
@@ -3231,7 +3181,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         net_weight:   parseFloat(saveWeight.toFixed(dec)),
         remark:       rollRemark,
         inspector:    inspector || null,
-        is_rewound:   rwIsRewound,
+        is_rewound:   false,
         weighed_at:   payload.created_at,
       }
       let logOk = false
@@ -3646,8 +3596,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
               accent="red" placeholder="เลือกเหตุผลเศษเสีย (จำเป็น)..." />
           )}
 
-          {/* ผลิตเป่า "มาจากกรอ" ถูกถอดออก — งานกรอให้ไปชั่ง/โอนที่แผนกกรอ (คนละ Lot กันอยู่แล้ว)
-              แผนกเป่าจึงไม่มีตัวเลือกนี้ · fromRework คงเป็น false เสมอ ไม่มีการเขียน is_rewound/rework_source */}
+          {/* ผลิตเป่า "มาจากกรอ" ถูกถอดออกทั้งหมด — งานกรอทำ/โอนที่แผนกกรอ (section='rewind') คนละ Lot กันอยู่แล้ว */}
 
           {/* แผนกกรอ: เลือกม้วนต้นทางที่กำลังกรอ (ติ๊กก่อนชั่ง) */}
           {isRework && isGood && (

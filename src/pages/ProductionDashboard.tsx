@@ -41,8 +41,9 @@ type Roll = {
   rework_status?: string | null   // null=ยังไม่ส่งกรอ · 'reworking'=กำลังกรอ · 'reworked'=กรอเสร็จ
 }
 
+// ดึงเฉพาะคอลัมน์ที่หน้านี้ใช้จริง — ตัด gross_weight/core_weight/pcs ที่ไม่ได้ใช้ออก ลด egress
 const SELECT_COLS =
-  'id,roll_type,weight,gross_weight,core_weight,length,pcs,machine_no,lot_no,product_name,customer,' +
+  'id,roll_type,weight,length,machine_no,lot_no,product_name,customer,' +
   'width_cm,width_unit,thick_mc,inspector,work_order,sale_order,created_at,roll_no,section,remark,rework_status'
 
 const NO_WO = '(ไม่ระบุ WO)'
@@ -320,7 +321,7 @@ export default function ProductionDashboard() {
     const a = new Date(dateFrom).getTime(), b = new Date(dateTo).getTime()
     return Number.isFinite(a) && Number.isFinite(b) ? Math.round((b - a) / 86_400_000) + 1 : 0
   }, [dateFrom, dateTo])
-  const LONG_RANGE_DAYS = 62
+  const LONG_RANGE_DAYS = 31
   const [forceClient, setForceClient] = useState(false)   // ผู้ใช้กดขอดึงรายม้วนเองทั้งที่ช่วงยาว
   const [rpcMissing, setRpcMissing]   = useState(false)   // ยังไม่ได้รัน SQL บนฐานข้อมูล
   const serverMode = rangeDays > LONG_RANGE_DAYS && !forceClient && !rpcMissing
@@ -372,8 +373,8 @@ export default function ProductionDashboard() {
 
   useEffect(() => {
     load()
-    const iv = setInterval(() => load(true), 120_000)   // รีเฟรชเงียบ ๆ ทุก 2 นาที
-    return () => clearInterval(iv)
+    // ไม่ auto-refresh — เดิมดึงม้วนทุกใบใหม่ทุก 2 นาที กิน egress มาก
+    // อยากได้ข้อมูลล่าสุดให้กดปุ่ม "รีเฟรช" เอง
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateFrom, dateTo, serverMode, fMachine, fWo, fCustomer])
 

@@ -2309,17 +2309,30 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
     // ผลิตเป่า/พิมพ์: นับเลขม้วน "แยกตาม WO เสมอ" (1 WO = เริ่ม #1) — ไม่ขึ้นกับ checkbox อีก
     //   (item เดียวกันใน Lot เดียวกันคนละ WO ต้องเริ่ม #1 ใหม่ได้) · กรอ: ยึด item
     const useFreshWO = !isRework
+    // ⚠ กันตัวนับเลขม้วนเด้งกลับ #1: profile โหลด async — ระหว่างรอ WO/Lot ยังว่าง
+    //   query จะได้ 0 แถว → ตีความว่า "งานนี้ยังไม่มีม้วน" → เลขเด้งกลับ 1 → ชั่งทับเลขเดิม
+    if (!profile.machine_no || !profile.lotNo) return
+    if (useFreshWO && !(profile.woNo ?? '').trim()) return
     // ⚠ Lot ที่ถูกใช้ซ้ำหลาย WO สะสมเกิน 1000 ม้วน → ต้องดึงทีละหน้า ไม่งั้นโดน cap 1000
     //   เอาม้วนใหม่สุดหาย → เลขม้วนถัดไปเด้งผิด (เคยได้ 44 แทน 47). freshStart กรอง WO ในตัว
     //   query เลยลดจำนวนแถวลงมาก + เร็วขึ้น
-    const data = await fetchAll(() => {
-      let q = supabase.from('production_rolls')
-        .select('*')
-        .eq('machine_no', profile.machine_no)
-        .eq('lot_no', profile.lotNo)
-      if (useFreshWO) q = q.eq('work_order', profile.woNo ?? '')
-      return q.order('created_at', { ascending: true }).order('id', { ascending: true })
-    })
+    // ⚠ strict: โหลดพลาด (เน็ตสะดุด/5xx) ต้อง throw — ห้ามคืน [] เงียบ ๆ
+    //   ไม่งั้นจอจะล้างลิสต์ + เลขม้วนถอยกลับ #1 → ชั่งทับม้วนเก่า (เคส BL06 26/8/2026)
+    let data: any[]
+    try {
+      data = await fetchAll(() => {
+        let q = supabase.from('production_rolls')
+          .select('*')
+          .eq('machine_no', profile.machine_no)
+          .eq('lot_no', profile.lotNo)
+        if (useFreshWO) q = q.eq('work_order', profile.woNo ?? '')
+        return q.order('created_at', { ascending: true }).order('id', { ascending: true })
+      }, { strict: true })
+    } catch (e) {
+      // โหลดไม่สำเร็จ → คงลิสต์/ตัวนับเดิมไว้ ไม่แตะ state (รอรอบหน้ารีเฟรช)
+      console.warn('loadRollsForMachine พลาด — คงตัวนับเดิม:', e)
+      return
+    }
     // ── รวมม้วนที่ค้างใน offline queue (ของ machine+lot นี้เท่านั้น) ──
     const offlineForThis = loadQueue()
       .filter((q: any) => q.machine_no === profile.machine_no && q.lot_no === profile.lotNo)
@@ -2793,9 +2806,26 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         nsRollNo = Math.max(0, ...((nsRows ?? []).map((x:any) => x.roll_no ?? 0))) + 1
       }
       // เลขม้วน: ข้ามเดือน → lot ใหม่ยังไม่มีม้วน → เริ่ม #1 (เศษ=0) · ปกติ → ใช้ตัวนับปัจจุบัน
+      // ⚠ กันเลขม้วนซ้ำ (เป่า/พิมพ์): อ่าน max(roll_no) จาก DB สด ๆ ก่อน insert
+      //   ตัวนับบนจอเชื่อไม่ได้ถ้าเคยโหลดพลาดแล้วเด้งกลับ #1
+      //   เป่า/พิมพ์ไม่ gap-fill → ใช้ max+1 ได้เสมอ · อ่านไม่ได้ (ออฟไลน์) → guard=0 → พฤติกรรมเดิม
+      let guardRollNo = 0
+      if (!isRework && !monthRolled && (isGood || isBad)) {
+        try {
+          const { data: mx } = await supabase.from('production_rolls')
+            .select('roll_no')
+            .eq('machine_no', profile.machine_no)
+            .eq('lot_no', effLot)
+            .eq('work_order', profile.woNo ?? '')
+            .eq('roll_type', actualType)
+            .order('roll_no', { ascending: false }).limit(1)
+          if (mx && mx.length) guardRollNo = (mx[0] as any).roll_no ?? 0
+        } catch { /* อ่านไม่ได้ → ใช้ตัวนับบนจอ */ }
+      }
       const useRollNo  = isNewSysRoll ? nsRollNo
         : monthRolled ? (isScrap ? 0 : 1)
-        : (isBad ? badRollNo : isGood ? rollNo : 0)
+        : (isBad ? Math.max(badRollNo, guardRollNo + 1)
+        : isGood ? Math.max(rollNo,    guardRollNo + 1) : 0)
       // หมายเหตุม้วนกรอ: หยิบม้วนต้นทางมากี่โล ชั่งได้กี่โล เศษกี่โล
       const useSrc = (isRework && isGood && selSrc) ? selSrc : null
       const useManual = (isRework && isGood && manualMode && manualSrcText.trim())

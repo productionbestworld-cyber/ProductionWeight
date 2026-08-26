@@ -23,9 +23,12 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 // makeQuery: คืน query ใหม่ทุกครั้ง (ใส่ .select/.eq/.order ได้ตามต้องการ แต่ "อย่า" ใส่ .range)
 // ⚡ ดึงหลายหน้า "พร้อมกัน" (parallel) ทีละชุด — ได้ข้อมูลชุดเดิมเป๊ะ (เรียงตาม .order ที่ส่งมา)
 //    แต่เร็วขึ้นมากเมื่อข้อมูลเยอะ (เช่น 17 หน้า: เดิมยิงเรียงกัน 17 รอบ → ตอนนี้ ~3 รอบ)
+// ⚠ strict:true → โหลดพลาด (เน็ตสะดุด/5xx) ให้ "โยน error" แทนการคืน [] เงียบ ๆ
+//   ใช้กับจุดที่ผลลัพธ์ว่างมีความหมาย เช่น ตัวนับเลขม้วนในจอชั่ง — [] ปลอมทำให้เลขเด้งกลับ #1
+//   แล้วชั่งทับเลขเดิม (เคสจริง BL06 Lot 69BL06003408 ได้ #1 ซ้ำ 26/8/2026)
 export async function fetchAll<T = any>(
   makeQuery: () => any,
-  opts?: { pageSize?: number; concurrency?: number },
+  opts?: { pageSize?: number; concurrency?: number; strict?: boolean },
 ): Promise<T[]> {
   const PAGE = opts?.pageSize ?? 1000
   const CONC = opts?.concurrency ?? 6
@@ -39,7 +42,10 @@ export async function fetchAll<T = any>(
     )
     let done = false
     for (const { data, error } of batch) {
-      if (error || !data) { done = true; break }
+      if (error || !data) {
+        if (opts?.strict) throw (error ?? new Error('fetchAll: no data'))
+        done = true; break
+      }
       all.push(...(data as T[]))
       if (data.length < PAGE) done = true   // เจอหน้าที่ไม่เต็ม = ถึงท้ายแล้ว
     }

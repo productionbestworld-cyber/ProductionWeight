@@ -6,7 +6,7 @@ import { supabase, fetchAll } from '../lib/supabase'
 import { restoreReworkSource } from '../lib/rework'
 import { loadProfiles, saveProfiles, fmtSize, convertWidth, type MachineProfile } from './MachineSettings'
 import ReworkJobList from './ReworkJobList'
-import { loadLongLayout, loadShortLayout, loadWasteLayout, type FieldConfig } from './LabelDesigner'
+import { loadShortLayout, loadWasteLayout, type FieldConfig } from './LabelDesigner'
 import { fetchProducts, backfillProductMatCore, backfillCustomer, addProductIfMissing, type Product } from './Products'
 import { fetchFlag } from './Admin'
 import ReworkInbox from './ReworkInbox'
@@ -167,16 +167,13 @@ export async function reprintRollLabel(roll: any, size: 'long' | 'short' = 'long
 }
 
 async function buildLabelHtml(p: MachineProfile, rollNo: number, gross: number, net: number, size: 'long'|'short' = 'long', rollType: string = 'good', reason = '', rollId?: string, prodDate?: string | Date | null): Promise<{ innerHtml: string; W: number; H: number }> {
+  // ── ใบยาวถูกยกเลิกทั้งระบบ — ทุกใบปะหน้าพิมพ์เป็น "ใบสั้น" เสมอ ──
+  // (ข้อมูลเดิมใน DB ที่เป็น label_size='long' ไม่ถูกแตะ · ม้วนเก่ารีปริ้นได้ปกติ ออกมาเป็นใบสั้น)
+  size = 'short'
   const dec     = p.decimal
   // วันผลิต = วันที่ชั่งจริง (รีปริ้นใช้ created_at) · ถ้าไม่ส่งมา = วันนี้ (ตอนชั่ง)
   const baseDate = prodDate ? new Date(prodDate) : new Date()
   const mfgDate = thaiDate(baseDate)
-  // EXP date — เฉพาะลูกค้าหาดทิพย์ (cust_code 08): วันผลิต + 6 เดือน
-  const showExp = (p.custCode ?? '').trim() === '08'
-  const expDate = (() => {
-    const d = new Date(baseDate); d.setMonth(d.getMonth() + 6)
-    return thaiDate(d)
-  })()
   const core    = parseFloat(p.coreWeight) || 0
   // QR encode แค่ roll ID → URL สั้น → generate เป็น data URL ฝังใน HTML ทันที
   const appUrl    = window.location.origin
@@ -191,47 +188,14 @@ async function buildLabelHtml(p: MachineProfile, rollNo: number, gross: number, 
   const [qr72, qr56] = await Promise.all([makeQR(144), makeQR(112)])
   const qrUrl = (s: 72|56) => s === 72 ? qr72 : qr56
 
-  // ═══════════════════════════════════════════════════════
-  // ใบยาว — สร้างจาก LabelDesigner layout (หรือ fallback default)
-  // ═══════════════════════════════════════════════════════
-  const savedLayout = await loadLongLayout()
+  // ป้ายชนิดม้วน (ใช้ในหัวใบ)
   const rollTypeLabelLong =
     rollType === 'bad'         ? 'ม้วนกรอ' :
     rollType === 'scrap_clear' ? 'เศษเสีย (ใส)' :
     rollType === 'scrap_color' ? 'เศษเสีย (สี)' :
     rollType === 'scrap_lump'  ? 'เศษก้อน' : ''
 
-  // ค่าจริงของแต่ละ field id → map จาก MachineProfile + น้ำหนัก
-  const rollLabel = rollType.startsWith('scrap') ? 'ถุงเศษ' : rollType === 'bad' ? 'กรอ No.' : 'Roll No.'
-  const longFieldData: Record<string, string> = {
-    header:      (rollType === 'bad')
-                 ? `<span style="font-size:0.9em">SO <b>${p.soNo || '—'}</b>&nbsp;&nbsp;·&nbsp;&nbsp;WO <b>${p.woNo || '—'}</b>&nbsp;&nbsp;·&nbsp;&nbsp;รหัสสินค้า <b>${p.itemCode || '—'}</b></span>` +
-                   (rollTypeLabelLong ? `&nbsp;&nbsp;[${rollTypeLabelLong}]` : '') +
-                   (rollType === 'bad' && reason ? `&nbsp;&nbsp;<span style="color:#c00">เหตุผล: ${reason}</span>` : '')
-                 : (p.headerText?.trim() || 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด') +
-                   (rollTypeLabelLong ? `&nbsp;&nbsp;[${rollTypeLabelLong}]` : ''),
-    // 3-column header
-    mat:         `Mat Code&nbsp;&nbsp;<b style="font-size:1.15em">${p.matCode}</b>`,
-    mfg:         `MFG Date&nbsp;&nbsp;<b style="font-size:1.15em">${mfgDate}</b>${showExp ? `&nbsp;&nbsp;&nbsp;EXP&nbsp;&nbsp;<b style="font-size:1.15em">${expDate}</b>` : ''}`,
-    rollno:      `${rollLabel}&nbsp;&nbsp;<b style="font-size:1.15em">${rollNo === 0 ? '—' : rollNo}</b>`,
-    // left column
-    prodcode:    p.productCode ? `<span style="font-weight:400">Product Code</span>&nbsp;&nbsp;<b>${p.productCode}</b>` : '',
-    prodname:    `<span style="font-weight:400">Product Name</span>&nbsp;&nbsp;<b>${p.productName}</b>`,
-    machine:     `เครื่อง&nbsp;&nbsp;<b>${p.machine_no}</b>`,
-    core:        `Core Weight&nbsp;&nbsp;<b>${fmt(core, dec)}</b>`,
-    size:        `Size&nbsp;&nbsp;<b style="font-size:1.2em">${p.widthCm}</b>&nbsp;${p.widthUnit ?? 'cm'}&nbsp;×&nbsp;<b style="font-size:1.2em">${p.thickMc}</b>&nbsp;mc`,
-    // right column
-    lotno:       `Lot No&nbsp;&nbsp;<b>${p.lotNo}</b>`,
-    length:      `Length&nbsp;&nbsp;<b>${p.length || '—'}</b>&nbsp;M.${p.pcs ? `&nbsp;&nbsp;<b>${p.pcs}</b>&nbsp;Pcs.` : ''}`,
-    gross:       `Gross Weight&nbsp;&nbsp;<b>${fmt(gross, dec)} Kgs.</b>`,
-    net:         fmt(net, dec),
-    barcode_lbl: 'Barcode No.',
-    inspector:   `ผู้ตรวจสอบ&nbsp;&nbsp;<b>${p.inspector || '—'}</b>`,
-    // old compat keys
-    meta:        `Mat&nbsp;<b>${p.matCode}</b>&nbsp;&nbsp;&nbsp;MFG&nbsp;<b>${mfgDate}</b>&nbsp;&nbsp;&nbsp;Roll&nbsp;<b>${rollNo === 0 ? '—' : rollNo}</b>`,
-  }
-
-  // factory: สร้าง renderer จาก data map + qr size — ใช้ได้ทั้งใบยาว/ใบสั้น
+  // factory: สร้าง renderer จาก data map + qr size — ใช้ได้ทั้งใบสั้น/ใบเศษ
   function makeFieldRenderer(dataMap: Record<string, string>, qrSize: 72|56) {
     return function renderField(f: FieldConfig): string {
       if (!f.visible) return ''
@@ -267,21 +231,8 @@ async function buildLabelHtml(p: MachineProfile, rollNo: number, gross: number, 
     }
   }
 
-  const renderLongField = makeFieldRenderer(longFieldData, 72)
-
-  const longHtmlFromLayout = `
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800;900&display=swap');
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;width:${savedLayout.labelW}mm;height:${savedLayout.labelH}mm}
-@media print{@page{size:${savedLayout.labelW}mm ${savedLayout.labelH}mm;margin:0}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-</style>
-<div style="position:relative;width:${savedLayout.labelW}mm;height:${savedLayout.labelH}mm;border:1.5px solid #000;overflow:hidden">
-${savedLayout.fields.map(renderLongField).join('\n')}
-</div>`
-
   // ═══════════════════════════════════════════════════════
-  // ใบสั้น — สร้างจาก LabelDesigner layout (เหมือนใบยาว → ปริ้น=หน้าแก้ไข, แก้ไขได้)
+  // ใบปะหน้า (ใบสั้น 76×76) — สร้างจาก LabelDesigner layout (ปริ้น = หน้าแก้ไข)
   // ═══════════════════════════════════════════════════════
   const shortLayout  = await loadShortLayout()
   const shortHeader  = p.blankHeader ? '' : ((p.headerText || '').trim() || 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด')
@@ -320,113 +271,7 @@ ${shortLayout.fields.map(renderShortField).join('\n')}
 
 
   // ═══════════════════════════════════════════════════════
-  // ใบยาว 165 × 70 mm (fallback default — ไม่ถูกใช้แล้ว เก็บไว้เผื่อ)
-  // ═══════════════════════════════════════════════════════
-  const longHtml = `
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800&display=swap');
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;width:165mm;height:70mm}
-.wrap{width:165mm;height:70mm;padding:.8mm 2mm;display:flex;flex-direction:column;border:2px solid #000;overflow:hidden}
-
-/* ── Row 1: หัวกระดาษ ── */
-.title{text-align:center;font-size:11pt;font-weight:700;border-bottom:2px solid #000;padding-bottom:.5mm;margin-bottom:.5mm;line-height:1.25;letter-spacing:.2px}
-
-/* ── Row 2: Mat / MFG / Roll ── */
-.hdr{display:flex;border-bottom:1px solid #000;padding-bottom:.4mm;margin-bottom:.4mm;align-items:center}
-.hc{flex:1;font-size:7pt;color:#444}
-.hc b{font-size:9.5pt;font-weight:700;color:#000;margin-left:.5mm}
-.hc.mid{text-align:center;border-left:1px solid #bbb;border-right:1px solid #bbb;padding:0 2mm}
-.hc.right{text-align:right}
-
-/* ── Row 3: Product name + Size + Lot ── */
-.prod-row{display:flex;align-items:baseline;border-bottom:1px solid #ddd;padding-bottom:.4mm;margin-bottom:.4mm;gap:1.5mm;flex-wrap:nowrap;overflow:hidden}
-.pname{font-size:11pt;font-weight:800;white-space:nowrap;flex-shrink:0}
-.pdot{color:#bbb;font-size:9pt;flex-shrink:0}
-.psize{font-size:8.5pt;font-weight:700;white-space:nowrap;flex-shrink:0}
-.plot{margin-left:auto;font-size:7.5pt;font-weight:700;white-space:nowrap;flex-shrink:0;color:#333}
-
-/* ── Row 4-5: info rows ── */
-.irow{display:flex;justify-content:space-between;font-size:7.5pt;padding:.25mm 0;border-bottom:.5px solid #eee}
-.il{color:#444}
-.il b{color:#000;font-weight:700}
-.ir{color:#444;text-align:right}
-.ir b{color:#000;font-weight:700}
-
-/* ── Row 6: Weight + QR ── */
-.wsec{flex:1;display:flex;border-top:2px solid #000;margin-top:.3mm;min-height:0;overflow:hidden}
-.wleft{flex:1;display:flex;flex-direction:column;padding-right:1.5mm;padding-top:.3mm;overflow:hidden}
-.wlbl{font-size:6pt;font-weight:600;color:#555;letter-spacing:.3px;text-transform:uppercase;line-height:1.2}
-.wnum{font-size:17pt;font-weight:800;line-height:1;color:#001a5c;letter-spacing:-1px}
-.wunit{font-size:7.5pt;font-weight:700;margin-top:.1mm;line-height:1.2}
-.wgross{font-size:7pt;font-weight:600;color:#333;margin-top:.3mm;border-top:.5px solid #ccc;padding-top:.2mm;line-height:1.2}
-.wbc{margin-top:auto}
-.wbclbl{font-size:6pt;color:#666;margin-bottom:.2mm;line-height:1.2}
-.wbcline{border-bottom:1px solid #000;width:24mm;height:2mm}
-.winsp{font-size:8pt;font-weight:700;margin-top:.8mm}
-.qrbox{width:22mm;display:flex;align-items:center;justify-content:center;border-left:1px solid #ddd;padding-left:1.5mm;flex-shrink:0}
-
-@media print{@page{size:165mm 70mm;margin:0}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-</style>
-
-<div class="wrap">
-
-  <!-- Row 1: หัวกระดาษ -->
-  <div class="title">
-    ${p.blankHeader ? '' : (p.headerText?.trim() || 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด')}
-    ${rollType !== 'good' ? `<span style="font-size:8pt;font-weight:700;margin-left:3mm">[${rollTypeLabelLong}]</span>` : ''}
-  </div>
-  ${reason ? `<div style="font-size:7pt;color:#c00;text-align:center;line-height:1.2;margin-bottom:.3mm">เหตุผล: ${reason}</div>` : ''}
-
-  <!-- Row 2: Mat / MFG / Roll -->
-  <div class="hdr">
-    <div class="hc"><span>Mat</span><b>${p.matCode}</b></div>
-    <div class="hc mid"><span>MFG</span><b>${mfgDate}</b></div>
-    <div class="hc right"><span>${rollType.startsWith('scrap') ? 'ถุง' : rollType==='bad' ? 'กรอ' : 'Roll'}</span><b>${rollNo===0?'—':rollNo}</b></div>
-  </div>
-
-  <!-- Row 3: Product + Size + Lot -->
-  <div class="prod-row">
-    <span class="pname">${p.productName}</span>
-    <span class="pdot">·</span>
-    <span class="psize">${p.widthCm} ${p.widthUnit ?? 'cm'} × ${p.thickMc} mc</span>
-    <span class="plot">Lot: ${p.lotNo}</span>
-  </div>
-
-  <!-- Row 4: Code + Length -->
-  <div class="irow">
-    <span class="il">Item&nbsp;<b>${p.itemCode || '—'}</b></span>
-    <span class="ir">Length&nbsp;<b>${p.length||'—'} M.</b>${p.pcs ? `&nbsp;&nbsp;Pcs.&nbsp;<b>${p.pcs}</b>` : ''}</span>
-  </div>
-
-  <!-- Row 5: Machine + Core -->
-  <div class="irow" style="border-bottom:none">
-    <span class="il">เครื่อง&nbsp;<b>${p.machine_no}</b></span>
-    <span class="ir">Core&nbsp;<b>${fmt(core,dec)} Kg</b></span>
-  </div>
-
-  <!-- Row 6: Weight + QR -->
-  <div class="wsec">
-    <div class="wleft">
-      <div class="wlbl">Net Weight</div>
-      <div class="wnum">${fmt(net,dec)}</div>
-      <div class="wunit">Kgs.</div>
-      <div class="wgross">Gross&nbsp;&nbsp;${fmt(gross,dec)} Kgs.</div>
-      <div class="wbc">
-        <div class="wbclbl">Barcode No.</div>
-        <div class="wbcline"></div>
-        <div class="winsp">ผู้ตรวจสอบ&nbsp;&nbsp;${p.inspector||'—'}</div>
-      </div>
-    </div>
-    <div class="qrbox">
-      <img src="${qrUrl(72)}" width="76" height="76" style="image-rendering:pixelated;display:block"/>
-    </div>
-  </div>
-
-</div>`
-
-  // ═══════════════════════════════════════════════════════
-  // ใบสั้น 76.2 × 76.2 mm (square) — รายละเอียดครบเหมือนใบยาว
+  // ใบสั้น 76.2 × 76.2 mm (square) — fallback default
   // หัวกระดาษ: ใช้ p.headerText (ว่าง = เว้น)
   // ═══════════════════════════════════════════════════════
   const hdr = p.blankHeader ? '' : ((p.headerText || '').trim() || 'บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด')
@@ -644,9 +489,9 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
 ${wasteLayout.fields.map(renderWasteField).join('\n')}
 </div>`
 
-  const W = isScrapRoll ? wasteLayout.labelW : size === 'long' ? savedLayout.labelW : shortLayout.labelW
-  const H = isScrapRoll ? wasteLayout.labelH : size === 'long' ? savedLayout.labelH : shortLayout.labelH
-  const innerHtml = isScrapRoll ? wasteHtmlFromLayout : size === 'long' ? longHtmlFromLayout : shortHtmlFromLayout
+  const W = isScrapRoll ? wasteLayout.labelW : shortLayout.labelW
+  const H = isScrapRoll ? wasteLayout.labelH : shortLayout.labelH
+  const innerHtml = isScrapRoll ? wasteHtmlFromLayout : shortHtmlFromLayout
   return { innerHtml, W, H }
 }
 
@@ -1938,34 +1783,21 @@ function QuickEditModal({ profile, onClose, onSaved, onParked }: {
           <div className="grid grid-cols-2 gap-2">
             {inp('Core Weight (kg)',   'coreWeight', '', true)}
             {inp('ผู้ตรวจสอบ',        'inspector',  '',     true)}
-            <div className="col-span-2">
-              <label className="block text-[10px] text-slate-500 mb-1">ใบปะหน้า</label>
-              <div className="flex gap-1">
-                {(['long','short'] as const).map(s => (
-                  <button key={s} onMouseDown={e => { e.preventDefault(); setP(prev => ({...prev, labelSize: s})) }}
-                    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold ${p.labelSize===s ? 'bg-brand-600 text-white' : 'bg-slate-800 text-slate-400'}`}>
-                    {s === 'long' ? 'ยาว 165×70' : 'สั้น 76×76'}
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
 
-          {p.labelSize === 'short' && (
-            <div className="col-span-2 space-y-1.5">
-              <label className="flex items-center gap-2 cursor-pointer select-none"
-                onMouseDown={e => { e.preventDefault(); setP(prev => ({...prev, blankHeader: !prev.blankHeader})) }}>
-                <input type="checkbox" readOnly checked={!!p.blankHeader}
-                  className="w-4 h-4 accent-brand-500 pointer-events-none"/>
-                <span className="text-xs text-slate-300">เว้นหัวกระดาษว่าง (ไม่พิมพ์ชื่อบริษัท)</span>
-              </label>
-              {!p.blankHeader && (
-                <input value={p.headerText ?? ''} onChange={e => setP(prev => ({...prev, headerText: e.target.value}))}
-                  placeholder="ปล่อยว่าง = ใช้ชื่อบริษัท BWP"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-brand-500" />
-              )}
-            </div>
-          )}
+          <div className="space-y-1.5">
+            <label className="flex items-center gap-2 cursor-pointer select-none"
+              onMouseDown={e => { e.preventDefault(); setP(prev => ({...prev, blankHeader: !prev.blankHeader})) }}>
+              <input type="checkbox" readOnly checked={!!p.blankHeader}
+                className="w-4 h-4 accent-brand-500 pointer-events-none"/>
+              <span className="text-xs text-slate-300">เว้นหัวกระดาษว่าง (ไม่พิมพ์ชื่อบริษัท)</span>
+            </label>
+            {!p.blankHeader && (
+              <input value={p.headerText ?? ''} onChange={e => setP(prev => ({...prev, headerText: e.target.value}))}
+                placeholder="ปล่อยว่าง = ใช้ชื่อบริษัท BWP"
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-brand-500" />
+            )}
+          </div>
         </div>
 
         {/* ปุ่มจอดงาน/พักงาน เอาออกแล้ว — ใช้ "ปิดงาน" แทน (กันบั๊กข้อมูลปนข้ามงาน) */}
@@ -4418,12 +4250,8 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
             {/* Reprint */}
             <div className="flex gap-2 px-5 pt-4 border-t border-slate-800">
               <button onClick={() => reprintRollLabel(selectedRoll, 'short')}
-                className="flex-1 flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white text-sm py-2.5 rounded-xl transition-colors">
-                <Printer size={14}/> ใบสั้น
-              </button>
-              <button onClick={() => reprintRollLabel(selectedRoll, 'long')}
                 className="flex-1 flex items-center justify-center gap-1.5 bg-brand-600 hover:bg-brand-700 text-white text-sm py-2.5 rounded-xl transition-colors font-semibold">
-                <Printer size={14}/> ใบยาว
+                <Printer size={14}/> รีปริ้นใบปะหน้า
               </button>
             </div>
 

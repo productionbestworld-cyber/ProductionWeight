@@ -1446,12 +1446,9 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
               {r.remark && <p className="text-rose-300/80 text-xs mt-2">⚠ {r.remark}</p>}
             </div>
             <div className="flex gap-2 px-4 py-3 border-t border-slate-800">
-              <button onClick={() => doReprint(r, 'long')} disabled={!!printing}
-                className="flex-1 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white py-2.5 rounded-xl font-bold text-sm">
-                {printing === r.id+'long' ? 'กำลังพิมพ์...' : '🖨 ใบปะหน้า (ยาว)'}</button>
               <button onClick={() => doReprint(r, 'short')} disabled={!!printing}
-                className="flex-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white py-2.5 rounded-xl font-bold text-sm">
-                {printing === r.id+'short' ? 'กำลังพิมพ์...' : '🖨 ใบสั้น'}</button>
+                className="flex-1 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white py-2.5 rounded-xl font-bold text-sm">
+                {printing === r.id+'short' ? 'กำลังพิมพ์...' : '🖨 รีปริ้นใบปะหน้า'}</button>
             </div>
           </div>
         </div>

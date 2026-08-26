@@ -1587,12 +1587,9 @@ function RollDetailModal({ roll: r, onClose, doReprint, printing, onChanged }: {
           )}
         </div>
         <div className="flex gap-2 px-4 py-3 border-t border-slate-800">
-          <button onClick={() => doReprint(r, 'long')} disabled={!!printing}
-            className="flex-1 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white py-2.5 rounded-xl font-bold text-sm">
-            {printing === r.id+'long' ? 'กำลังพิมพ์...' : '🖨 รีปริ้นใบยาว'}</button>
           <button onClick={() => doReprint(r, 'short')} disabled={!!printing}
-            className="flex-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white py-2.5 rounded-xl font-bold text-sm">
-            {printing === r.id+'short' ? 'กำลังพิมพ์...' : '🖨 รีปริ้นใบสั้น'}</button>
+            className="flex-1 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white py-2.5 rounded-xl font-bold text-sm">
+            {printing === r.id+'short' ? 'กำลังพิมพ์...' : '🖨 รีปริ้นใบปะหน้า'}</button>
         </div>
         {/* ── ลบม้วน (ชั่งผิด/งานผิด) ── */}
         {!r.transferred && (
@@ -1688,12 +1685,9 @@ function ItemReworkPanel({ itemCode, itemName, onClose }: { itemCode: string; it
                   </p>
                 </div>
                 <div className="flex flex-col gap-1 shrink-0">
-                  <button onClick={() => doReprint(r, 'long')} disabled={!!printing}
-                    className="text-[11px] bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white px-2 py-1 rounded font-bold whitespace-nowrap">
-                    {printing === r.id+'long' ? '...' : '🖨 ใบยาว'}</button>
                   <button onClick={() => doReprint(r, 'short')} disabled={!!printing}
-                    className="text-[11px] bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white px-2 py-1 rounded font-bold whitespace-nowrap">
-                    {printing === r.id+'short' ? '...' : '🖨 ใบสั้น'}</button>
+                    className="text-[11px] bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white px-2 py-1 rounded font-bold whitespace-nowrap">
+                    {printing === r.id+'short' ? '...' : '🖨 รีปริ้น'}</button>
                 </div>
               </div>
             </div>

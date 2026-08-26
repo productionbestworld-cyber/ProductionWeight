@@ -153,7 +153,6 @@ export default function RollSearch({ readOnly = false }: { readOnly?: boolean } 
   }
 
   // ── รีปริ้นทั้งหมดตามผลค้นหา (ใบครบในเอกสารเดียว ปริ้นครั้งเดียว) ──
-  const [batchSize, setBatchSize] = useState<'long' | 'short'>('long')
   const [batchPrinting, setBatchPrinting] = useState(false)
   async function reprintAll() {
     if (!rolls.length) return
@@ -169,7 +168,7 @@ export default function RollSearch({ readOnly = false }: { readOnly?: boolean } 
         full.push(...(data ?? []))
       }
       full.sort((a, b) => String(a.machine_no).localeCompare(String(b.machine_no)) || (a.roll_no ?? 0) - (b.roll_no ?? 0))
-      await printRollsBatch(full, batchSize)
+      await printRollsBatch(full, 'short')
     } catch (e: any) { alert('รีปริ้นรวมไม่สำเร็จ: ' + (e?.message ?? e)) }
     finally { setBatchPrinting(false) }
   }
@@ -283,14 +282,6 @@ export default function RollSearch({ readOnly = false }: { readOnly?: boolean } 
         {rolls.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 mb-2 bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2">
             <span className="text-xs text-slate-400">รีปริ้นรวมตามผลค้นหา ({nf(rolls.length, 0)} ใบ):</span>
-            <div className="flex bg-slate-800 rounded-md p-0.5 border border-slate-700">
-              {(['long', 'short'] as const).map(s => (
-                <button key={s} onClick={() => setBatchSize(s)}
-                  className={`px-2.5 py-1 rounded text-[11px] font-bold ${batchSize === s ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'}`}>
-                  {s === 'long' ? 'ใบยาว' : 'ใบสั้น'}
-                </button>
-              ))}
-            </div>
             <button onClick={reprintAll} disabled={batchPrinting}
               className="px-3 py-1.5 rounded-lg text-xs font-bold bg-green-600 hover:bg-green-500 text-white disabled:opacity-50">
               {batchPrinting ? 'กำลังเตรียม…' : `🖨 รีปริ้นทั้งหมด (${nf(rolls.length, 0)} ใบ)`}
@@ -404,10 +395,8 @@ export default function RollSearch({ readOnly = false }: { readOnly?: boolean } 
 
             <div className="px-5 py-3 border-t border-slate-800 flex flex-wrap items-center gap-2">
               <span className="text-[11px] text-slate-500">รีปริ้นใบปะหน้า (วันผลิต = วันชั่งจริง):</span>
-              <button onClick={() => doReprint('long')} disabled={printing || detailLoading}
-                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-600 hover:bg-brand-500 text-white disabled:opacity-50">🖨 ใบยาว</button>
               <button onClick={() => doReprint('short')} disabled={printing || detailLoading}
-                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-700 hover:bg-slate-600 text-white disabled:opacity-50">🖨 ใบสั้น</button>
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-600 hover:bg-brand-500 text-white disabled:opacity-50">🖨 รีปริ้น</button>
               <a href={`/?roll=${detail.id}`} target="_blank" rel="noopener noreferrer"
                 className="ml-auto text-[11px] text-brand-400 hover:text-brand-200 underline">เปิดหน้าเต็ม ↗</a>
             </div>

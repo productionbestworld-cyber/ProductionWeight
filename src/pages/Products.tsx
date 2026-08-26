@@ -10,9 +10,9 @@ import { reprintRollLabel } from './WeighStation'
 const ReadOnlyCtx = createContext(false)
 const useRO = () => useContext(ReadOnlyCtx)
 
-// ── ทดสอบใบปะหน้า (สั้น/ยาว) จากข้อมูลสินค้า — ไม่ต้องมีงานจริง ──
-// ใช้ค่าน้ำหนักตัวอย่าง · cust_code ส่งไปด้วย → ลูกค้า 08 จะเห็น EXP
-function previewProductLabel(p: Product, size: 'short' | 'long') {
+// ── ทดสอบใบปะหน้าจากข้อมูลสินค้า — ไม่ต้องมีงานจริง ──
+// ใช้ค่าน้ำหนักตัวอย่าง · EXP (ลูกค้า 08) ไม่พิมพ์บนใบ — ดูผ่าน QR ที่หน้ารายละเอียดม้วน
+function previewProductLabel(p: Product, size: 'short' = 'short') {
   const core = parseFloat((p.core_weight ?? '').trim() || '1.25') || 1.25
   const net  = 25.00
   reprintRollLabel({
@@ -528,10 +528,8 @@ function CustomerDetailModal({ customer, products, customers, onClose }: {
                       <td className="px-3 py-2 text-white">{p.product_name || '—'}</td>
                       <td className="px-3 py-2 text-slate-300">{p.width_cm ? `${p.width_cm}${p.width_unit ?? 'cm'}×${p.thick_mc}mc` : '—'}</td>
                       <td className="px-3 py-2 text-right whitespace-nowrap">
-                        <button onClick={() => previewProductLabel(p, 'long')} title="ทดสอบใบยาว"
-                          className="text-[11px] font-bold bg-brand-500/15 text-brand-300 hover:bg-brand-500/25 rounded px-1.5 py-1 mr-1">🏷️ยาว</button>
-                        <button onClick={() => previewProductLabel(p, 'short')} title="ทดสอบใบสั้น"
-                          className="text-[11px] font-bold bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 rounded px-1.5 py-1 mr-1">สั้น</button>
+                        <button onClick={() => previewProductLabel(p, 'short')} title="ทดสอบใบปะหน้า"
+                          className="text-[11px] font-bold bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 rounded px-1.5 py-1 mr-1">🏷️ทดสอบใบ</button>
                         <button hidden={ro} onClick={() => setEditProd(p)} className="text-slate-400 hover:text-brand-400 p-1.5">
                           <Edit3 size={13}/>
                         </button>
@@ -656,10 +654,8 @@ function ProductsTab({ products, customers, loading, onChanged }: {
                   {p.cust_name || '—'}
                 </td>
                 <td className="px-3 py-2 text-right whitespace-nowrap">
-                  <button onClick={() => previewProductLabel(p, 'long')} title="ทดสอบใบยาว"
-                    className="text-[11px] font-bold bg-brand-500/15 text-brand-300 hover:bg-brand-500/25 rounded px-1.5 py-1 mr-1">🏷️ยาว</button>
-                  <button onClick={() => previewProductLabel(p, 'short')} title="ทดสอบใบสั้น"
-                    className="text-[11px] font-bold bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 rounded px-1.5 py-1 mr-1">สั้น</button>
+                  <button onClick={() => previewProductLabel(p, 'short')} title="ทดสอบใบปะหน้า"
+                    className="text-[11px] font-bold bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 rounded px-1.5 py-1 mr-1">🏷️ทดสอบใบ</button>
                   <button hidden={ro} onClick={() => setEditing(p)} className="text-slate-400 hover:text-brand-400 p-1.5"><Edit3 size={14}/></button>
                   <button onClick={() => remove(p)} className="text-slate-400 hover:text-red-400 p-1.5"><Trash2 size={14}/></button>
                 </td>

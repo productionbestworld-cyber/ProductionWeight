@@ -371,7 +371,6 @@ async function loadLayoutBySize(size: LabelSize): Promise<LabelLayout> {
   return def
 }
 
-export const loadLongLayout  = () => loadLayoutBySize('long')
 export const loadShortLayout = () => loadLayoutBySize('short')
 export const loadWasteLayout = () => loadLayoutBySize('waste')
 
@@ -386,8 +385,8 @@ async function saveLayoutToDB(layout: LabelLayout, size: LabelSize): Promise<boo
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function LabelDesigner() {
-  const [size, setSize]         = useState<LabelSize>('long')
-  const [layout, setLayout]     = useState<LabelLayout>(DEFAULT_LAYOUT)
+  const [size, setSize]         = useState<LabelSize>('short')
+  const [layout, setLayout]     = useState<LabelLayout>(DEFAULT_LAYOUT_SHORT)
   const [loading, setLoading]   = useState(true)
   const [selected, setSelected] = useState<string | null>(null)
   const [savedFlash, setSavedFlash] = useState(false)
@@ -766,12 +765,6 @@ document.fonts.ready.then(function(){setTimeout(function(){window.print();window
         <div className="flex items-center gap-3 w-full max-w-max">
           {/* Size switcher */}
           <div className="flex gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800">
-            <button onClick={() => setSize('long')}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
-                size === 'long' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'
-              }`}>
-              📄 ใบยาว 165×70
-            </button>
             <button onClick={() => setSize('short')}
               className={`px-3 py-1.5 rounded-md text-xs font-bold transition-colors ${
                 size === 'short' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'

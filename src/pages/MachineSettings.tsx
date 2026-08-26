@@ -566,32 +566,19 @@ function EditModal({ p, products, onChange, onAutoFill, onRemove, onClose, onPro
           <div className="grid grid-cols-2 gap-2">
             {f('Core Weight (kg)','coreWeight','',true)}
             {f('ผู้ตรวจสอบ','inspector','',true)}
-            <div className="col-span-2">
-              <label className="block text-[10px] text-slate-500 mb-1">ใบปะหน้า</label>
-              <div className="flex gap-1">
-                {(['long','short'] as const).map(s => (
-                  <button key={s} onMouseDown={e => { e.preventDefault(); onChange('labelSize', s) }}
-                    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold ${p.labelSize===s?'bg-brand-600 text-white':'bg-slate-800 text-slate-400'}`}>
-                    {s==='long'?'📄 ยาว 165×70':'🏷 สั้น 76×76'}
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
-          {p.labelSize==='short' && (
-            <div className="space-y-1.5">
-              <label className="flex items-center gap-2 cursor-pointer select-none"
-                onMouseDown={e => { e.preventDefault(); onChange('blankHeader', !p.blankHeader) }}>
-                <input type="checkbox" readOnly checked={!!p.blankHeader} className="w-4 h-4 accent-brand-500 pointer-events-none"/>
-                <span className="text-xs text-slate-300">เว้นหัวกระดาษว่าง</span>
-              </label>
-              {!p.blankHeader && (
-                <input value={p.headerText??''} onChange={e => onChange('headerText', e.target.value)}
-                  placeholder="ปล่อยว่าง = ใช้ชื่อบริษัท BWP"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-brand-500"/>
-              )}
-            </div>
-          )}
+          <div className="space-y-1.5">
+            <label className="flex items-center gap-2 cursor-pointer select-none"
+              onMouseDown={e => { e.preventDefault(); onChange('blankHeader', !p.blankHeader) }}>
+              <input type="checkbox" readOnly checked={!!p.blankHeader} className="w-4 h-4 accent-brand-500 pointer-events-none"/>
+              <span className="text-xs text-slate-300">เว้นหัวกระดาษว่าง</span>
+            </label>
+            {!p.blankHeader && (
+              <input value={p.headerText??''} onChange={e => onChange('headerText', e.target.value)}
+                placeholder="ปล่อยว่าง = ใช้ชื่อบริษัท BWP"
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-sm outline-none focus:border-brand-500"/>
+            )}
+          </div>
           {/* ตำแหน่งแปะป้าย — กำหนดตามที่ส่ง (ไหลลงม้วน → ใบส่งสินค้า) */}
           <div>
             <label className="block text-[10px] text-slate-500 mb-1">ตำแหน่งแปะป้าย (ตามที่ส่ง)</label>

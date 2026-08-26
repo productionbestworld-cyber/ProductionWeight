@@ -3,6 +3,7 @@ import { Save, Printer, RefreshCw, CheckCircle2, ArrowLeft, Wind, X, Settings } 
 import QRCode from 'react-qr-code'
 import QRCodeLib from 'qrcode'
 import { supabase, fetchAll } from '../lib/supabase'
+import { restoreReworkSource } from '../lib/rework'
 import { loadProfiles, saveProfiles, fmtSize, convertWidth, type MachineProfile } from './MachineSettings'
 import ReworkJobList from './ReworkJobList'
 import { loadLongLayout, loadShortLayout, loadWasteLayout, type FieldConfig } from './LabelDesigner'
@@ -3320,13 +3321,9 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
     }
     // ── ม้วนกรอ: ลบแล้วคืนม้วนต้นทางให้กลับมาเลือกกรอใหม่ได้ ──
     if (r.rework_source_roll_id) {
-      const { error: srcErr } = await supabase.from('production_rolls')
-        .update({
-          rework_status: 'reworking',
-          rework_remark: `คืนสถานะ (ลบม้วนกรอ #${r.roll_no}: ${deleteReason.trim()})`,
-        })
-        .eq('id', r.rework_source_roll_id)
-      if (srcErr) console.warn('คืนม้วนต้นทางไม่สำเร็จ:', srcErr.message)
+      // คืนม้วนต้นทาง: ถ้ายังมีงานกรอ active → 'reworking' (กรอต่อในงานเดิม) · ถ้าไม่มี → คืนเข้าคิวให้เลือกกรอใหม่
+      await restoreReworkSource(r.rework_source_roll_id, `คืนสถานะ (ลบม้วนกรอ #${r.roll_no}: ${deleteReason.trim()})`)
+        .catch(e => console.warn('คืนม้วนต้นทางไม่สำเร็จ:', e?.message ?? e))
       // เด้งม้วนต้นทางกลับเข้ารายการเลือกกรอ
       loadSrcRolls()
     }

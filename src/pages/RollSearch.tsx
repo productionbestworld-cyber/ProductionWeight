@@ -13,6 +13,7 @@
 // ════════════════════════════════════════════════════════════════════════
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { restoreReworkSource } from '../lib/rework'
 import { reprintRollLabel, printRollsBatch } from './WeighStation'
 
 const TZ = 'Asia/Bangkok'
@@ -138,16 +139,15 @@ export default function RollSearch({ readOnly = false }: { readOnly?: boolean } 
         p_work_order: detail.work_order ?? null, p_sale_order: detail.sale_order ?? null,
       })
       if (error) throw error
-      // ม้วนกรอ: คืนม้วนต้นทางกลับคิว
+      // ม้วนกรอ: คืนม้วนต้นทาง — มีงานกรอ active → กรอต่อในงานเดิม · ไม่มี → คืนเข้าคิวให้เลือกกรอใหม่
+      let restoredTo: 'reworking' | 'queue' | null = null
       if (detail.rework_source_roll_id) {
-        await supabase.from('production_rolls').update({
-          rework_status: 'reworking',
-          rework_remark: `คืนสถานะ (ลบม้วนกรอ #${detail.roll_no}: ${delReason.trim()})`,
-        }).eq('id', detail.rework_source_roll_id)
+        restoredTo = await restoreReworkSource(detail.rework_source_roll_id, `คืนสถานะ (ลบม้วนกรอ #${detail.roll_no}: ${delReason.trim()})`)
       }
       setRolls(prev => prev.filter(x => x.id !== detail.id))   // เอาออกจากผลค้นหา
       setDetail(null); setDelMode(false); setDelBy(''); setDelReason('')
-      alert('✅ ลบม้วนแล้ว' + (detail.rework_source_roll_id ? ' · คืนม้วนต้นทางกลับคิวกรอแล้ว' : ''))
+      alert('✅ ลบม้วนแล้ว' + (restoredTo === 'queue' ? ' · คืนม้วนต้นทางกลับคิว "รับจากผลิต" แล้ว'
+        : restoredTo === 'reworking' ? ' · คืนม้วนต้นทางให้กรอต่อในงานเดิมแล้ว' : ''))
     } catch (e: any) { alert('ลบไม่สำเร็จ: ' + (e?.message ?? e)) }
     finally { setDeleting(false) }
   }

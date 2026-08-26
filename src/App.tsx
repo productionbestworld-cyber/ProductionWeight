@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Scale, LayoutDashboard, Settings, Package, History, Warehouse as WarehouseIcon, ChevronDown, Wifi, WifiOff, AlertTriangle, Lock, Search, Boxes, CalendarClock, ClipboardList, Factory } from 'lucide-react'
+import { Scale, LayoutDashboard, Settings, Package, History, Warehouse as WarehouseIcon, ChevronDown, Wifi, WifiOff, AlertTriangle, Lock, Search, Boxes, CalendarClock, ClipboardList, Factory, Repeat } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import WeighStation from './pages/WeighStation'
 import Dashboard from './pages/Dashboard'
@@ -17,9 +17,10 @@ import OwnerDashboard from './pages/OwnerDashboard'
 import WeighLog from './pages/WeighLog'
 import RollSearch from './pages/RollSearch'
 import ProductionDashboard from './pages/ProductionDashboard'
+import RewindDashboard from './pages/RewindDashboard'
 import { APP_VERSION, APP_BUILD_DATE, CHANGELOG } from './version'
 
-type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings' | 'admin' | 'review' | 'nc' | 'products' | 'planning' | 'combined' | 'weighlog' | 'rollsearch' | 'proddash'
+type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings' | 'admin' | 'review' | 'nc' | 'products' | 'planning' | 'combined' | 'weighlog' | 'rollsearch' | 'proddash' | 'rewinddash'
 type Dept = DeptType
 
 // section ของ "ข้อมูล" (อยู่บนม้วน/เครื่อง) — คนละเรื่องกับแผนกที่ใช้ล็อกอิน
@@ -185,6 +186,16 @@ export default function App() {
     if (isProdDash) return <ProductionDashboard />
   }
 
+  // ── ลิงก์แยก: แดชบอร์ดกรอ — ...?rewinddash=1 หรือ /rewinddash ──
+  {
+    const sp = new URLSearchParams(window.location.search)
+    const path = window.location.pathname.replace(/\/+$/, '').toLowerCase()
+    const isRewindDash = sp.get('rewinddash') !== null
+      || window.location.hash.replace('#', '').toLowerCase() === 'rewinddash'
+      || path === '/rewinddash'
+    if (isRewindDash) return <RewindDashboard />
+  }
+
   // ── ลิงก์แยก: ค้นหาม้วน — ...?rollsearch=1 หรือ /rollsearch ──
   {
     const sp = new URLSearchParams(window.location.search)
@@ -326,6 +337,7 @@ export default function App() {
     { key: 'history',   label: 'ประวัติผลิต',    icon: History,         own: ['planning'], view: ['blow','rewind'] },
     { key: 'products',  label: 'คลังข้อมูล',     icon: Boxes,           own: ['purchase'], view: ['sales','planning','blow'] },
     { key: 'proddash',  label: 'แดชบอร์ดผลิต',  icon: Factory,         own: [], view: ['blow'] },
+    { key: 'rewinddash',label: 'แดชบอร์ดกรอ',   icon: Repeat,          own: [], view: ['rewind'] },
     { key: 'dashboard', label: 'Dashboard',      icon: LayoutDashboard, own: [], view: ['blow','rewind','warehouse','planning','sales'] },
     { key: 'combined',  label: 'รวมเทียบทั้งปี',  icon: LayoutDashboard, own: [], view: ['planning','sales'] },
     { key: 'rollsearch',label: 'ค้นหาม้วน',     icon: Search,          own: [], view: ['blow','rewind','warehouse','logistics','sales','planning'] },
@@ -541,6 +553,17 @@ export default function App() {
               </a>
             </div>
             <ProductionDashboard />
+          </div>
+        )}
+        {page === 'rewinddash' && (
+          <div>
+            <div className="flex justify-end px-4 pt-3">
+              <a href="/rewinddash" target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg px-3 py-1.5">
+                🔗 เปิดแยกหน้าต่าง
+              </a>
+            </div>
+            <RewindDashboard />
           </div>
         )}
         {page === 'products'  && <ProductsPage readOnly={pageReadOnly} />}

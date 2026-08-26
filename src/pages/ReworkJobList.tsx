@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { Plus, Trash2, RefreshCw, Search, X } from 'lucide-react'
 import { supabase, fetchAll } from '../lib/supabase'
+import { restoreReworkSource, resolveJobSources } from '../lib/rework'
 import { fetchProducts, backfillProductMatCore, type Product } from './Products'
 import ExportButton from '../components/ExportButton'
 import { fmtSize, type MachineProfile } from './MachineSettings'
@@ -420,34 +421,10 @@ function JobListView({ onPickJob, refreshSignal }: { onPickJob: (profile: Machin
         alert('ปิดงานไม่สำเร็จ: ไม่มีสิทธิ์อัปเดต (RLS) หรือไม่พบงานนี้\nให้เปิดสิทธิ์ UPDATE บนตาราง rework_jobs ใน Supabase')
         return
       }
-      if ((closeFor as any).new_system) {
-        // ชุดระบบใหม่: ปิดงาน → ม้วนต้นทางที่ "กรอแล้ว" = reworked · ที่ "ยังไม่กรอ" = กลับคิว (รับจากผลิต)
-        const ic = (closeFor.item_code ?? '').trim()
-        const { data: outs } = await supabase.from('production_rolls')
-          .select('rework_source_roll_id').eq('item_code', ic).eq('roll_type', 'good')
-          .eq('new_system', true)
-        const used = new Set((outs ?? []).map((o: any) => o.rework_source_roll_id).filter(Boolean))
-        const { data: srcs } = await supabase.from('production_rolls')
-          .select('id').eq('item_code', ic).eq('roll_type', 'bad').eq('rework_status', 'reworking')
-        for (const s of srcs ?? []) {
-          if (used.has(s.id)) {
-            await supabase.from('production_rolls').update({ rework_status: 'reworked' }).eq('id', s.id)
-          } else {
-            await supabase.from('production_rolls').update({
-              rework_status: null, rework_received_by: null, rework_received_at: null, rework_remark: null, new_system: false,
-            }).eq('id', s.id)   // เหลือไม่ได้กรอ → กลับคิว
-          }
-        }
-      } else {
-        // งานเก่า: เดิม — ม้วนกำลังกรอของ Lot ต้นทาง → reworked
-        const srcLot = ((closeFor as any).source_lot_no || '').trim()
-        if (srcLot) {
-          const { error: rollErr } = await supabase.from('production_rolls')
-            .update({ rework_status: 'reworked' })
-            .eq('lot_no', srcLot).eq('roll_type', 'bad').eq('rework_status', 'reworking')
-          if (rollErr) console.warn('อัปเดตสถานะม้วนต้นทางไม่สำเร็จ (non-fatal):', rollErr.message)
-        }
-      }
+      // ปิดงาน → ม้วนต้นทาง "ของงานนี้": ที่กรอแล้ว = reworked · ที่ยังไม่กรอ = คืนคิว (รับจากผลิต)
+      // อิงรายการเบิกจริง (ไม่พึ่ง source_lot_no/item_code) — ม้วนข้าม Lot ไม่ค้าง · ไม่แตะม้วนงานอื่น
+      try { await resolveJobSources(closeFor as any) }
+      catch (e: any) { console.warn('อัปเดตสถานะม้วนต้นทางไม่สำเร็จ (non-fatal):', e?.message ?? e) }
       setCloseFor(null)
       await load()
     } catch (e: any) {
@@ -459,33 +436,9 @@ function JobListView({ onPickJob, refreshSignal }: { onPickJob: (profile: Machin
   // คืนม้วนต้นทางกลับคิว + ลบงานกรอ (ไม่ confirm/ไม่ reload) — ใช้ซ้ำทั้งลบเดี่ยวและโยนคืนหลายม้วน
   async function returnJobCore(job: ReworkJob) {
     try {
-      if ((job as any).new_system) {
-        // ชุดระบบใหม่: คืนม้วนต้นทางที่ "ยังไม่ได้กรอ" กลับคิว · ม้วนที่กรอแล้ว = reworked
-        const ic = (job.item_code ?? '').trim()
-        const { data: outs } = await supabase.from('production_rolls')
-          .select('rework_source_roll_id').eq('item_code', ic).eq('roll_type', 'good')
-          .eq('new_system', true)
-        const used = new Set((outs ?? []).map((o: any) => o.rework_source_roll_id).filter(Boolean))
-        const { data: srcs } = await supabase.from('production_rolls')
-          .select('id').eq('item_code', ic).eq('roll_type', 'bad').eq('rework_status', 'reworking')
-        for (const s of srcs ?? []) {
-          if (used.has(s.id)) {
-            await supabase.from('production_rolls').update({ rework_status: 'reworked' }).eq('id', s.id)
-          } else {
-            await supabase.from('production_rolls').update({
-              rework_status: null, rework_received_by: null, rework_received_at: null, rework_remark: null, new_system: false,
-            }).eq('id', s.id)   // ยังไม่ได้กรอ → กลับคิว
-          }
-        }
-      } else {
-        // งานเก่า: คืนม้วนต้นทางของ Lot นี้ที่กำลังกรอกลับคิว
-        const srcLot = ((job as any).source_lot_no || '').trim()
-        if (srcLot) {
-          await supabase.from('production_rolls').update({
-            rework_status: null, rework_received_by: null, rework_received_at: null, rework_remark: null,
-          }).eq('lot_no', srcLot).eq('roll_type', 'bad').eq('rework_status', 'reworking')
-        }
-      }
+      // คืนม้วนต้นทาง "ของงานนี้" อิงรายการเบิกจริง — ที่กรอแล้ว = reworked · ยังไม่กรอ = กลับคิว
+      // (เดิมอิง source_lot_no/item_code ทำให้ม้วนข้าม Lot ค้าง หรือไปแตะม้วนงานอื่น)
+      await resolveJobSources(job as any)
     } catch (e: any) {
       console.warn('คืนม้วนต้นทางไม่สำเร็จ (non-fatal):', e?.message ?? e)
     }
@@ -1561,13 +1514,13 @@ function RollDetailModal({ roll: r, onClose, doReprint, printing, onChanged }: {
         p_work_order: r.work_order ?? null, p_sale_order: r.sale_order ?? null,
       })
       if (error) throw error
+      let restoredTo: 'reworking' | 'queue' | null = null
       if (r.rework_source_roll_id) {
-        await supabase.from('production_rolls').update({
-          rework_status: 'reworking',
-          rework_remark: `คืนสถานะ (ลบม้วนกรอ #${r.roll_no}: ${delReason.trim()})`,
-        }).eq('id', r.rework_source_roll_id)
+        // คืนม้วนต้นทาง: มีงานกรอ active → กรอต่อในงานเดิม · ไม่มี → คืนเข้าคิวให้เลือกกรอใหม่
+        restoredTo = await restoreReworkSource(r.rework_source_roll_id, `คืนสถานะ (ลบม้วนกรอ #${r.roll_no}: ${delReason.trim()})`)
       }
-      alert('✅ ลบม้วนแล้ว' + (r.rework_source_roll_id ? ' · คืนม้วนต้นทางกลับคิวแล้ว' : ''))
+      alert('✅ ลบม้วนแล้ว' + (restoredTo === 'queue' ? ' · คืนม้วนต้นทางกลับคิว "รับจากผลิต" แล้ว'
+        : restoredTo === 'reworking' ? ' · คืนม้วนต้นทางให้กรอต่อในงานเดิมแล้ว' : ''))
       onChanged?.()
     } catch (e: any) { alert('ลบไม่สำเร็จ: ' + (e?.message ?? e)) }
     finally { setDeleting(false) }

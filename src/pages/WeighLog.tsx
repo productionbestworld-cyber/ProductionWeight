@@ -2,6 +2,8 @@
 //  Log การชั่ง — บันทึกทุกการชั่งตามจริง (อ่านอย่างเดียว · READ-ONLY)
 //  เปิดผ่าน  ?weighlog=1  หรือ  /weighlog
 //  ดึงจาก weigh_logs (เขียนทุกครั้งที่กดบันทึกชั่ง) — แสดง WO/SO/เวลา/นน./ผู้ชั่ง ครบ
+//  แยก log ตามแผนก: ส่ง dept='blow'/'rewind' เข้ามา → กรองให้เห็นเฉพาะของแผนกตัวเอง
+//  (weigh_logs ไม่มีคอลัมน์ section → จำแนกจากเครื่อง: S01–S04 = กรอ · BLxx = เป่า · is_rewound=กรอ)
 // ════════════════════════════════════════════════════════════════════════
 import { useEffect, useMemo, useState } from 'react'
 import { supabase, fetchAll } from '../lib/supabase'
@@ -13,6 +15,7 @@ type Log = {
   roll_no: number | null; roll_type: string | null
   gross_weight: number | null; core_weight: number | null; net_weight: number | null
   remark: string | null; inspector: string | null; weighed_at: string | null
+  is_rewound: boolean | null
 }
 
 const TZ = 'Asia/Bangkok'
@@ -39,7 +42,7 @@ function sinceISO(k: RangeKey): string | null {
   return null
 }
 
-export default function WeighLog() {
+export default function WeighLog({ dept }: { dept?: 'blow' | 'rewind' } = {}) {
   const [logs, setLogs] = useState<Log[]>([])
   const [loading, setLoading] = useState(true)
   const [range, setRange] = useState<RangeKey>('today')
@@ -47,13 +50,15 @@ export default function WeighLog() {
   const [type, setType] = useState('')
   const [q, setQ] = useState('')
   const [updated, setUpdated] = useState<Date | null>(null)
+  // เครื่องไหนเป็นของแผนกไหน (จาก machine_profiles) — ใช้แยก log เป่า/กรอ
+  const [machineSection, setMachineSection] = useState<Record<string, string>>({})
 
   async function load() {
     setLoading(true)
     const since = sinceISO(range)
     const rows = await fetchAll<Log>(() => {
       let qq = supabase.from('weigh_logs')
-        .select('id,machine_no,lot_no,work_order,sale_order,item_code,product_name,customer,roll_no,roll_type,gross_weight,core_weight,net_weight,remark,inspector,weighed_at')
+        .select('id,machine_no,lot_no,work_order,sale_order,item_code,product_name,customer,roll_no,roll_type,gross_weight,core_weight,net_weight,remark,inspector,weighed_at,is_rewound')
         .order('weighed_at', { ascending: false })
       if (since) qq = qq.gte('weighed_at', since)
       return qq
@@ -62,9 +67,28 @@ export default function WeighLog() {
   }
   useEffect(() => { load() }, [range]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const machines = useMemo(() => Array.from(new Set(logs.map(l => l.machine_no).filter(Boolean))).sort() as string[], [logs])
+  // โหลด map เครื่อง→แผนก ครั้งเดียว (S01–S04=rewind · BLxx=blow)
+  useEffect(() => {
+    supabase.from('machine_profiles').select('machine_no,section').then(({ data }) => {
+      const m: Record<string, string> = {}
+      for (const r of (data ?? []) as any[]) if (r.machine_no) m[r.machine_no] = r.section ?? 'blow'
+      setMachineSection(m)
+    })
+  }, [])
 
-  const filtered = useMemo(() => logs.filter(l => {
+  // แผนกของ log แต่ละแถว: is_rewound=กรอ · เครื่องกรอ(S0x)=กรอ · ที่เหลือ=เป่า
+  const logSection = (l: Log): 'blow' | 'rewind' =>
+    l.is_rewound ? 'rewind' : (machineSection[l.machine_no ?? ''] === 'rewind' ? 'rewind' : 'blow')
+
+  // กรองตามแผนกก่อน (ถ้าส่ง dept มา) — เป่าเห็นเฉพาะเป่า · กรอเห็นเฉพาะกรอ
+  const sectionLogs = useMemo(() =>
+    dept ? logs.filter(l => logSection(l) === dept) : logs,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [logs, dept, machineSection])
+
+  const machines = useMemo(() => Array.from(new Set(sectionLogs.map(l => l.machine_no).filter(Boolean))).sort() as string[], [sectionLogs])
+
+  const filtered = useMemo(() => sectionLogs.filter(l => {
     if (machine && l.machine_no !== machine) return false
     if (type && l.roll_type !== type) return false
     if (q) {
@@ -73,7 +97,7 @@ export default function WeighLog() {
       if (!blob.includes(s)) return false
     }
     return true
-  }), [logs, machine, type, q])
+  }), [sectionLogs, machine, type, q])
 
   const totNet = filtered.reduce((s, l) => s + (l.net_weight ?? 0), 0)
 
@@ -94,7 +118,14 @@ export default function WeighLog() {
           <div className="flex items-center gap-2">
             <span className="text-2xl">📝</span>
             <div>
-              <h1 className="text-white font-black text-lg leading-tight">Log การชั่ง</h1>
+              <h1 className="text-white font-black text-lg leading-tight flex items-center gap-2">
+                Log การชั่ง
+                {dept && (
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${dept === 'rewind' ? 'bg-green-500/20 text-green-300' : 'bg-blue-500/20 text-blue-300'}`}>
+                    {dept === 'rewind' ? '🔁 เฉพาะแผนกกรอ' : '🌬 เฉพาะผลิต(เป่า)'}
+                  </span>
+                )}
+              </h1>
               <p className="text-slate-500 text-[11px]">บันทึกทุกการชั่งตามจริง · อ่านอย่างเดียว · WO / SO / เวลา / ผู้ชั่ง ครบ</p>
             </div>
           </div>

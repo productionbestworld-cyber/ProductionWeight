@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '2.25.0'
-export const APP_BUILD_DATE = '2026-08-25'
+export const APP_VERSION = '2.25.1'
+export const APP_BUILD_DATE = '2026-08-26'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '2.25.1', date: '2026-08-26',
+    items: [
+      'แก้บั๊ก: หน้า "Log ชั่ง" แยกตามแผนกแล้ว — แผนกกรอเห็นเฉพาะ log กรอ (สถานี S01–S04 + ม้วนที่มาจากกรอ) · แผนกเป่าเห็นเฉพาะ log เป่า (เครื่อง BLxx) ไม่ปนกัน (weigh_logs ไม่มี section → จำแนกจากเครื่อง/is_rewound) · ลิงก์แยก /weighlog?dept=rewind|blow (ไม่ใส่ = เห็นรวมทุกแผนก)',
+    ],
+  },
   {
     version: '2.25.0', date: '2026-08-25',
     items: [

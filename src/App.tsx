@@ -173,7 +173,11 @@ export default function App() {
     const isWeighLog = sp.get('weighlog') !== null
       || window.location.hash.replace('#', '').toLowerCase() === 'weighlog'
       || path === '/weighlog'
-    if (isWeighLog) return <WeighLog />
+    if (isWeighLog) {
+      // ?dept=blow / ?dept=rewind → แยก log ตามแผนก · ไม่ใส่ = เห็นทั้งหมด (มุมมองรวม/ผู้บริหาร)
+      const d = sp.get('dept') as ('blow' | 'rewind' | null)
+      return <WeighLog dept={d ?? undefined} />
+    }
   }
 
   // ── ลิงก์แยก: แดชบอร์ดผลิต — ...?proddash=1 หรือ /proddash ──
@@ -543,7 +547,7 @@ export default function App() {
         )}
         {page === 'planning'  && <Planning dept={sectionOf(dept)} />}
         {page === 'history'   && <HistoryPage dept={sectionOf(dept)} />}
-        {page === 'weighlog'  && <WeighLog />}
+        {page === 'weighlog'  && <WeighLog dept={sectionOf(dept)} />}
         {page === 'proddash'  && (
           <div>
             <div className="flex justify-end px-4 pt-3">

@@ -4373,15 +4373,21 @@ export default function WeighStation({ dept }: { dept?: 'blow' | 'rewind' }) {
   // filter เครื่องตาม dept
   const filtered = dept ? profiles.filter(p => (p.section ?? 'blow') === dept) : profiles
 
+  // สลับแผนก (เป่า ↔ กรอ) → ล้างเครื่อง/งานที่เลือกไว้ของแผนกเดิม
+  // ไม่งั้นย้ายจากเป่ามากรอแล้วจอชั่งของเป่าจะเด้งค้างทับหน้ารายการงานกรอ
+  useEffect(() => { setSelected(null) }, [dept])
+  // กันจังหวะ render แรกก่อน effect ทำงาน — ถ้าเครื่องที่เลือกไม่ใช่ของแผนกนี้ ถือว่ายังไม่ได้เลือก
+  const selectedForDept = selected && dept && (selected.section ?? 'blow') !== dept ? null : selected
+
   // แผนกกรอ: รายการงานเป็นพื้นหลัง + จอชั่งเด้งเป็น popup (ไม่ทับทั้งหน้า)
   if (dept === 'rewind') {
     return (
       <>
         <ReworkJobList onPickJob={(prof) => setSelected(prof)} jumpHistory={jumpHistory} />
-        {selected && (
+        {selectedForDept && (
           <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-2 sm:p-4">
             <div className="w-full max-w-5xl h-[94vh] bg-[#0a0f1e] rounded-2xl overflow-hidden border border-slate-700 shadow-2xl flex flex-col">
-              <WeighPage asModal profile={selected}
+              <WeighPage asModal profile={selectedForDept}
                 onBack={(opts) => { setSelected(null); reload(); if (opts?.weighed) setJumpHistory(n => n + 1) }} />
             </div>
           </div>
@@ -4389,8 +4395,8 @@ export default function WeighStation({ dept }: { dept?: 'blow' | 'rewind' }) {
       </>
     )
   }
-  if (!selected) {
+  if (!selectedForDept) {
     return <MachinePicker profiles={filtered} onSelect={setSelected} onProfileUpdated={reload} dept={dept} />
   }
-  return <WeighPage profile={selected} onBack={() => { setSelected(null); reload() }} />
+  return <WeighPage profile={selectedForDept} onBack={() => { setSelected(null); reload() }} />
 }

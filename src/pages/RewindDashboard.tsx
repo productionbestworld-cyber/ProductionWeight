@@ -226,13 +226,13 @@ function InTable({ rows, fileName }: { rows: InRoll[]; fileName: string }) {
       <div className="overflow-x-auto max-h-[360px]">
         <table className="w-full text-[11px]">
           <thead className="bg-gray-50 text-gray-500 border-b border-gray-200 sticky top-0">
-            <tr>{['วันที่/เวลา', 'เครื่อง', 'ผู้เบิก', 'Lot', 'WO', 'SO', 'สินค้า', 'นน. (kg)'].map(h => (
-              <th key={h} className="px-2 py-1.5 text-left font-semibold whitespace-nowrap">{h}</th>))}</tr>
+            <tr>{['วันที่/เวลา', 'เครื่อง', 'ผู้เบิก', 'Lot', 'WO', 'SO', 'สินค้า', 'นน. (kg)'].map((h, i) => (
+              <th key={h} className={`px-2 py-1.5 font-semibold whitespace-nowrap border-r border-gray-100 last:border-r-0 ${i === 7 ? 'text-right' : 'text-left'}`}>{h}</th>))}</tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {sorted.length === 0 && <tr><td colSpan={8} className="px-2 py-6 text-center text-gray-400">— ไม่มีม้วนจากผลิตในช่วงนี้ —</td></tr>}
             {sorted.slice(0, 500).map(r => (
-              <tr key={r.id} className="hover:bg-gray-50">
+              <tr key={r.id} className="hover:bg-blue-50 even:bg-gray-50/60 [&>td]:border-r [&>td]:border-gray-100 [&>td:last-child]:border-r-0">
                 <td className="px-2 py-1 text-gray-500 whitespace-nowrap">{thaiTime(r.created_at)}</td>
                 <td className="px-2 py-1 font-mono text-gray-700">{r.machine_no || '—'}{r.roll_no != null ? ` #${r.roll_no}` : ''}</td>
                 <td className="px-2 py-1 text-sky-600">{r.withdrawn_by || '—'}</td>
@@ -294,15 +294,15 @@ function OutTable({ rows, fileName }: { rows: OutRoll[]; fileName: string }) {
       <div className="overflow-x-auto max-h-[360px]">
         <table className="w-full text-[11px]">
           <thead className="bg-gray-50 text-gray-500 border-b border-gray-200 sticky top-0">
-            <tr>{['วันที่/เวลา', 'สถานี', 'คนกรอ', 'Lot', 'ม้วนที่', 'ประเภท', 'นน. (kg)', 'Lot ต้นทาง', 'เศษกรอ', 'ขนาด', 'สินค้า', 'โอน'].map(h => (
-              <th key={h} className="px-2 py-1.5 text-left font-semibold whitespace-nowrap">{h}</th>))}</tr>
+            <tr>{['วันที่/เวลา', 'สถานี', 'คนกรอ', 'Lot', 'ม้วนที่', 'ประเภท', 'นน. (kg)', 'Lot ต้นทาง', 'เศษกรอ', 'ขนาด', 'สินค้า', 'โอน'].map((h, i) => (
+              <th key={h} className={`px-2 py-1.5 font-semibold whitespace-nowrap border-r border-gray-100 last:border-r-0 ${i === 6 || i === 8 ? 'text-right' : 'text-left'}`}>{h}</th>))}</tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {sorted.length === 0 && <tr><td colSpan={12} className="px-2 py-6 text-center text-gray-400">— ไม่มีผลงานกรอในช่วงนี้ —</td></tr>}
             {sorted.slice(0, 500).map(r => {
               const l = loss(r)
               return (
-                <tr key={r.id} className="hover:bg-gray-50">
+                <tr key={r.id} className="hover:bg-blue-50 even:bg-gray-50/60 [&>td]:border-r [&>td]:border-gray-100 [&>td:last-child]:border-r-0">
                   <td className="px-2 py-1 text-gray-500 whitespace-nowrap">{thaiTime(r.created_at)}</td>
                   <td className="px-2 py-1 font-mono text-gray-700">{r.machine_no || '—'}</td>
                   <td className="px-2 py-1 text-sky-600 truncate max-w-[90px]">{r.inspector || '—'}</td>
@@ -866,7 +866,7 @@ export default function RewindDashboard() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-500 border-b border-gray-200">
                 <tr>{['วันที่', 'มาจากผลิต (ม้วน)', 'มาจากผลิต (kg)', 'กรอดี (ม้วน)', 'กรอดี (kg)', 'เศษ (kg)', 'โอนแล้ว', 'สัดส่วนผลิต/กรอ'].map((h, i) => (
-                  <th key={i} className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">{h}</th>))}</tr>
+                  <th key={i} className={`px-3 py-2.5 font-semibold whitespace-nowrap border-r border-gray-100 last:border-r-0 ${i === 0 || i === 7 ? 'text-left' : 'text-right'}`}>{h}</th>))}</tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {byDay.length === 0 && <tr><td colSpan={8} className="px-3 py-8 text-center text-gray-400">ไม่มีข้อมูลตามตัวกรองที่เลือก</td></tr>}
@@ -874,18 +874,18 @@ export default function RewindDashboard() {
                   const open = openDay === r.key
                   return (
                     <Fragment key={r.key}>
-                      <tr className={`cursor-pointer hover:bg-gray-50 ${open ? 'bg-blue-50/60' : ''}`}
+                      <tr className={`cursor-pointer hover:bg-blue-50 ${open ? 'bg-blue-50/60' : 'even:bg-gray-50/60'}`}
                         onClick={() => setOpenDay(o => (o === r.key ? null : r.key))}>
-                        <td className="px-3 py-2.5 font-mono text-gray-700 font-bold whitespace-nowrap">
+                        <td className="px-3 py-2.5 font-mono text-gray-700 font-bold whitespace-nowrap border-r border-gray-100 last:border-r-0">
                           <span className="text-gray-400 mr-1">{open ? '▾' : '▸'}</span>{r.key}
                         </td>
-                        <td className="px-3 py-2.5 text-right text-blue-600 font-bold">{r.inRolls.toLocaleString('th-TH')}</td>
-                        <td className="px-3 py-2.5 text-right text-blue-500">{num(r.inKg)}</td>
-                        <td className="px-3 py-2.5 text-right text-emerald-600 font-bold">{r.goodRolls.toLocaleString('th-TH')}</td>
-                        <td className="px-3 py-2.5 text-right text-emerald-600 font-bold">{num(r.goodKg)}</td>
-                        <td className="px-3 py-2.5 text-right text-amber-600">{num(r.scrapKg)}</td>
-                        <td className="px-3 py-2.5 text-right text-gray-500">{r.transferred || '—'}</td>
-                        <td className="px-3 py-2.5 w-40">
+                        <td className="px-3 py-2.5 text-right text-blue-600 font-bold border-r border-gray-100 last:border-r-0">{r.inRolls.toLocaleString('th-TH')}</td>
+                        <td className="px-3 py-2.5 text-right text-blue-500 border-r border-gray-100 last:border-r-0">{num(r.inKg)}</td>
+                        <td className="px-3 py-2.5 text-right text-emerald-600 font-bold border-r border-gray-100 last:border-r-0">{r.goodRolls.toLocaleString('th-TH')}</td>
+                        <td className="px-3 py-2.5 text-right text-emerald-600 font-bold border-r border-gray-100 last:border-r-0">{num(r.goodKg)}</td>
+                        <td className="px-3 py-2.5 text-right text-amber-600 border-r border-gray-100 last:border-r-0">{num(r.scrapKg)}</td>
+                        <td className="px-3 py-2.5 text-right text-gray-500 border-r border-gray-100 last:border-r-0">{r.transferred || '—'}</td>
+                        <td className="px-3 py-2.5 w-40 border-r border-gray-100 last:border-r-0">
                           <div className="flex items-center gap-1">
                             <div className="flex-1"><Bar pct={(r.inKg / maxDay) * 100} tone="bg-blue-400" /></div>
                             <div className="flex-1"><Bar pct={(r.goodKg / maxDay) * 100} tone="bg-emerald-500" /></div>
@@ -923,13 +923,13 @@ export default function RewindDashboard() {
               {byDay.length > 0 && (
                 <tfoot className="bg-gray-50 border-t border-gray-200 font-bold text-gray-700">
                   <tr>
-                    <td className="px-3 py-2.5">รวมทั้งหมด</td>
-                    <td className="px-3 py-2.5 text-right text-blue-700">{stat.inCount.toLocaleString('th-TH')}</td>
-                    <td className="px-3 py-2.5 text-right text-blue-600">{num(stat.inKg)}</td>
-                    <td className="px-3 py-2.5 text-right text-emerald-700">{stat.goodCount.toLocaleString('th-TH')}</td>
-                    <td className="px-3 py-2.5 text-right text-emerald-700">{num(stat.goodKg)}</td>
-                    <td className="px-3 py-2.5 text-right text-amber-700">{num(stat.scrapKg)}</td>
-                    <td className="px-3 py-2.5 text-right">{stat.transferred.toLocaleString('th-TH')}</td>
+                    <td className="px-3 py-2.5 border-r border-gray-100 last:border-r-0">รวมทั้งหมด</td>
+                    <td className="px-3 py-2.5 text-right text-blue-700 border-r border-gray-100 last:border-r-0">{stat.inCount.toLocaleString('th-TH')}</td>
+                    <td className="px-3 py-2.5 text-right text-blue-600 border-r border-gray-100 last:border-r-0">{num(stat.inKg)}</td>
+                    <td className="px-3 py-2.5 text-right text-emerald-700 border-r border-gray-100 last:border-r-0">{stat.goodCount.toLocaleString('th-TH')}</td>
+                    <td className="px-3 py-2.5 text-right text-emerald-700 border-r border-gray-100 last:border-r-0">{num(stat.goodKg)}</td>
+                    <td className="px-3 py-2.5 text-right text-amber-700 border-r border-gray-100 last:border-r-0">{num(stat.scrapKg)}</td>
+                    <td className="px-3 py-2.5 text-right border-r border-gray-100 last:border-r-0">{stat.transferred.toLocaleString('th-TH')}</td>
                     <td />
                   </tr>
                 </tfoot>
@@ -949,19 +949,19 @@ export default function RewindDashboard() {
           <div className="overflow-x-auto max-h-[70vh]">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-500 border-b border-gray-200 sticky top-0">
-                <tr>{['สินค้า', 'มาจากผลิต (ม้วน)', 'มาจากผลิต (kg)', 'กรอดี (ม้วน)', 'กรอดี (kg)', 'เศษ (kg)'].map(h => (
-                  <th key={h} className="px-3 py-2.5 text-left font-semibold whitespace-nowrap">{h}</th>))}</tr>
+                <tr>{['สินค้า', 'มาจากผลิต (ม้วน)', 'มาจากผลิต (kg)', 'กรอดี (ม้วน)', 'กรอดี (kg)', 'เศษ (kg)'].map((h, i) => (
+                  <th key={h} className={`px-3 py-2.5 font-semibold whitespace-nowrap border-r border-gray-100 last:border-r-0 ${i === 0 ? 'text-left' : 'text-right'}`}>{h}</th>))}</tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {byProduct.length === 0 && <tr><td colSpan={6} className="px-3 py-8 text-center text-gray-400">ไม่มีข้อมูลตามตัวกรองที่เลือก</td></tr>}
                 {byProduct.map(r => (
-                  <tr key={r.key} className="hover:bg-gray-50">
-                    <td className="px-3 py-2.5 text-gray-800 font-semibold max-w-[280px] truncate" title={r.key}>{r.key}</td>
-                    <td className="px-3 py-2.5 text-right text-blue-600 font-bold">{r.inRolls.toLocaleString('th-TH')}</td>
-                    <td className="px-3 py-2.5 text-right text-blue-500">{num(r.inKg)}</td>
-                    <td className="px-3 py-2.5 text-right text-emerald-600 font-bold">{r.goodRolls.toLocaleString('th-TH')}</td>
-                    <td className="px-3 py-2.5 text-right text-emerald-600 font-bold">{num(r.goodKg)}</td>
-                    <td className="px-3 py-2.5 text-right text-amber-600">{num(r.scrapKg)}</td>
+                  <tr key={r.key} className="hover:bg-blue-50 even:bg-gray-50/60">
+                    <td className="px-3 py-2.5 text-gray-800 font-semibold max-w-[280px] truncate border-r border-gray-100 last:border-r-0" title={r.key}>{r.key}</td>
+                    <td className="px-3 py-2.5 text-right text-blue-600 font-bold border-r border-gray-100 last:border-r-0">{r.inRolls.toLocaleString('th-TH')}</td>
+                    <td className="px-3 py-2.5 text-right text-blue-500 border-r border-gray-100 last:border-r-0">{num(r.inKg)}</td>
+                    <td className="px-3 py-2.5 text-right text-emerald-600 font-bold border-r border-gray-100 last:border-r-0">{r.goodRolls.toLocaleString('th-TH')}</td>
+                    <td className="px-3 py-2.5 text-right text-emerald-600 font-bold border-r border-gray-100 last:border-r-0">{num(r.goodKg)}</td>
+                    <td className="px-3 py-2.5 text-right text-amber-600 border-r border-gray-100 last:border-r-0">{num(r.scrapKg)}</td>
                   </tr>
                 ))}
               </tbody>

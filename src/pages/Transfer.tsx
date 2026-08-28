@@ -875,6 +875,13 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
                       const typeLbl = tt==='bad'?'🔄 กรอ':tt==='scrap'?'🗑 เศษ':'✅ FG'
                       const unit = tt==='scrap'?'ถุง':'ม้วน'
                       const dt = d.transferred_at ? new Date(d.transferred_at) : null
+                      // ใบเศษ/ใบกรอรวมหลายงาน → WO/SO/Lot ยาวเป็นพรืด · ย่อเหลือตัวแรก + "+N"
+                      //   (ค่าเต็มยังอยู่ใน title ให้ชี้ดูได้ และตารางฝั่งขวายังไล่ครบทุก WO)
+                      const brief = (v: any) => {
+                        const parts = String(v ?? '').split(',').map(x => x.trim()).filter(Boolean)
+                        return { text: parts.length > 1 ? `${parts[0]} +${parts.length - 1}` : (parts[0] ?? ''), full: parts.join(', ') }
+                      }
+                      const woB = brief(d.work_order), soB = brief(d.sale_order), lotB = brief(d.lot_no)
                       return (
                       <button key={d.id} onClick={()=>openDoc(d)}
                         className={`w-full text-left px-4 py-3 transition-colors border-l-4 ${isSel?'bg-brand-600/20 border-brand-500':'border-transparent hover:bg-slate-800/40'}`}>
@@ -891,9 +898,9 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
                         <p className="text-slate-400 text-[10px] mt-0.5 truncate">{d.product_name||'—'}</p>
                         {d.item_code && <p className="text-emerald-300/80 text-[10px] font-mono mt-0.5 truncate">🏷 {d.item_code}</p>}
                         <div className="flex items-center gap-1.5 flex-wrap text-[10px] mt-1">
-                          {d.work_order && <span className="bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded font-bold">WO {d.work_order}</span>}
-                          {d.sale_order && <span className="bg-blue-500/15 text-blue-300 px-1.5 py-0.5 rounded font-bold">SO {d.sale_order}</span>}
-                          <span className="font-mono text-slate-500">Lot {d.lot_no}</span>
+                          {woB.text && <span title={woB.full} className="bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded font-bold">WO {woB.text}</span>}
+                          {soB.text && <span title={soB.full} className="bg-blue-500/15 text-blue-300 px-1.5 py-0.5 rounded font-bold">SO {soB.text}</span>}
+                          <span title={lotB.full} className="font-mono text-slate-500">Lot {lotB.text || '—'}</span>
                         </div>
                         <p className="text-slate-600 text-[10px] mt-1">📄 {d.doc_no} · 🕐 {dt?dt.toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'}):'—'} · โดย {d.transferred_by||'—'}</p>
                       </button>

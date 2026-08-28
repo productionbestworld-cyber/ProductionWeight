@@ -397,6 +397,8 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
   const [docRollSearch, setDocRollSearch] = useState('')   // ค้นหาม้วน "ภายในใบโอนที่เปิด" (คนละตัวกับ docSearch ที่ค้นรายการใบ)
   const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set())   // วันที่ถูกยุบในประวัติการโอน
   const [machineProfiles, setMachineProfiles] = useState<Record<string,string>>({}) // machine_no → lot_no ปัจจุบัน
+  const [machineSections, setMachineSections] = useState<Record<string,string>>({}) // machine_no → แผนก (blow/rewind)
+  const [docAllDept, setDocAllDept] = useState(false)                                // ประวัติ: ดูใบของทุกแผนก
   const [typeFilter, setTypeFilter] = useState<'good'|'bad'|'scrap'>('good')
   const [scrapKind,  setScrapKind]  = useState<'all'|'clear'|'color'|'lump'>('all')  // แยกชนิดเศษเมื่อ typeFilter='scrap'
   const [pendingCounts, setPendingCounts] = useState<{ good: number; bad: number; scrap: number }>({ good: 0, bad: 0, scrap: 0 })
@@ -451,13 +453,34 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
     loadDocs()
     loadPendingCounts()
     // โหลด lot_no ปัจจุบันของแต่ละเครื่อง
-    supabase.from('machine_profiles').select('machine_no, lot_no, work_order').then(({ data }) => {
+    supabase.from('machine_profiles').select('machine_no, lot_no, work_order, section').then(({ data }) => {
       if (!data) return
       const map: Record<string,string> = {}
-      data.forEach(p => { if (p.machine_no) map[p.machine_no] = `${p.lot_no ?? ''}__${p.work_order ?? ''}` })
+      const sec: Record<string,string> = {}
+      data.forEach(p => {
+        if (!p.machine_no) return
+        map[p.machine_no] = `${p.lot_no ?? ''}__${p.work_order ?? ''}`
+        sec[p.machine_no] = (p as any).section ?? 'blow'
+      })
       setMachineProfiles(map)
+      setMachineSections(sec)
     })
   }, [])
+
+  // ── ใบโอนของแผนกนี้ ────────────────────────────────────────────────
+  //   ใบโอนไม่มีคอลัมน์ section จึงดูจาก "เครื่องในใบ" เทียบกับแผนกของเครื่อง
+  //   (เดิมประวัติดึงมาทุกใบ → ฝั่งผลิตเห็นใบของกรอปนมาด้วย ซึ่งกรอรวมหลาย WO ต่อ item
+  //    ต่างจากผลิตที่เดินทีละ WO — เลยดูเหมือน "WO มั่ว")
+  //   เครื่องที่ไม่รู้จัก (ถูกลบ/ชั่งนอกระบบ) → ยังแสดง กันประวัติเก่าหาย
+  const secOfMachine = (m: string) => machineSections[m] || (/กรอ|rewind|^rw/i.test(m) ? 'rewind' : '')
+  const matchDept = (d: any) => {
+    if (!dept || docAllDept) return true
+    const ms = String(d.machine_no ?? '').split(',').map(x => x.trim()).filter(Boolean)
+    if (!ms.length) return true
+    return ms.some(m => { const s0 = secOfMachine(m); return !s0 || s0 === dept })
+  }
+  const deptDocs     = docs.filter(matchDept)   // ฐานของทุกตัวนับ (ไม่งั้นเลขบนปุ่มไม่ตรงกับที่แสดง)
+  const hiddenByDept = docs.length - deptDocs.length
 
   // ── กรองชนิดเศษ (ใส/สี/ก้อน) — มีผลเฉพาะ tab เศษ ──
   const scrapMatch = (r: any) =>
@@ -716,7 +739,7 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
           <div className="flex gap-1 bg-slate-900 border border-slate-800 rounded-xl p-1 w-fit">
             {([
               { key:'transfer', label:'โอนเข้าคลัง',    icon: ArrowRightFromLine },
-              { key:'history',  label:`ประวัติการโอน (${docs.length})`, icon: FileText },
+              { key:'history',  label:`ประวัติการโอน (${deptDocs.length})`, icon: FileText },
             ] as const).map(t => (
               <button key={t.key} onClick={() => setTab(t.key)}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -801,29 +824,29 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
                   : ''
                 const matchMonth = (d: any) => docMonth === 'all' || monthKeyOf(d) === docMonth
                 // รายการเดือนที่มีข้อมูล (ใหม่→เก่า) สำหรับ dropdown
-                const monthOptions = Array.from(new Set(docs.map(monthKeyOf).filter(Boolean))).sort().reverse()
+                const monthOptions = Array.from(new Set(deptDocs.map(monthKeyOf).filter(Boolean))).sort().reverse()
                 const monthLabel = (m: string) => {
                   const [y, mo] = m.split('-').map(Number)
                   const th = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
                   return `${th[mo-1]} ${(y+543)%100}`
                 }
-                const fdocs = docs.filter(d => matchType(d) && matchMonth(d) && (!q ||
+                const fdocs = deptDocs.filter(d => matchType(d) && matchMonth(d) && (!q ||
                   `${d.doc_no ?? ''} ${d.item_code ?? ''} ${d.product_name ?? ''} ${d.customer ?? ''} ${d.size ?? ''} ${d.work_order ?? ''} ${d.sale_order ?? ''} ${d.lot_no ?? ''} ${d.machine_no ?? ''} ${d.transferred_by ?? ''} ${d.transfer_type ?? ''}`.toLowerCase().includes(q)))
-                const cnt = (t: 'good'|'bad'|'scrap') => docs.filter(d => t==='scrap' ? String(d.transfer_type??'').startsWith('scrap') : (d.transfer_type??'good')===t).length
+                const cnt = (t: 'good'|'bad'|'scrap') => deptDocs.filter(d => t==='scrap' ? String(d.transfer_type??'').startsWith('scrap') : (d.transfer_type??'good')===t).length
                 return (<>
               <div className="px-4 py-3 border-b border-slate-800 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <p className="text-white font-semibold text-sm">📦 ประวัติการโอน — จัดตามงาน</p>
-                  <p className="text-slate-500 text-[10px]">{fdocs.length}{(q||docType!=='all'||docMonth!=='all') && `/${docs.length}`} ใบ · {fmt(fdocs.reduce((s,d)=>s+(d.total_kg??0),0))} Kgs.</p>
+                  <p className="text-slate-500 text-[10px]">{fdocs.length}{(q||docType!=='all'||docMonth!=='all') && `/${deptDocs.length}`} ใบ · {fmt(fdocs.reduce((s,d)=>s+(d.total_kg??0),0))} Kgs.</p>
                 </div>
                 {/* กรองเดือน */}
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="text-[10px] text-slate-500 font-bold">📅 เดือน:</span>
                   <select value={docMonth} onChange={e => setDocMonth(e.target.value)}
                     className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-[11px] font-bold text-white outline-none focus:border-brand-500 cursor-pointer">
-                    <option value="all">ทุกเดือน ({docs.length})</option>
+                    <option value="all">ทุกเดือน ({deptDocs.length})</option>
                     {monthOptions.map(m => (
-                      <option key={m} value={m}>{monthLabel(m)} ({docs.filter(d => monthKeyOf(d) === m).length})</option>
+                      <option key={m} value={m}>{monthLabel(m)} ({deptDocs.filter(d => monthKeyOf(d) === m).length})</option>
                     ))}
                   </select>
                   {docMonth !== 'all' && (
@@ -833,7 +856,7 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
                 {/* กรองประเภท */}
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {([
-                    ['all',`ทั้งหมด (${docs.length})`,'bg-slate-700 text-white'],
+                    ['all',`ทั้งหมด (${deptDocs.length})`,'bg-slate-700 text-white'],
                     ['good',`✅ ม้วนดี (${cnt('good')})`,'bg-blue-500/25 text-blue-200'],
                     ['bad',`🔄 กรอ (${cnt('bad')})`,'bg-orange-500/25 text-orange-200'],
                     ['scrap',`🗑 เศษ (${cnt('scrap')})`,'bg-red-500/25 text-red-200'],
@@ -844,6 +867,14 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
                     </button>
                   ))}
                 </div>
+                {dept && (hiddenByDept > 0 || docAllDept) && (
+                  <button onClick={() => setDocAllDept(v => !v)}
+                    className="w-full text-left text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors">
+                    {docAllDept
+                      ? `👁 กำลังแสดงใบของทุกแผนก — กดเพื่อดูเฉพาะ${dept==='blow' ? 'ผลิต(เป่า)' : 'กรอ'}`
+                      : `🔒 ซ่อนใบของอีกแผนกอยู่ ${hiddenByDept} ใบ — กดเพื่อดูทุกแผนก`}
+                  </button>
+                )}
                 <div className="relative">
                   <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500"/>
                   <input value={docSearch} onChange={e => setDocSearch(e.target.value)}

@@ -145,7 +145,11 @@ const C = {
   grossC: (label = 'นน.รวม'): Col     => ({ label, w: 15, align: 'r', sum: true, get: r => n2(gross(r)) }),
   coreC:  (label = 'นน.แกน'): Col     => ({ label, w: 14, align: 'r', sum: true, get: r => n2(r.core_weight) }),
   netC:   (label = 'นน.สุทธิ'): Col   => ({ label, w: 15, align: 'r', sum: true, bold: true, get: r => n2(r.weight) }),
-  note:   (label = 'หมายเหตุ'): Col   => ({ label, w: 16, align: 'l', get: r => String(r.remark ?? '') }),
+  // ⚠ หมายเหตุต้องเว้นว่างให้เขียนมือ — ห้ามดึง remark ของม้วนมาพิมพ์
+  //   remark เก็บโน้ตภายในโรงงาน เช่น "โป่งแตกเม็ดไหม้" / "🔁 กรอจาก Lot ... เหตุผล: ..."
+  //   ซึ่งกติกาเดิม (v2.28.0) ห้ามให้โผล่ในเอกสารที่ถึงมือลูกค้า และในแบบฟอร์มต้นฉบับ
+  //   ช่องนี้ก็ว่างอยู่แล้ว
+  note:   (label = 'หมายเหตุ'): Col   => ({ label, w: 16, align: 'l', get: () => '' }),
 }
 
 export const TEMPLATES: Record<TemplateId, Tpl> = {
@@ -324,20 +328,28 @@ export const TEMPLATES: Record<TemplateId, Tpl> = {
 export const TEMPLATE_LIST = Object.values(TEMPLATES).map(t => ({ id: t.id, label: t.label }))
 
 // ── จับคู่ ลูกค้า → ฟอร์ม ─────────────────────────────────────────────────────
+/** ชื่อลูกค้าจริงในฐานข้อมูลคั่นด้วย non-breaking space ( ) ไม่ใช่เว้นวรรคปกติ
+ *  เช่น "บริษัท ไทยน้ำทิพย์ คอร์ปอเรชั่น จำกัด (มหาชน)"
+ *  ถ้าไม่ปรับให้เหมือนกันก่อน คนตั้งค่าที่พิมพ์เว้นวรรคปกติจะจับคู่ไม่ติดแบบเงียบ ๆ */
+function normName(s: any): string {
+  return String(s ?? '').replace(/[\u00A0\u2007\u202F]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase()
+}
+
 export function resolveTemplate(
   rolls: SlipRoll[], rows: SlipTemplateRow[],
 ): { template: TemplateId; extra: SlipExtra; title?: string | null } {
   const list = (rows ?? []).filter(r => r.active !== false)
     .sort((a, b) => (a.sort_order ?? 100) - (b.sort_order ?? 100))
-  const codes = new Set(rolls.map(r => String(r.cust_code ?? '').trim()).filter(Boolean))
-  const names = rolls.map(r => String(r.customer ?? '').trim()).filter(Boolean)
+  const codes = new Set(rolls.map(r => normName(r.cust_code)).filter(Boolean))
+  const names = rolls.map(r => normName(r.customer)).filter(Boolean)
 
   for (const t of list) {
-    if (t.cust_code && codes.has(String(t.cust_code).trim()))
+    const c = normName(t.cust_code)
+    if (c && codes.has(c))
       return { template: t.template, extra: t.extra ?? {}, title: t.slip_title }
   }
   for (const t of list) {
-    const m = String(t.cust_match ?? '').trim()
+    const m = normName(t.cust_match)
     if (m && names.some(n => n.includes(m)))
       return { template: t.template, extra: t.extra ?? {}, title: t.slip_title }
   }

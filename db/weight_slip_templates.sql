@@ -1,7 +1,8 @@
 -- ─── ใบน้ำหนักแยกตามลูกค้า ────────────────────────────────────────
 -- ลูกค้าแต่ละเจ้าใช้ "ใบออกน้ำหนัก" คนละแบบแนบไปกับใบส่งของ
 -- ตารางนี้เก็บว่า ลูกค้าเจ้าไหน → ใช้ฟอร์มแบบไหน + ค่าคงที่ที่ต้องพิมพ์ลงหัวใบ
--- รันใน Supabase SQL Editor ครั้งเดียว
+-- รันใน Supabase SQL Editor — รันซ้ำได้ ไม่ทำให้ข้อมูลเดิมเปลี่ยน
+-- ไฟล์นี้ไม่แตะตารางอื่นเลย (ไม่มี ALTER/UPDATE/DELETE ตารางเดิม)
 
 CREATE TABLE IF NOT EXISTS weight_slip_templates (
   id          BIGSERIAL PRIMARY KEY,
@@ -16,8 +17,19 @@ CREATE TABLE IF NOT EXISTS weight_slip_templates (
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_wst_match ON weight_slip_templates(cust_match);
-CREATE INDEX IF NOT EXISTS idx_wst_code  ON weight_slip_templates(cust_code);
+-- unique เพื่อให้รันไฟล์นี้ซ้ำแล้วไม่ได้ลูกค้าซ้ำ (ON CONFLICT ต้องมีอะไรให้ชน)
+CREATE UNIQUE INDEX IF NOT EXISTS uq_wst_match ON weight_slip_templates(cust_match);
+CREATE INDEX IF NOT EXISTS idx_wst_code ON weight_slip_templates(cust_code);
+
+-- ฟังก์ชันนี้ปกติมีอยู่แล้วจาก products.sql — สร้างให้เฉพาะตอนที่ยังไม่มี
+-- (ไม่ใช้ CREATE OR REPLACE เพราะตารางอื่นใช้ตัวเดิมอยู่ ไม่ควรไปทับของเขา)
+DO $do$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'trg_set_updated_at') THEN
+    CREATE FUNCTION trg_set_updated_at() RETURNS trigger AS $fn$
+    BEGIN NEW.updated_at = NOW(); RETURN NEW; END $fn$ LANGUAGE plpgsql;
+  END IF;
+END $do$;
 
 DROP TRIGGER IF EXISTS wst_set_updated_at ON weight_slip_templates;
 CREATE TRIGGER wst_set_updated_at
@@ -36,4 +48,7 @@ INSERT INTO weight_slip_templates (cust_match, template, extra, sort_order) VALU
   ('เซเว่นสตาร์',  'sevenstar', '{"treat":"ไม่ระเบิดผิว"}'::jsonb,                                    10),
   ('ที.ซี.ฟาร์มา', 'tcp',       '{"exp_months":"24"}'::jsonb,                                        10),
   ('กระทิงแดง',    'tcp',       '{"exp_months":"24"}'::jsonb,                                        10)
-ON CONFLICT DO NOTHING;
+ON CONFLICT (cust_match) DO NOTHING;
+
+-- ตรวจผล — ควรได้ 6 แถว (รันซ้ำกี่รอบก็ยัง 6)
+SELECT cust_match, template, extra, sort_order FROM weight_slip_templates ORDER BY cust_match;

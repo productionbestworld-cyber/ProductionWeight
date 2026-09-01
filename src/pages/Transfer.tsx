@@ -1,4 +1,4 @@
-import { useEffect, useState, Fragment } from 'react'
+import { useEffect, useRef, useState, Fragment } from 'react'
 import { Package, Search, CheckCircle2, ArrowRightFromLine, RefreshCw, Wind, Printer, FileText, Download, X } from 'lucide-react'
 import { supabase, fetchAll } from '../lib/supabase'
 import { rewoundFlag, withRewoundNote } from '../lib/rework'
@@ -401,6 +401,10 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
   const [machineProfiles, setMachineProfiles] = useState<Record<string,string>>({}) // machine_no → lot_no ปัจจุบัน
   const [machineSections, setMachineSections] = useState<Record<string,string>>({}) // machine_no → แผนก (blow/rewind)
   const [docAllDept, setDocAllDept] = useState(false)                                // ประวัติ: ดูใบของทุกแผนก
+  const [docJobs,    setDocJobs]    = useState<Record<string, any[]>>({})  // doc_id → งานย่อยในใบนั้น (แยกจากม้วน)
+  const [splitting,  setSplitting]  = useState(0)                          // จำนวนใบที่ยังแยกงานไม่เสร็จ
+  const [docJob,     setDocJob]     = useState<any | null>(null)          // งานที่กำลังเจาะดูในใบที่เปิด (null = ทั้งใบ)
+  const docJobsRef = useRef<Record<string, any[]>>({})                     // กันโหลดซ้ำใบเดิม (ไม่ต้องใส่ใน deps)
   const [typeFilter, setTypeFilter] = useState<'good'|'bad'|'scrap'>('good')
   const [scrapKind,  setScrapKind]  = useState<'all'|'clear'|'color'|'lump'>('all')  // แยกชนิดเศษเมื่อ typeFilter='scrap'
   const [pendingCounts, setPendingCounts] = useState<{ good: number; bad: number; scrap: number }>({ good: 0, bad: 0, scrap: 0 })
@@ -483,6 +487,127 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
   }
   const deptDocs     = docs.filter(matchDept)   // ฐานของทุกตัวนับ (ไม่งั้นเลขบนปุ่มไม่ตรงกับที่แสดง)
   const hiddenByDept = docs.length - deptDocs.length
+
+  // ม้วนในใบที่เปิดอยู่ — ใช้ร่วมกันทั้ง KPI หัวใบ ตาราง และยอดท้ายตาราง
+  //   ชั้น 1: เจาะเฉพาะงานที่กด (เทียบ "คีย์งาน" ตรง ๆ ไม่ใช่ค้นข้อความ — WO ซ้ำข้ามเครื่อง/Lot จะไม่ปนกัน)
+  //   ชั้น 2: ช่องค้นในใบที่ผู้ใช้พิมพ์เอง
+  const dq = docRollSearch.trim().toLowerCase()
+  const docRollsJob = docJob ? docRolls.filter((r:any) => jobKeyOfRoll(r) === docJob.key) : docRolls
+  const docRollsView = dq
+    ? docRollsJob.filter((r:any) => `${r.roll_no} ${r.product_name ?? ''} ${r.item_code ?? ''} ${r.work_order ?? ''} ${r.sale_order ?? ''} ${r.lot_no ?? ''} ${r.machine_no ?? ''} ${r.inspector ?? ''}`.toLowerCase().includes(dq))
+    : docRollsJob
+
+  // ── ประวัติโอน: 1 การ์ด = 1 งาน ────────────────────────────────────
+  //   ใบโอน 1 ใบกินได้หลายงาน (กด "ดูทุกงานรวม" แล้วโอนทีเดียว · ใบเศษที่รวมทั้งวัน)
+  //   → การ์ดเดียวขึ้น WO/Lot/สินค้าปนกันจนอ่านไม่ออก · แยกเป็นการ์ดละงาน (เครื่อง+Lot+WO)
+  //   ประหยัดโหลด: ดึงม้วนเฉพาะใบที่ "ส่อว่าหลายงาน" (ช่องรวมมีจุลภาค) ทยอยทีละชุด ใบใหม่ก่อน
+  const docQ = docSearch.trim().toLowerCase()
+  const monthKeyOf = (d: any) => d.transferred_at
+    ? new Date(new Date(d.transferred_at).getTime() + 7*3600*1000).toISOString().slice(0,7)
+    : ''
+  const matchDocType  = (d: any) => docType === 'all' ? true
+    : docType === 'scrap' ? String(d.transfer_type ?? '').startsWith('scrap')
+    : (d.transfer_type ?? 'good') === docType
+  const matchDocMonth = (d: any) => docMonth === 'all' || monthKeyOf(d) === docMonth
+  // ใบที่ผ่านตัวกรอง (ยังไม่คิดคำค้น — คำค้นไปกรองระดับ "งาน" ทีหลัง)
+  const scopedDocs = deptDocs.filter(d => matchDocType(d) && matchDocMonth(d))
+  //   หมายเหตุ: ช่องรวมกรอง Boolean ก่อน join → ใบที่ผสม "งานมี WO + งานไม่มี WO" อาจไม่มีจุลภาค
+  //   จึงเช็ค sale_order ด้วย (คนละงานมัก SO ต่างกัน) — จับไม่ได้ทุกเคส แต่เคสที่พลาดจะแสดงเป็นการ์ดเดียวแบบเดิม
+  const SPLIT_CAP = 80   // แยกงานได้สูงสุดกี่ใบต่อรอบ (กันยิง query ยาวตอนเลือก "ทุกเดือน")
+  const isMultiJobDoc = (d: any) =>
+    [d.work_order, d.lot_no, d.machine_no, d.item_code, d.sale_order].some(v => String(v ?? '').includes(','))
+
+  // คีย์ของ "งาน" — ใช้ร่วมกันทั้งตอนแยกการ์ดและตอนกรองตารางฝั่งขวา (ต้องเป็นสูตรเดียวกันเสมอ)
+  //   ชุดระบบใหม่(กรอ) รวมทุก WO ใน lot เดียวแต่แยกตามสินค้า · งานปกติแยกตาม WO
+  const jobKeyOfRoll = (r: any) => r.new_system
+    ? `${r.machine_no ?? ''}__${r.lot_no ?? ''}__${r.item_code ?? ''}__${NS_WO}`
+    : `${r.machine_no ?? ''}__${r.lot_no ?? ''}__${r.work_order ?? ''}`
+  const jobsOfRolls = (rs: any[]) => {
+    const m = new Map<string, any[]>()
+    for (const r of rs) {
+      const key = jobKeyOfRoll(r)
+      ;(m.get(key) ?? m.set(key, []).get(key))!.push(r)
+    }
+    // ⚠ งานปกติคีย์ = เครื่อง+Lot+WO (ไม่มีรหัสสินค้า) → งานเดียวอาจมีหลายรหัส/หลายลูกค้า/หลายขนาด
+    //   จึงเก็บ "ครบทุกค่า" แล้วให้การ์ดย่อเอง — ไม่หยิบแค่ม้วนแรก (ของเดิมในใบเก็บครบ จะกลายเป็นข้อมูลหาย)
+    const uniq = (rs2: any[], f: (x: any) => any) =>
+      Array.from(new Set(rs2.map(f).filter(Boolean))).join(', ')
+    return [...m.entries()].map(([key, rs2]) => {
+      const s0 = rs2[0]
+      return {
+        key,
+        machine_no:  uniq(rs2, x => x.machine_no),
+        lot_no:      uniq(rs2, x => x.lot_no),
+        work_order:  uniq(rs2, x => x.work_order),
+        sale_order:  uniq(rs2, x => x.sale_order),
+        item_code:   uniq(rs2, x => x.item_code),
+        product_name: uniq(rs2, x => x.product_name),
+        customer:    uniq(rs2, x => x.customer),
+        size:        uniq(rs2, x => x.width_cm && x.thick_mc ? `${x.width_cm}${x.width_unit ?? 'cm'}×${x.thick_mc}mc` : ''),
+        newSystem:   !!s0.new_system,
+        rolls:       rs2.length,
+        kg:          rs2.reduce((a, x) => a + (x.weight ?? 0), 0),
+      }
+    }).sort((a, b) =>
+      (a.size || '').localeCompare(b.size || '') ||
+      (a.work_order || '').localeCompare(b.work_order || '') ||
+      (a.lot_no || '').localeCompare(b.lot_no || ''))
+  }
+
+  useEffect(() => {
+    if (tab !== 'history') return
+    const needAll = scopedDocs.filter(d => isMultiJobDoc(d) && !docJobsRef.current[d.id]).map(d => d.id)
+    const need = needAll.slice(0, SPLIT_CAP)   // ใบใหม่ก่อน · ที่เหลือให้เลือกเดือนแล้วค่อยแยก
+    if (!need.length) { setSplitting(0); return }
+    let alive = true
+    setSplitting(need.length)
+    ;(async () => {
+      for (let i = 0; i < need.length; i += 25) {
+        if (!alive) return
+        const chunk = need.slice(i, i + 25)
+        let rows: any[] = []
+        try {
+          // ⚠ ต้องมี order — fetchAll ยิงหลายหน้าพร้อมกันด้วย .range ถ้าลำดับไม่นิ่งแถวจะซ้ำ/หาย
+          // ⚠ strict — โหลดพลาดต้องโยน error ไม่ใช่คืนแถวไม่ครบเงียบ ๆ (ยอดต่องานจะผิด)
+          rows = await fetchAll<any>(() => supabase.from('production_rolls')
+            .select('id, transfer_doc_id, machine_no, lot_no, work_order, sale_order, item_code, product_name, customer, width_cm, width_unit, thick_mc, weight, new_system')
+            .in('transfer_doc_id', chunk)
+            .order('id', { ascending: true }), { concurrency: 2, strict: true })
+        } catch (e: any) {
+          console.warn('แยกงานในใบโอนไม่สำเร็จ (ไว้ลองใหม่รอบหน้า):', e?.message ?? e)
+          setSplitting(s => Math.max(0, s - chunk.length))
+          continue   // ไม่ cache ผลพลาด — ใบยังเป็นการ์ดรวมแบบเดิม แล้วลองใหม่เมื่อเปลี่ยนตัวกรอง
+        }
+        if (!alive) return
+        const byDoc: Record<string, any[]> = {}
+        for (const r of rows) { const k = r.transfer_doc_id; (byDoc[k] ?? (byDoc[k] = [])).push(r) }
+        const add: Record<string, any[]> = {}
+        for (const id of chunk) if (byDoc[id]?.length) add[id] = jobsOfRolls(byDoc[id])   // ได้ 0 แถว = ไม่ cache
+        docJobsRef.current = { ...docJobsRef.current, ...add }
+        setDocJobs(prev => ({ ...prev, ...add }))
+        setSplitting(s => Math.max(0, s - chunk.length))
+      }
+    })()
+    return () => { alive = false }
+  }, [tab, docType, docMonth, docAllDept, dept, docs.length]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // การ์ดของประวัติ — ใบที่แยกงานแล้วและมีหลายงาน → การ์ดละงาน · นอกนั้นการ์ดเดียวเหมือนเดิม
+  const historyCards: { key: string; doc: any; job: any | null }[] = []
+  for (const d of [...scopedDocs].sort((a, b) => (b.transferred_at || '').localeCompare(a.transferred_at || ''))) {
+    const js = docJobs[d.id]
+    if (js && js.length > 1) js.forEach(j => historyCards.push({ key: `${d.id}__${j.key}`, doc: d, job: j }))
+    else historyCards.push({ key: d.id, doc: d, job: js && js.length === 1 ? js[0] : null })
+  }
+  const cardBlob = (c: { doc: any; job: any | null }) => {
+    const d = c.doc, j = c.job
+    return `${d.doc_no ?? ''} ${d.transferred_by ?? ''} ${d.transfer_type ?? ''} ` + (j
+      ? `${j.item_code} ${j.product_name} ${j.customer} ${j.size} ${j.work_order} ${j.sale_order} ${j.lot_no} ${j.machine_no}`
+      : `${d.item_code ?? ''} ${d.product_name ?? ''} ${d.customer ?? ''} ${d.size ?? ''} ${d.work_order ?? ''} ${d.sale_order ?? ''} ${d.lot_no ?? ''} ${d.machine_no ?? ''}`)
+  }
+  const overCap = Math.max(0, scopedDocs.filter(d => isMultiJobDoc(d) && !docJobs[d.id]).length - SPLIT_CAP)
+  const fcards  = docQ ? historyCards.filter(c => cardBlob(c).toLowerCase().includes(docQ)) : historyCards
+  const fcardKg = fcards.reduce((s0, c) => s0 + (c.job ? c.job.kg : (c.doc.total_kg ?? 0)), 0)
+  const fcardDocs = new Set(fcards.map(c => c.doc.id)).size
 
   // ── กรองชนิดเศษ (ใส/สี/ก้อน) — มีผลเฉพาะ tab เศษ ──
   const scrapMatch = (r: any) =>
@@ -679,6 +804,7 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
     setSelectedDoc(doc)
     setDocRolls([])
     setDocRollSearch('')
+    setDocJob(null)
     setDocLoading(true)
     const { data } = await supabase.from('production_rolls')
       .select('*').eq('transfer_doc_id', doc.id)
@@ -815,16 +941,7 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
             {/* ── รายการใบโอน — จัดกลุ่มตาม Machine + Lot ── */}
             <div className={`bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden flex-shrink-0 ${selectedDoc ? 'w-96' : 'flex-1'}`}>
               {(() => {
-                const q = docSearch.trim().toLowerCase()
-                const matchType = (d: any) => docType === 'all'
-                  ? true
-                  : docType === 'scrap' ? String(d.transfer_type ?? '').startsWith('scrap')
-                  : (d.transfer_type ?? 'good') === docType
-                // เดือนของใบ (ตามเวลาไทย) = YYYY-MM
-                const monthKeyOf = (d: any) => d.transferred_at
-                  ? new Date(new Date(d.transferred_at).getTime() + 7*3600*1000).toISOString().slice(0,7)
-                  : ''
-                const matchMonth = (d: any) => docMonth === 'all' || monthKeyOf(d) === docMonth
+                const q = docQ
                 // รายการเดือนที่มีข้อมูล (ใหม่→เก่า) สำหรับ dropdown
                 const monthOptions = Array.from(new Set(deptDocs.map(monthKeyOf).filter(Boolean))).sort().reverse()
                 const monthLabel = (m: string) => {
@@ -832,14 +949,16 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
                   const th = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
                   return `${th[mo-1]} ${(y+543)%100}`
                 }
-                const fdocs = deptDocs.filter(d => matchType(d) && matchMonth(d) && (!q ||
-                  `${d.doc_no ?? ''} ${d.item_code ?? ''} ${d.product_name ?? ''} ${d.customer ?? ''} ${d.size ?? ''} ${d.work_order ?? ''} ${d.sale_order ?? ''} ${d.lot_no ?? ''} ${d.machine_no ?? ''} ${d.transferred_by ?? ''} ${d.transfer_type ?? ''}`.toLowerCase().includes(q)))
                 const cnt = (t: 'good'|'bad'|'scrap') => deptDocs.filter(d => t==='scrap' ? String(d.transfer_type??'').startsWith('scrap') : (d.transfer_type??'good')===t).length
                 return (<>
               <div className="px-4 py-3 border-b border-slate-800 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <p className="text-white font-semibold text-sm">📦 ประวัติการโอน — จัดตามงาน</p>
-                  <p className="text-slate-500 text-[10px]">{fdocs.length}{(q||docType!=='all'||docMonth!=='all') && `/${deptDocs.length}`} ใบ · {fmt(fdocs.reduce((s,d)=>s+(d.total_kg??0),0))} Kgs.</p>
+                  <p className="text-slate-500 text-[10px]">
+                    {fcards.length} งาน · {fcardDocs} ใบ · {fmt(fcardKg)} Kgs.
+                    {splitting > 0 && <span className="text-amber-400/80"> · ⏳ แยกงานอีก {splitting} ใบ</span>}
+                    {splitting === 0 && overCap > 0 && <span className="text-slate-600"> · ยังไม่แยก {overCap} ใบเก่ากว่า (เลือกเดือนเพื่อแยก)</span>}
+                  </p>
                 </div>
                 {/* กรองเดือน */}
                 <div className="flex items-center gap-1.5 flex-wrap">
@@ -885,7 +1004,7 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
                   {docSearch && <button onClick={()=>setDocSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white text-xs">✕</button>}
                 </div>
               </div>
-              {fdocs.length === 0 ? (
+              {fcards.length === 0 ? (
                 <div className="py-16 text-center text-slate-600 text-sm">{(q||docType!=='all'||docMonth!=='all') ? 'ไม่พบใบโอนที่ตรงเงื่อนไข' : 'ยังไม่มีการโอน'}</div>
               ) : (
                 <div className="max-h-[70vh] overflow-y-auto">
@@ -893,43 +1012,56 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
                     const dayKeyOf = (x: any) => x.transferred_at
                       ? new Date(x.transferred_at).toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok', weekday:'short', day:'2-digit', month:'short', year:'2-digit' })
                       : '— ไม่ระบุวันที่'
-                    const sorted = [...fdocs].sort((a,b)=>(b.transferred_at||'').localeCompare(a.transferred_at||''))
-                    // จัดกลุ่มตามวัน (คงลำดับใหม่→เก่า)
-                    const groups: { day: string; items: any[] }[] = []
-                    for (const d of sorted) {
-                      const day = dayKeyOf(d)
+                    // จัดกลุ่มตามวัน (การ์ดเรียงใหม่→เก่ามาแล้ว · การ์ด = 1 งาน)
+                    const groups: { day: string; items: typeof fcards }[] = []
+                    for (const c of fcards) {
+                      const day = dayKeyOf(c.doc)
                       const g = groups[groups.length-1]
-                      if (g && g.day === day) g.items.push(d); else groups.push({ day, items:[d] })
+                      if (g && g.day === day) g.items.push(c); else groups.push({ day, items:[c] })
                     }
-                    const renderCard = (d: any) => {
-                      const isSel = selectedDoc?.id === d.id
+                    const renderCard = (c: { key: string; doc: any; job: any | null }) => {
+                      const d = c.doc, j = c.job
+                      const isSel = selectedDoc?.id === d.id && (!docJob || !j || docJob.key === j.key)
                       const tt = d.transfer_type ?? 'good'
                       const typeBadge = tt==='bad'?'bg-orange-500/20 text-orange-300':tt==='scrap'?'bg-red-500/20 text-red-300':'bg-blue-500/20 text-blue-300'
                       const typeLbl = tt==='bad'?'🔄 กรอ':tt==='scrap'?'🗑 เศษ':'✅ FG'
                       const unit = tt==='scrap'?'ถุง':'ม้วน'
                       const dt = d.transferred_at ? new Date(d.transferred_at) : null
-                      // ใบเศษ/ใบกรอรวมหลายงาน → WO/SO/Lot ยาวเป็นพรืด · ย่อเหลือตัวแรก + "+N"
-                      //   (ค่าเต็มยังอยู่ใน title ให้ชี้ดูได้ และตารางฝั่งขวายังไล่ครบทุก WO)
+                      // ค่าที่โชว์: ยึด "งาน" ถ้าแยกได้แล้ว · ยังไม่แยก (ใบงานเดียว/กำลังโหลด) → ใช้ค่ารวมของใบ
+                      const size   = j ? j.size         : d.size
+                      const cust   = j ? j.customer     : d.customer
+                      const prod   = j ? j.product_name : d.product_name
+                      const item   = j ? j.item_code    : d.item_code
+                      const kg     = j ? j.kg           : d.total_kg
+                      const nRolls = j ? j.rolls        : d.total_rolls
+                      // งานกรอชุดใหม่กินหลาย WO ต่อสินค้า 1 ตัว → ย่อเหลือตัวแรก + "+N" (ค่าเต็มอยู่ใน title)
                       const brief = (v: any) => {
                         const parts = String(v ?? '').split(',').map(x => x.trim()).filter(Boolean)
                         return { text: parts.length > 1 ? `${parts[0]} +${parts.length - 1}` : (parts[0] ?? ''), full: parts.join(', ') }
                       }
-                      const woB = brief(d.work_order), soB = brief(d.sale_order), lotB = brief(d.lot_no)
+                      const woB  = brief(j ? j.work_order : d.work_order)
+                      const soB  = brief(j ? j.sale_order : d.sale_order)
+                      const lotB = brief(j ? j.lot_no     : d.lot_no)
                       return (
-                      <button key={d.id} onClick={()=>openDoc(d)}
+                      <button key={c.key} onClick={()=>{
+                        // กดการ์ดงาน → เปิดใบนั้นแล้วเจาะเฉพาะงานนี้ · ใบเดิมเปิดอยู่แล้วไม่ต้องโหลดม้วนซ้ำ
+                        if (selectedDoc?.id !== d.id) openDoc(d); else setDocRollSearch('')
+                        setDocJob(j)
+                      }}
                         className={`w-full text-left px-4 py-3 transition-colors border-l-4 ${isSel?'bg-brand-600/20 border-brand-500':'border-transparent hover:bg-slate-800/40'}`}>
                         {/* แถวบน: ขนาด (เด่นสุด) + ประเภท + น้ำหนัก */}
                         <div className="flex items-center gap-1.5 mb-1">
-                          {d.size
-                            ? <span className="text-sm font-black bg-brand-500/25 text-brand-100 px-2 py-0.5 rounded">{d.size}</span>
+                          {size
+                            ? <span className="text-sm font-black bg-brand-500/25 text-brand-100 px-2 py-0.5 rounded">{size}</span>
                             : <span className="text-[10px] text-slate-600">ไม่ระบุขนาด</span>}
                           <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${typeBadge}`}>{typeLbl}</span>
-                          <span className="ml-auto text-green-300 font-black text-sm">{fmt(d.total_kg)} <span className="text-[10px] text-slate-500 font-normal">Kg · {d.total_rolls} {unit}</span></span>
+                          {j && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-700 text-slate-300">{j.machine_no || '—'}</span>}
+                          <span className="ml-auto text-green-300 font-black text-sm">{fmt(kg)} <span className="text-[10px] text-slate-500 font-normal">Kg · {nRolls} {unit}</span></span>
                         </div>
                         {/* ลูกค้า (เด่นรอง) */}
-                        {d.customer && <p className="text-white text-xs font-bold truncate">👥 {d.customer}</p>}
-                        <p className="text-slate-400 text-[10px] mt-0.5 truncate">{d.product_name||'—'}</p>
-                        {d.item_code && <p className="text-emerald-300/80 text-[10px] font-mono mt-0.5 truncate">🏷 {d.item_code}</p>}
+                        {cust && <p className="text-white text-xs font-bold truncate">👥 {cust}</p>}
+                        <p className="text-slate-400 text-[10px] mt-0.5 truncate">{prod||'—'}</p>
+                        {item && <p className="text-emerald-300/80 text-[10px] font-mono mt-0.5 truncate">🏷 {item}</p>}
                         <div className="flex items-center gap-1.5 flex-wrap text-[10px] mt-1">
                           {woB.text && <span title={woB.full} className="bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded font-bold">WO {woB.text}</span>}
                           {soB.text && <span title={soB.full} className="bg-blue-500/15 text-blue-300 px-1.5 py-0.5 rounded font-bold">SO {soB.text}</span>}
@@ -952,7 +1084,7 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
                             <span className={`text-[9px] text-slate-400 transition-transform ${collapsed ? '' : 'rotate-90'}`}>▶</span>
                             📅 {g.day}
                           </span>
-                          <span className="text-[10px] text-slate-500">{g.items.length} ใบ · {fmt(g.items.reduce((s,x)=>s+(x.total_kg??0),0))} Kg</span>
+                          <span className="text-[10px] text-slate-500">{g.items.length} งาน · {new Set(g.items.map(x=>x.doc.id)).size} ใบ · {fmt(g.items.reduce((s,x)=>s+(x.job ? x.job.kg : (x.doc.total_kg??0)),0))} Kg</span>
                         </button>
                         {!collapsed && <div className="divide-y divide-slate-800/50">{g.items.map(renderCard)}</div>}
                       </div>
@@ -972,10 +1104,11 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
                 <div className="px-5 py-3 border-b border-slate-800 flex items-center justify-between bg-brand-600/10">
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 mb-0.5">
-                      {selectedDoc.size && <span className="text-sm font-black bg-brand-500/25 text-brand-100 px-2 py-0.5 rounded">{selectedDoc.size}</span>}
-                      {selectedDoc.customer && <span className="text-white font-bold text-sm truncate">👥 {selectedDoc.customer}</span>}
+                      {(docJob ? docJob.size : selectedDoc.size) && <span className="text-sm font-black bg-brand-500/25 text-brand-100 px-2 py-0.5 rounded">{docJob ? docJob.size : selectedDoc.size}</span>}
+                      {(docJob ? docJob.customer : selectedDoc.customer) && <span className="text-white font-bold text-sm truncate">👥 {docJob ? docJob.customer : selectedDoc.customer}</span>}
+                      {docJob && <span className="text-[10px] font-bold bg-amber-500/20 text-amber-200 px-1.5 py-0.5 rounded whitespace-nowrap">เจาะงานเดียว</span>}
                     </div>
-                    {selectedDoc.product_name && <p className="text-slate-300 text-xs truncate">{selectedDoc.product_name}</p>}
+                    {(docJob ? docJob.product_name : selectedDoc.product_name) && <p className="text-slate-300 text-xs truncate">{docJob ? docJob.product_name : selectedDoc.product_name}</p>}
                     <p className="text-slate-500 text-[11px] mt-0.5">
                       📄 <span className="text-brand-300 font-mono">{selectedDoc.doc_no}</span> · {new Date(selectedDoc.transferred_at).toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok' })} · {fmtTime(selectedDoc.transferred_at)} · โดย <b className="text-slate-300">{selectedDoc.transferred_by}</b>
                     </p>
@@ -994,18 +1127,33 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
                 </div>
 
                 {/* KPI bar */}
-                {!docLoading && docRolls.length > 0 && (() => { const u = selectedDoc?.transfer_type === 'scrap' ? 'ถุง' : 'ม้วน'; return (
-                  <div className="grid grid-cols-3 gap-3 px-5 py-3 border-b border-slate-800 bg-slate-800/20">
-                    {[
-                      { label:`จำนวน${u}`, value: `${docRolls.length} ${u}`, color:'text-brand-300' },
-                      { label:'น้ำหนักรวม', value: `${fmt(docRolls.reduce((s,r)=>s+(r.weight??0),0))} Kgs.`, color:'text-green-300' },
-                      { label:'เครื่องที่โอน', value: Array.from(new Set(docRolls.map(r=>r.machine_no).filter(Boolean))).join(', ') || '—', color:'text-amber-300' },
-                    ].map(k => (
-                      <div key={k.label}>
-                        <p className="text-slate-500 text-[10px]">{k.label}</p>
-                        <p className={`font-black text-sm ${k.color}`}>{k.value}</p>
-                      </div>
-                    ))}
+                {!docLoading && docRolls.length > 0 && (() => {
+                  const u = selectedDoc?.transfer_type === 'scrap' ? 'ถุง' : 'ม้วน'
+                  // ⚠ กรองอยู่ (กดการ์ดงาน/พิมพ์ค้น) → KPI ต้องเป็นของที่กรอง ไม่งั้นการ์ดบอก 1 ม้วน แต่หัวใบขึ้น 21 ม้วน
+                  return (
+                  <div className="px-5 py-3 border-b border-slate-800 bg-slate-800/20">
+                    <div className="grid grid-cols-3 gap-3">
+                      {[
+                        { label:`จำนวน${u}`, value: `${docRollsView.length}${docRollsView.length !== docRolls.length ? `/${docRolls.length}` : ''} ${u}`, color:'text-brand-300' },
+                        { label:'น้ำหนักรวม', value: `${fmt(docRollsView.reduce((s,r)=>s+(r.weight??0),0))} Kgs.`, color:'text-green-300' },
+                        { label:'เครื่องที่โอน', value: Array.from(new Set(docRollsView.map(r=>r.machine_no).filter(Boolean))).join(', ') || '—', color:'text-amber-300' },
+                      ].map(k => (
+                        <div key={k.label}>
+                          <p className="text-slate-500 text-[10px]">{k.label}</p>
+                          <p className={`font-black text-sm ${k.color}`}>{k.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {(docJob || dq) && (
+                      <p className="text-[10px] text-amber-300/80 mt-2 flex items-center gap-1.5 flex-wrap">
+                        <span>
+                          🔍 {docJob ? `กำลังดูเฉพาะงาน WO ${docJob.work_order || '(ไม่ระบุ)'} · เครื่อง ${docJob.machine_no || '—'} · Lot ${docJob.lot_no || '—'}` : `กรองเฉพาะ "${docRollSearch}"`}
+                          {' '}— ตัวเลขข้างบนเป็นของงานนี้ · ทั้งใบ {docRolls.length} {u} · {fmt(docRolls.reduce((s,r)=>s+(r.weight??0),0))} Kgs.
+                        </span>
+                        <button onClick={() => { setDocJob(null); setDocRollSearch('') }} className="text-slate-400 hover:text-white bg-slate-800 rounded px-1.5 py-0.5">✕ ดูทั้งใบ</button>
+                        <span className="text-slate-600">(พิมพ์ใบ/Export ยังเป็นทั้งใบเสมอ)</span>
+                      </p>
+                    )}
                   </div>
                 ) })()}
 
@@ -1015,18 +1163,14 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
                 ) : docRolls.length === 0 ? (
                   <div className="flex-1 flex items-center justify-center text-slate-600 text-sm">ไม่พบข้อมูลม้วน</div>
                 ) : (() => {
-                  const dq = docRollSearch.trim().toLowerCase()
-                  const docRollsView = dq
-                    ? docRolls.filter((r:any) => `${r.roll_no} ${r.product_name ?? ''} ${r.work_order ?? ''} ${r.sale_order ?? ''} ${r.lot_no ?? ''} ${r.machine_no ?? ''} ${r.inspector ?? ''}`.toLowerCase().includes(dq))
-                    : docRolls
                   return (
                   <>
                     <div className="px-3 py-2 border-b border-slate-800 bg-slate-800/20 flex items-center gap-2 shrink-0">
                       <Search size={12} className="text-slate-500 shrink-0"/>
                       <input value={docRollSearch} onChange={e => setDocRollSearch(e.target.value)}
-                        placeholder="ค้นหาในใบนี้: ม้วน / WO / SO / สินค้า / Lot / เครื่อง"
+                        placeholder="ค้นหาในใบนี้: ม้วน / WO / SO / สินค้า / รหัสสินค้า / Lot / เครื่อง"
                         className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none focus:border-brand-500"/>
-                      {dq && <span className="text-[10px] text-slate-400 whitespace-nowrap">เจอ {docRollsView.length}/{docRolls.length}</span>}
+                      {(dq || docJob) && <span className="text-[10px] text-slate-400 whitespace-nowrap">เจอ {docRollsView.length}/{docRolls.length}</span>}
                       {dq && <button onClick={() => setDocRollSearch('')} className="text-slate-500 hover:text-white text-xs px-1">✕</button>}
                     </div>
                   {docRollsView.length === 0 ? (
@@ -1085,7 +1229,7 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
                       </tbody>
                       <tfoot>
                         <tr className="border-t border-slate-700 bg-green-500/5">
-                          <td colSpan={5} className="px-3 py-3 text-slate-300 font-semibold text-xs">{dq ? 'กรองเจอ' : 'รวม'} {docRollsView.length} {selectedDoc?.transfer_type === 'scrap' ? 'ถุง' : 'ม้วน'}{dq ? ` (จาก ${docRolls.length})` : ''}</td>
+                          <td colSpan={5} className="px-3 py-3 text-slate-300 font-semibold text-xs">{(dq || docJob) ? 'กรองเจอ' : 'รวม'} {docRollsView.length} {selectedDoc?.transfer_type === 'scrap' ? 'ถุง' : 'ม้วน'}{docRollsView.length !== docRolls.length ? ` (จากทั้งใบ ${docRolls.length})` : ''}</td>
                           <td className="px-3 py-3 text-slate-300 font-black">{fmt(docRollsView.reduce((s,r)=>s+(r.weight??0)+(r.core_weight??0),0))}</td>
                           <td className="px-3 py-3 text-green-300 font-black">{fmt(docRollsView.reduce((s,r)=>s+(r.weight??0),0))}</td>
                           <td colSpan={2}></td>

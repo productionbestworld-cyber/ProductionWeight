@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Boxes, FileEdit, KeyRound, Lock, Eye, EyeOff, Database } from 'lucide-react'
+import { Boxes, FileEdit, KeyRound, Lock, Eye, EyeOff, Database, FileSpreadsheet } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { exportSheetsToExcel } from '../lib/exportExcel'
 import Products from './Products'
 import LabelDesigner from './LabelDesigner'
+import SlipTemplateAdmin from './SlipTemplateAdmin'
 
 // แผนก = โปรไฟล์ผู้ใช้ที่ใช้ล็อกอิน (คนละเรื่องกับ section ของข้อมูล blow/rewind ที่อยู่บนม้วน)
 export type Dept = 'sales' | 'purchase' | 'planning' | 'blow' | 'rewind' | 'warehouse' | 'logistics'
@@ -223,7 +224,7 @@ export function DeptPinGate({ dept, onUnlock, onClose }: {
 }
 
 // ─── Main Admin Page ─────────────────────────────────────────────────────────
-type Tab = 'labels' | 'pin'
+type Tab = 'labels' | 'slips' | 'pin'
 
 export default function Admin({ dept: _dept }: { dept?: Dept }) {
   const [tab, setTab] = useState<Tab>('labels')
@@ -275,6 +276,12 @@ export default function Admin({ dept: _dept }: { dept?: Dept }) {
           }`}>
           <FileEdit size={13}/> ออกแบบใบปะหน้า
         </button>
+        <button onClick={() => setTab('slips')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            tab==='slips' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}>
+          <FileSpreadsheet size={13}/> ใบน้ำหนักลูกค้า
+        </button>
         <button onClick={() => setTab('pin')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
             tab==='pin' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'
@@ -296,6 +303,7 @@ export default function Admin({ dept: _dept }: { dept?: Dept }) {
       {/* Content */}
       <div className="flex-1 overflow-auto">
         {tab === 'labels'   && <LabelDesigner/>}
+        {tab === 'slips'    && <SlipTemplateAdmin/>}
         {tab === 'pin'      && <PinManager/>}
       </div>
     </div>

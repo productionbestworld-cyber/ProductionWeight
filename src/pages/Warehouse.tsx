@@ -3,6 +3,10 @@ import { supabase, fetchAll } from '../lib/supabase'
 import { rewoundFlag, withRewoundNote } from '../lib/rework'
 import { Package, Plus, Truck, BarChart3, RefreshCw, Search, Printer, Download, X, ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
 import * as XLSX from 'xlsx'
+import {
+  printSlip, exportSlipExcel, resolveTemplate, TEMPLATE_LIST, SLIP_TPL_COLS,
+  type SlipTemplateRow, type TemplateId,
+} from '../lib/weightSlip'
 
 function fmt(n: number | null | undefined, d = 2) {
   if (n == null || isNaN(n as number)) return '0.00'
@@ -154,152 +158,6 @@ function normSO(s: any): string {
 function esc(s: any) {
   return String(s ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c] as string))
 }
-// จัดกลุ่มม้วนตาม สินค้า + Lot (เรียงสินค้า → Lot → เลขม้วน)
-function groupForSlip(rolls: any[]) {
-  const map = new Map<string, { product: string; lot: string; wo: string; customer: string; rolls: any[] }>()
-  rolls.forEach(r => {
-    const k = `${r.product_name ?? '?'}__${r.lot_no ?? '?'}__${(r.work_order ?? '').trim()}`
-    if (!map.has(k)) map.set(k, { product: r.product_name ?? '—', lot: r.lot_no ?? '—',
-      wo: (r.work_order ?? '').trim(), customer: r.customer ?? '—', rolls: [] })
-    map.get(k)!.rolls.push(r)
-  })
-  const out = Array.from(map.values())
-  out.forEach(g => g.rolls.sort((a, b) => (a.roll_no ?? 0) - (b.roll_no ?? 0) || (a.created_at ?? '').localeCompare(b.created_at ?? '')))
-  return out.sort((a, b) => a.product.localeCompare(b.product) || a.lot.localeCompare(b.lot) || a.wo.localeCompare(b.wo))
-}
-
-function printWeightSlip(rolls: any[], staff: string, note: string) {
-  if (!rolls.length) return
-  const groups   = groupForSlip(rolls)
-  const totalNet = rolls.reduce((s, r) => s + (r.weight ?? 0), 0)
-  const totalCore= rolls.reduce((s, r) => s + (r.core_weight ?? 0), 0)
-  const custs    = Array.from(new Set(rolls.map(r => r.customer).filter(Boolean)))
-  const win = window.open('', '_blank', 'width=900,height=700')
-  if (!win) { alert('เบราว์เซอร์บล็อกป็อปอัพ — อนุญาต popup ของเว็บนี้ก่อนแล้วลองใหม่'); return }
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>ใบกำกับน้ำหนัก</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;background:#fff;padding:10mm}
-.head{text-align:center;border-bottom:2px solid #000;padding-bottom:3mm;margin-bottom:4mm}
-.head h1{font-size:13pt;font-weight:800}
-.head h2{font-size:18pt;font-weight:900;margin-top:2mm}
-.info{display:flex;justify-content:space-between;margin-bottom:4mm;font-size:10pt;gap:6mm}
-.info-row{margin-bottom:1mm}
-.info-row b{display:inline-block;min-width:26mm}
-.section-title{background:#003087;color:#fff;font-weight:700;padding:1.5mm 3mm;font-size:10pt}
-table{width:100%;border-collapse:collapse;margin-bottom:4mm}
-th,td{border:1px solid #aaa;padding:1.5mm 2.5mm;font-size:9.5pt}
-th{background:#f5f5f5;font-weight:700;text-align:left}
-.tot{background:#003087;color:#fff;font-weight:800}
-.sign{display:flex;justify-content:space-around;margin-top:15mm}
-.sign-box{flex:1;text-align:center}
-.sign-line{border-top:1px solid #000;margin-top:18mm;padding-top:1mm;font-size:9pt}
-tr{page-break-inside:avoid}
-@media print{@page{size:A4;margin:8mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-</style></head><body>
-<div class="head">
-  <h1>บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด</h1>
-  <h2>ใบกำกับน้ำหนัก</h2>
-  <p style="font-size:9pt;color:#555">WEIGHT LIST</p>
-</div>
-<div class="info">
-  <div>
-    <div class="info-row"><b>วันที่:</b> ${thaiDate()}</div>
-    <div class="info-row"><b>ลูกค้า:</b> ${esc(custs.join(', ') || '—')}</div>
-  </div>
-  <div>
-    <div class="info-row"><b>ผู้จัดของ:</b> ${esc(staff || '—')}</div>
-    <div class="info-row"><b>หมายเหตุ:</b> ${esc(note || '—')}</div>
-  </div>
-  <div>
-    <div class="info-row"><b>จำนวน:</b> ${rolls.length} ม้วน</div>
-    <div class="info-row"><b>น้ำหนักสุทธิรวม:</b> ${totalNet.toFixed(2)} Kgs.</div>
-  </div>
-</div>
-${groups.map(g => {
-  const subNet = g.rolls.reduce((s, r) => s + (r.weight ?? 0), 0)
-  const lp = labelPosOf(g.rolls)
-  return `
-  <div class="section-title">${esc(g.product)}　·　Lot: ${esc(g.lot)}${g.wo ? `　·　WO: ${esc(g.wo)}` : ''}${lp ? `　·　ป้าย: ${esc(lp.replace(/^[^ก-๙A-Za-z]+/, ''))}` : ''}</div>
-  <table>
-    <thead><tr>
-      <th style="width:6%">ลำดับ</th><th style="width:9%">ม้วนที่</th><th style="width:9%">เครื่อง</th>
-      <th style="width:14%">นน.เต็ม</th><th style="width:12%">นน.แกน</th><th style="width:16%">นน.สุทธิ (Kgs.)</th>
-      <th style="width:13%">ผู้ตรวจ</th><th>วันผลิต</th>
-    </tr></thead>
-    <tbody>
-      ${g.rolls.map((r, i) => `<tr>
-        <td style="text-align:center">${i + 1}</td>
-        <td style="text-align:center;font-weight:700">${r.roll_no ?? '—'}</td>
-        <td style="text-align:center">${esc(r.machine_no ?? '—')}</td>
-        <td style="text-align:right">${fmt((r.weight ?? 0) + (r.core_weight ?? 0))}</td>
-        <td style="text-align:right">${fmt(r.core_weight ?? 0)}</td>
-        <td style="text-align:right;font-weight:700">${fmt(r.weight ?? 0)}</td>
-        <td>${esc(r.inspector ?? '—')}</td>
-        <td>${r.created_at ? fmtDT(r.created_at) : '—'}</td>
-      </tr>`).join('')}
-      <tr class="tot">
-        <td colspan="5" style="text-align:right">รวม Lot ${esc(g.lot)}</td>
-        <td style="text-align:right">${subNet.toFixed(2)}</td>
-        <td colspan="2">${g.rolls.length} ม้วน</td>
-      </tr>
-    </tbody>
-  </table>`
-}).join('')}
-<table><tr class="tot" style="font-size:12.5pt">
-  <td colspan="4" style="text-align:right;padding:3mm">รวมทั้งสิ้น (แกน ${totalCore.toFixed(2)} Kgs.)</td>
-  <td style="text-align:right;padding:3mm">${totalNet.toFixed(2)} Kgs.</td>
-  <td style="text-align:center;padding:3mm;width:20%">${rolls.length} ม้วน</td>
-</tr></table>
-<div class="sign">
-  <div class="sign-box"><div class="sign-line"></div><div><b>${esc(staff || '...........................')}</b></div><div style="font-size:9pt;color:#555">ผู้จัดของ / ผู้ชั่ง</div></div>
-  <div class="sign-box"><div class="sign-line"></div><div>...........................</div><div style="font-size:9pt;color:#555">ผู้ตรวจสอบ</div></div>
-  <div class="sign-box"><div class="sign-line"></div><div>...........................</div><div style="font-size:9pt;color:#555">ผู้รับ</div></div>
-</div>
-<script>window.onload=()=>{setTimeout(()=>window.print(),400)}<\/script>
-</body></html>`)
-  win.document.close()
-}
-
-// Export ใบกำกับน้ำหนักเป็น Excel — คอลัมน์ชุดเดียวกับใบพิมพ์
-function exportWeightSlipExcel(rolls: any[], staff: string, note: string) {
-  if (!rolls.length) return
-  const groups   = groupForSlip(rolls)
-  const totalNet = rolls.reduce((s, r) => s + (r.weight ?? 0), 0)
-  const totalCore= rolls.reduce((s, r) => s + (r.core_weight ?? 0), 0)
-  const custs    = Array.from(new Set(rolls.map(r => r.customer).filter(Boolean)))
-  const aoa: any[][] = [
-    ['บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด'],
-    ['ใบกำกับน้ำหนัก'],
-    [],
-    ['วันที่ :', new Date().toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok' }), 'ผู้จัดของ :', staff || '', 'หมายเหตุ :', note || ''],
-    ['ลูกค้า :', custs.join(', '), 'จำนวน :', `${rolls.length} ม้วน`, 'นน.สุทธิรวม :', Number(totalNet.toFixed(2))],
-    [],
-  ]
-  groups.forEach(g => {
-    aoa.push([`${g.product} · Lot ${g.lot}${g.wo ? ` · WO ${g.wo}` : ''}`])
-    aoa.push(['ลำดับ','ม้วนที่','นน.รวม (kg)','นน.แกน (kg)','นน.สุทธิ (kg)','วันผลิต'])
-    g.rolls.forEach((r, i) => aoa.push([
-      i + 1, r.roll_no ?? '',
-      Number(((r.weight ?? 0) + (r.core_weight ?? 0)).toFixed(2)),
-      Number((r.core_weight ?? 0).toFixed(2)),
-      Number((r.weight ?? 0).toFixed(2)),
-      r.created_at ? fmtDT(r.created_at) : '',
-    ]))
-    const subNet  = g.rolls.reduce((s, r) => s + (r.weight ?? 0), 0)
-    const subCore = g.rolls.reduce((s, r) => s + (r.core_weight ?? 0), 0)
-    aoa.push(['รวม', `${g.rolls.length} ม้วน`, Number((subNet + subCore).toFixed(2)), Number(subCore.toFixed(2)), Number(subNet.toFixed(2)), ''])
-    aoa.push([])
-  })
-  aoa.push(['รวมทั้งสิ้น', `${rolls.length} ม้วน`, Number((totalNet + totalCore).toFixed(2)), Number(totalCore.toFixed(2)), Number(totalNet.toFixed(2)), ''])
-
-  const ws = XLSX.utils.aoa_to_sheet(aoa)
-  ws['!cols'] = [{wch:8},{wch:10},{wch:14},{wch:14},{wch:15},{wch:18}]
-  ws['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:5} }, { s:{r:1,c:0}, e:{r:1,c:5} }]
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'ใบกำกับน้ำหนัก')
-  XLSX.writeFile(wb, `ใบกำกับน้ำหนัก_${new Date().toISOString().slice(0,10)}.xlsx`)
-}
 
 // ── Modal สร้าง SO ─────────────────────────────────────────────────────────
 function SOModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
@@ -428,6 +286,10 @@ export default function Warehouse({ dept, readOnly = false }: { dept?: 'blow'|'r
   const [wsSel,   setWsSel]   = useState<Map<string, Roll>>(new Map())
   const [wsStaff, setWsStaff] = useState('')
   const [wsNote,  setWsNote]  = useState('')
+  // ลูกค้าแต่ละเจ้าใช้ฟอร์มใบน้ำหนักคนละแบบ — ตั้งค่าที่ Admin → ใบน้ำหนักลูกค้า
+  const [slipTpls, setSlipTpls] = useState<SlipTemplateRow[]>([])
+  const [wsTplOv, setWsTplOv]   = useState<TemplateId | ''>('')   // ผู้ใช้เลือกฟอร์มเองทับค่าที่จับคู่ได้
+  const [delTplOv, setDelTplOv] = useState<TemplateId | ''>('')   // เดียวกัน แต่ของแท็บจัดส่งตาม Item
 
   // shipment state
   const [selSoNo, setSelSoNo] = useState<string | null>(null)     // SO ที่เลือกในแท็บจัดส่ง (เลขจากม้วน ไม่ใช่ตาราง sales_orders)
@@ -526,6 +388,15 @@ export default function Warehouse({ dept, readOnly = false }: { dept?: 'blow'|'r
     setSoPlanWOs(s2w)
   }
   useEffect(() => { loadAll() }, [])
+
+  // ฟอร์มใบน้ำหนักของลูกค้า — โหลดครั้งเดียว (ตารางเล็ก) ถ้ายังไม่ได้รันไฟล์ SQL ก็ตกไปใช้ฟอร์มกลาง
+  useEffect(() => {
+    supabase.from('weight_slip_templates').select(SLIP_TPL_COLS)
+      .then(({ data, error }) => {
+        if (error) { console.warn('[weight_slip_templates]', error.message); return }
+        setSlipTpls((data ?? []) as SlipTemplateRow[])
+      })
+  }, [])
 
   // โหลดสต็อกเก่ากว่า 7 วัน — เรียกเมื่อผู้ใช้กดปุ่ม หรือเริ่มค้นหา/กรอง (ต้องเห็นครบ)
   async function loadOlder() {
@@ -667,6 +538,15 @@ export default function Warehouse({ dept, readOnly = false }: { dept?: 'blow'|'r
   // ── ม้วนที่ติ๊กไว้ทำใบกำกับน้ำหนัก (อิงสต็อกทั้งหมด ไม่ใช่เฉพาะที่กรองอยู่ — เปลี่ยนตัวกรองแล้วของที่เลือกไม่หาย) ──
   const wsPicked   = useMemo(() => Array.from(wsSel.values()), [wsSel])
   const wsPickedKg = useMemo(() => wsPicked.reduce((s, r) => s + (r.weight ?? 0), 0), [wsPicked])
+
+  // ── เลือกฟอร์มใบน้ำหนักตามลูกค้าของม้วนที่ติ๊ก (เลือกเองทับได้) ──────────
+  const wsMatch = useMemo(() => resolveTemplate(wsPicked, slipTpls), [wsPicked, slipTpls])
+  /** ออกใบน้ำหนัก — ov = ฟอร์มที่ผู้ใช้เลือกเอง (ว่าง = ใช้ที่จับคู่จากลูกค้า) */
+  function slipArgs(rolls: any[], staff: string, note: string, ov: TemplateId | '' = '') {
+    const m = resolveTemplate(rolls, slipTpls)
+    const tpl = (ov || m.template) as TemplateId
+    return [rolls, tpl, { staff, note, extra: m.extra, titleOverride: m.title }] as const
+  }
   function toggleWsRoll(r: Roll) {
     setWsSel(p => { const n = new Map(p); n.has(r.id) ? n.delete(r.id) : n.set(r.id, r); return n })
   }
@@ -936,6 +816,7 @@ export default function Warehouse({ dept, readOnly = false }: { dept?: 'blow'|'r
 
   const delPicked   = useMemo(() => (selItemGroup?.rolls ?? []).filter(r => delSel.has(r.id)), [selItemGroup, delSel])
   const delPickedKg = useMemo(() => delPicked.reduce((s, r) => s + (r.weight ?? 0), 0), [delPicked])
+  const delMatch    = useMemo(() => resolveTemplate(delPicked, slipTpls), [delPicked, slipTpls])
 
   function toggleDelRoll(id: string) {
     setDelSel(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -952,40 +833,16 @@ export default function Warehouse({ dept, readOnly = false }: { dept?: 'blow'|'r
     setDelOpenWO(new Set(delItemWOs.filter(g => g.rolls.some(r => sel.has(r.id))).map(g => g.wo)))
   }
 
-  // Export ใบกำกับน้ำหนัก (ม้วนที่เลือกจะส่ง) เป็น Excel — ไปกำกับที่ลูกค้า
+  // ใบน้ำหนักของม้วนที่เลือกจะส่ง — ใช้ฟอร์มของลูกค้าเจ้านั้น (ตั้งที่ Admin → ใบน้ำหนักลูกค้า)
+  // ใบนี้แนบไปกับใบส่งของ ลูกค้าแต่ละเจ้าจึงคนละแบบ — คนละใบกับ printDelivery ที่เป็นใบส่งของ
+  const delNote = () => `เป้า ${delTarget || '—'} kg`
   function exportDelivery() {
     if (delPicked.length === 0) { alert('เลือกม้วนก่อน'); return }
-    const rolls = [...delPicked].sort((a, b) =>
-      String((a as any).work_order ?? '').localeCompare(String((b as any).work_order ?? '')) || (a.roll_no ?? 0) - (b.roll_no ?? 0))
-    const dateStr = new Date().toISOString().slice(0, 10)
-    const header: any[][] = [
-      ['บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด'],
-      ['ใบกำกับน้ำหนัก (จัดส่ง)'],
-      [],
-      ['สินค้า :', selItemGroup?.product_name ?? '', 'Item :', selItemGroup?.item_code ?? '', 'ขนาด :', selItemGroup?.size ?? ''],
-      ['ลูกค้า :', selItemGroup?.customer ?? '', 'เป้าจัดส่ง :', `${delTarget || '—'} kg`, 'ผู้จัดส่ง :', delStaff || ''],
-      ['จำนวน :', `${rolls.length} ม้วน`, 'น้ำหนักรวม (สุทธิ) :', `${delPickedKg.toFixed(2)} kg`, 'วันที่ :', new Date().toLocaleDateString('th-TH')],
-      [],
-      ['ลำดับ', 'ม้วนที่', 'นน.รวม (kg)', 'นน.แกน (kg)', 'นน.สุทธิ (kg)', 'วันผลิต'],
-    ]
-    const sumNet   = rolls.reduce((s, r) => s + (r.weight ?? 0), 0)
-    const sumCore  = rolls.reduce((s, r) => s + (r.core_weight ?? 0), 0)
-    const sumGross = sumNet + sumCore
-    const dataRows = rolls.map((r, i) => [
-      i + 1,
-      r.roll_no,
-      Number(((r.weight ?? 0) + (r.core_weight ?? 0)).toFixed(2)),  // รวม = สุทธิ + แกน
-      Number((r.core_weight ?? 0).toFixed(2)),                       // แกน
-      Number((r.weight ?? 0).toFixed(2)),                            // สุทธิ
-      fmtDT(r.created_at),
-    ])
-    dataRows.push(['รวม', `${rolls.length} ม้วน`, Number(sumGross.toFixed(2)), Number(sumCore.toFixed(2)), Number(sumNet.toFixed(2)), ''])
-    const ws = XLSX.utils.aoa_to_sheet([...header, ...dataRows])
-    ws['!cols'] = [{ wch: 8 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 15 }, { wch: 18 }]
-    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } }]
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'จัดส่ง')
-    XLSX.writeFile(wb, `ใบกำกับน้ำหนัก_${(selItemGroup?.item_code ?? 'item')}_${dateStr}.xlsx`)
+    exportSlipExcel(...slipArgs(delPicked, delStaff.trim(), delNote(), delTplOv))
+  }
+  function printDeliverySlip() {
+    if (delPicked.length === 0) { alert('เลือกม้วนก่อน'); return }
+    printSlip(...slipArgs(delPicked, delStaff.trim(), delNote(), delTplOv))
   }
 
   async function handleShipDelivery() {
@@ -1358,17 +1215,26 @@ export default function Warehouse({ dept, readOnly = false }: { dept?: 'blow'|'r
                   className="w-40 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-brand-500"/>
                 <input value={wsNote} onChange={e => setWsNote(e.target.value)} placeholder="หมายเหตุ (ถ้ามี)"
                   className="w-44 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-brand-500"/>
+                {/* ฟอร์มของลูกค้า — จับคู่ให้อัตโนมัติ แต่เลือกทับเองได้ */}
+                <select value={wsTplOv} onChange={e => setWsTplOv(e.target.value as TemplateId | '')}
+                  title="ลูกค้าแต่ละเจ้าใช้ใบออกน้ำหนักคนละแบบ"
+                  className="w-52 bg-slate-800 border border-slate-700 rounded-lg px-2 py-2 text-sm text-white outline-none focus:border-brand-500">
+                  <option value="">
+                    ฟอร์มอัตโนมัติ — {TEMPLATE_LIST.find(t => t.id === wsMatch.template)?.label ?? 'ฟอร์มกลาง'}
+                  </option>
+                  {TEMPLATE_LIST.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+                </select>
                 <span className="text-[11px] text-amber-300/80">💡 พิมพ์อย่างเดียว — ม้วนยังอยู่ในคลัง ไม่ถูกตัดสต็อก</span>
                 <div className="ml-auto flex items-center gap-2">
                   <button onClick={() => setWsSel(new Map())}
                     className="text-slate-400 hover:text-white text-sm px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700">ล้าง</button>
-                  <button onClick={() => exportWeightSlipExcel(wsPicked, wsStaff.trim(), wsNote.trim())}
+                  <button onClick={() => exportSlipExcel(...slipArgs(wsPicked, wsStaff.trim(), wsNote.trim(), wsTplOv))}
                     className="flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-600 text-white text-sm px-4 py-2 rounded-xl font-bold">
                     <Download size={14}/> Excel
                   </button>
-                  <button onClick={() => printWeightSlip(wsPicked, wsStaff.trim(), wsNote.trim())}
+                  <button onClick={() => printSlip(...slipArgs(wsPicked, wsStaff.trim(), wsNote.trim(), wsTplOv))}
                     className="flex items-center gap-1.5 bg-brand-600 hover:bg-brand-500 text-white text-sm px-5 py-2.5 rounded-xl font-bold">
-                    <Printer size={15}/> ออกใบกำกับน้ำหนัก (A4)
+                    <Printer size={15}/> ออกใบน้ำหนัก (A4)
                   </button>
                 </div>
               </div>
@@ -1498,9 +1364,22 @@ export default function Warehouse({ dept, readOnly = false }: { dept?: 'blow'|'r
                   ))}
                 </div>
                 <div className="p-3 border-t border-slate-800 space-y-2">
+                  {/* ฟอร์มใบน้ำหนักของลูกค้า — จับคู่ให้อัตโนมัติ เลือกทับเองได้ */}
+                  <select value={delTplOv} onChange={e => setDelTplOv(e.target.value as TemplateId | '')}
+                    title="ลูกค้าแต่ละเจ้าใช้ใบออกน้ำหนักคนละแบบ"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-2 text-xs text-white outline-none focus:border-brand-500">
+                    <option value="">
+                      ฟอร์มอัตโนมัติ — {TEMPLATE_LIST.find(t => t.id === delMatch.template)?.label ?? 'ฟอร์มกลาง'}
+                    </option>
+                    {TEMPLATE_LIST.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+                  </select>
+                  <button onClick={printDeliverySlip} disabled={delSel.size === 0}
+                    className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white text-sm px-4 py-2 rounded-xl font-bold">
+                    <Printer size={14}/> ใบน้ำหนัก (A4)
+                  </button>
                   <button onClick={exportDelivery} disabled={delSel.size === 0}
                     className="w-full flex items-center justify-center gap-2 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white text-sm px-4 py-2 rounded-xl font-bold">
-                    <Download size={14}/> Export Excel (ใบกำกับน้ำหนัก)
+                    <Download size={14}/> Export Excel (ใบน้ำหนัก)
                   </button>
                   <input value={delStaff} onChange={e => setDelStaff(e.target.value)} placeholder="ชื่อผู้จัดส่ง *"
                     className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-brand-500"/>
@@ -1752,11 +1631,11 @@ export default function Warehouse({ dept, readOnly = false }: { dept?: 'blow'|'r
                   ))}
                 </div>
                 <div className="p-3 border-t border-slate-800 space-y-2">
-                  <button onClick={() => printWeightSlip(pickedRolls, shipStaff.trim(), `SO ${selSO.so}`)} disabled={selectedRolls.size === 0}
+                  <button onClick={() => printSlip(...slipArgs(pickedRolls, shipStaff.trim(), `SO ${selSO.so}`))} disabled={selectedRolls.size === 0}
                     className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white text-sm px-4 py-2 rounded-xl font-bold">
-                    <Printer size={14}/> ใบกำกับน้ำหนัก (ยังไม่ตัดสต็อก)
+                    <Printer size={14}/> ใบน้ำหนัก (ยังไม่ตัดสต็อก)
                   </button>
-                  <button onClick={() => exportWeightSlipExcel(pickedRolls, shipStaff.trim(), `SO ${selSO.so}`)} disabled={selectedRolls.size === 0}
+                  <button onClick={() => exportSlipExcel(...slipArgs(pickedRolls, shipStaff.trim(), `SO ${selSO.so}`))} disabled={selectedRolls.size === 0}
                     className="w-full flex items-center justify-center gap-2 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white text-sm px-4 py-2 rounded-xl font-bold">
                     <Download size={14}/> Export Excel
                   </button>

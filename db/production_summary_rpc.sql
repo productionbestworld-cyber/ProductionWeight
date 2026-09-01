@@ -8,6 +8,7 @@
 -- ════════════════════════════════════════════════════════════════
 
 -- นับเฉพาะงานผลิต(เป่า): section = 'blow' หรือ NULL (ข้อมูลเก่าก่อนมีคอลัมน์ section)
+-- และไม่นับม้วนที่ติ๊ก "มาจากกรอ" (is_rewound) — เนื้อวัสดุถูกนับไปแล้วตอนชั่งเป็นม้วนเสีย
 -- p_group: 'day' | 'machine' | 'wo' | 'reason' | 'customer'
 --   day     = วันที่ผลิตตามเวลาไทย (Asia/Bangkok)
 --   reason  = หมายเหตุของม้วนเสีย/เศษ (นับเฉพาะม้วนที่ไม่ใช่ FG)
@@ -51,6 +52,8 @@ AS $$
       TO_CHAR(r.created_at AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD') AS day
     FROM production_rolls r
     WHERE COALESCE(r.section, 'blow') = 'blow'
+      -- ตัดม้วนที่ติ๊ก "มาจากกรอ" ออก (กันนับซ้ำ) — ต้องตรงกับ ProductionDashboard ฝั่งเบราว์เซอร์
+      AND COALESCE(r.is_rewound, FALSE) = FALSE
       AND r.created_at >= p_from
       AND r.created_at <= p_to
       AND (p_machine  IS NULL OR r.machine_no = p_machine)

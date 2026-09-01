@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, Fragment } from 'react'
 import { supabase, fetchAll } from '../lib/supabase'
+import { rewoundFlag, withRewoundNote } from '../lib/rework'
 import { Package, Plus, Truck, BarChart3, RefreshCw, Search, Printer, Download, X, ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 
@@ -360,7 +361,7 @@ const RETURN_TO_REWORK_TYPES = [
 ] as const
 
 // เลือกเฉพาะคอลัมน์ที่หน้านี้ใช้จริง (ลด Egress — เดิมดึง * ทุกคอลัมน์)
-const RCOLS = 'id,roll_no,roll_type,weight,gross_weight,core_weight,machine_no,lot_no,product_name,product_code,item_code,mat_code,customer,cust_code,cust_branch,inspector,created_at,transferred_at,transferred,shipped,shipped_at,shipped_by,ship_doc_no,so_id,sale_order,work_order,section,width_cm,thick_mc,width_unit,length,pcs,inbound_type,remark,rework_source_lot,rework_source_roll_id,review_status,label_position,new_system,rework_remark'
+const RCOLS = 'id,roll_no,roll_type,weight,gross_weight,core_weight,machine_no,lot_no,product_name,product_code,item_code,mat_code,customer,cust_code,cust_branch,inspector,created_at,transferred_at,transferred,shipped,shipped_at,shipped_by,ship_doc_no,so_id,sale_order,work_order,section,width_cm,thick_mc,width_unit,length,pcs,inbound_type,remark,is_rewound,rework_source_lot,rework_source_roll_id,review_status,label_position,new_system,rework_remark'
 const LABELPOS_TH: Record<string,string> = { head: '🔝 แปะหัว', side: '↔ แปะข้าง' }
 // สรุปตำแหน่งแปะป้ายของกลุ่มม้วน: ตรงกันหมด → ค่านั้น, ต่างกัน → "หลายแบบ", ไม่มี → ''
 function labelPosOf(rolls: any[]): string {
@@ -611,7 +612,12 @@ export default function Warehouse({ dept, readOnly = false }: { dept?: 'blow'|'r
   ), [stock, fSection, fProduct, fCustomer, fLot, fSize, search])
 
   // ม้วนกรอ (ผลผลิตจากแผนกกรอ) = ม้วนดีที่มี rework_source ติดมา
-  const isReworkRoll = (r: any) => !!(r.rework_source_roll_id || r.rework_source_lot)
+  // ⚠ ยกเว้นม้วนที่ติ๊ก "มาจากกรอ" ที่หน้าชั่งเป่า (is_rewound) — พวกนี้ชั่งเข้า Lot ผลิตโดยตรง
+  //   ตามข้อกำหนดลูกค้า (ม้วนต้องอยู่ Lot เดียวกับที่ผลิต) จึงห้ามย้ายไปกลุ่ม Lot ต้นทาง
+  //   และห้ามเรียงไปท้ายกลุ่ม — ต้องอยู่ตามเลขม้วนเหมือนม้วนผลิตปกติ
+  const isReworkRoll = (r: any) => !r.is_rewound && !!(r.rework_source_roll_id || r.rework_source_lot)
+  // ธงทวนสอบภายในคลัง (ไม่กระทบการจัดกลุ่ม/เรียง)
+  const isRewoundRoll = (r: any) => !!r.is_rewound
 
   // group stock by lot + WO (กัน 2 งานปน Lot เดียว) + เก็บ SO / วันเริ่ม-จบ
   // ม้วนกรอจะถูกจับเข้ากลุ่ม Lot เป่าเดิม (rework_source_lot) ให้อยู่กับม้วนดีของ WO นั้น
@@ -856,7 +862,7 @@ export default function Warehouse({ dept, readOnly = false }: { dept?: 'blow'|'r
       ['ลูกค้า :', customer, '',  'จำนวน :', `${groupRolls.length} ม้วน`,  'น้ำหนักรวม (สุทธิ) :', `${totalKg.toFixed(2)} Kgs.`],
       ['วันที่ Export :', new Date().toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok' })],
       [],
-      ['ลำดับ','ม้วนที่','นน.ม้วน (Kgs.)','นน.แกน (Kgs.)','นน.สุทธิ (Kgs.)','เครื่อง','ผู้ตรวจสอบ','วันผลิต','วันรับโอน'],
+      ['ลำดับ','ม้วนที่','นน.ม้วน (Kgs.)','นน.แกน (Kgs.)','นน.สุทธิ (Kgs.)','เครื่อง','ผู้ตรวจสอบ','วันผลิต','วันรับโอน','หมายเหตุ','มาจากกรอ'],
     ]
 
     const dataRows = groupRolls.map((r, i) => [
@@ -869,18 +875,20 @@ export default function Warehouse({ dept, readOnly = false }: { dept?: 'blow'|'r
       r.inspector ?? '',
       fmtDT(r.created_at),
       r.transferred_at ? fmtDT(r.transferred_at) : '',
+      withRewoundNote((r as any).remark, (r as any).is_rewound),
+      rewoundFlag((r as any).is_rewound),
     ])
     // total row
-    dataRows.push(['', `รวม ${groupRolls.length} ม้วน`, '', '', Number(totalKg.toFixed(2)), '', '', '', ''])
+    dataRows.push(['', `รวม ${groupRolls.length} ม้วน`, '', '', Number(totalKg.toFixed(2)), '', '', '', '', '', ''])
 
     const ws = XLSX.utils.aoa_to_sheet([...header, ...dataRows])
     ws['!cols'] = [
       {wch:6},{wch:8},{wch:16},{wch:14},{wch:16},
-      {wch:8},{wch:12},{wch:18},{wch:18},
+      {wch:8},{wch:12},{wch:18},{wch:18},{wch:30},{wch:14},
     ]
     ws['!merges'] = [
-      { s:{r:0,c:0}, e:{r:0,c:8} },
-      { s:{r:1,c:0}, e:{r:1,c:8} },
+      { s:{r:0,c:0}, e:{r:0,c:10} },
+      { s:{r:1,c:0}, e:{r:1,c:10} },
     ]
     const wb = XLSX.utils.book_new()
     const sheetName = lot.slice(-10)
@@ -1273,6 +1281,7 @@ export default function Warehouse({ dept, readOnly = false }: { dept?: 'blow'|'r
                               <td className={`px-4 py-2.5 font-mono font-bold ${rr.new_system ? 'text-emerald-200' : 'text-white'}`}>{isOpen ? '▲' : '▼'} #{r.roll_no}
                                 {rr.new_system && <span className="ml-1.5 text-[9px] bg-emerald-500/25 text-emerald-200 px-1.5 py-0.5 rounded font-black">✨ ใหม่</span>}
                                 {isReworkRoll(r) && <span className="ml-1.5 text-[9px] bg-amber-500/25 text-amber-200 px-1.5 py-0.5 rounded font-bold" title={(r as any).rework_remark || `กรอจาก Lot ${(r as any).rework_source_lot||''}`}>🔄 กรอ</span>}
+                                {isRewoundRoll(r) && <span className="ml-1.5 text-[9px] bg-emerald-500/25 text-emerald-200 px-1.5 py-0.5 rounded font-bold" title={(r as any).remark || 'ชั่งที่เครื่องผลิต · ติ๊กว่ามาจากกรอ'}>🔁 มาจากกรอ</span>}
                                 {((r as any).remark || '').includes('คืน NC') && <span className="ml-1.5 text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold" title={(r as any).remark}>↩ เคยถูก NC</span>}
                               </td>
                               <td className="px-4 py-2.5"><span className="text-[10px] bg-brand-500/20 text-brand-300 font-bold px-1.5 py-0.5 rounded">{r.machine_no||'—'}</span></td>

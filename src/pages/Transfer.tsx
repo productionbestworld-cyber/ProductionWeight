@@ -1,6 +1,7 @@
 import { useEffect, useState, Fragment } from 'react'
 import { Package, Search, CheckCircle2, ArrowRightFromLine, RefreshCw, Wind, Printer, FileText, Download, X } from 'lucide-react'
 import { supabase, fetchAll } from '../lib/supabase'
+import { rewoundFlag, withRewoundNote } from '../lib/rework'
 import { reprintRollLabel } from './WeighStation'
 import * as XLSX from 'xlsx'
 
@@ -204,7 +205,7 @@ function buildTransferSheet(
   const unit      = isScrap ? 'ถุง' : 'ม้วน'
   const rollColHd = isScrap ? 'ถุงที่' : 'ม้วนที่'
 
-  const COLS = 18 // เพิ่ม WO column
+  const COLS = 19 // WO column + ธง "มาจากกรอ"
 
   // header rows
   const header: any[][] = [
@@ -217,7 +218,7 @@ function buildTransferSheet(
     ['สินค้า :',      products, '', 'จำนวน :', `${rolls.length} ${unit}`, 'น้ำหนักรวม (สุทธิ) :', `${totalKg.toFixed(2)} Kgs.`],
     ['ใบคำสั่งผลิต (WO) :', woNos || '—', '', 'Sale Order (SO) :', soNos || '—', 'วันที่ส่งของ :', delivDate || '—'],
     [],
-    ['ลำดับ', rollColHd,'นน.ม้วน (Kgs.)','นน.แกน (Kgs.)','นน.สุทธิ (Kgs.)','เครื่อง','WO','SO','Item Code','Mat Code','สินค้า','ลูกค้า','Lot','ผู้ตรวจสอบ', isScrap ? 'เหตุผลเศษ' : isBad ? 'เหตุผลกรอ' : 'หมายเหตุ', 'เวลาชั่ง','เวลาโอน','ผู้โอน'],
+    ['ลำดับ', rollColHd,'นน.ม้วน (Kgs.)','นน.แกน (Kgs.)','นน.สุทธิ (Kgs.)','เครื่อง','WO','SO','Item Code','Mat Code','สินค้า','ลูกค้า','Lot','ผู้ตรวจสอบ', isScrap ? 'เหตุผลเศษ' : isBad ? 'เหตุผลกรอ' : 'หมายเหตุ', 'เวลาชั่ง','เวลาโอน','ผู้โอน','มาจากกรอ'],
   ]
 
   const dataRows = rolls.map((r, i) => [
@@ -235,21 +236,22 @@ function buildTransferSheet(
     r.customer      ?? '',
     r.lot_no        ?? '',
     r.inspector     ?? '',
-    r.remark        ?? '',  // เหตุผลเศษ/กรอ
+    withRewoundNote(r.remark, (r as any).is_rewound),  // เหตุผลเศษ/กรอ (+ ธงมาจากกรอต่อท้าย)
     new Date(r.created_at).toLocaleString('th-TH', { timeZone:'Asia/Bangkok' }),
     r.transferred_at ? new Date(r.transferred_at).toLocaleString('th-TH', { timeZone:'Asia/Bangkok' }) : '',
     r.transferred_by ?? '',
+    rewoundFlag((r as any).is_rewound),
   ])
 
   // total row
-  dataRows.push(['', `รวม ${rolls.length} ${unit}`, '', '', Number(totalKg.toFixed(2)), '', '', '', '', '', '', '', '', '', '', '', '', ''])
+  dataRows.push(['', `รวม ${rolls.length} ${unit}`, '', '', Number(totalKg.toFixed(2)), '', '', '', '', '', '', '', '', '', '', '', '', '', ''])
 
   const ws = XLSX.utils.aoa_to_sheet([...header, ...dataRows])
 
-  // column widths (18 cols: +1 column "เหตุผล")
+  // column widths (19 cols: +1 "เหตุผล" +1 "มาจากกรอ")
   ws['!cols'] = [
     {wch:6},{wch:8},{wch:16},{wch:14},{wch:16},
-    {wch:8},{wch:14},{wch:14},{wch:14},{wch:14},{wch:26},{wch:20},{wch:16},{wch:12},{wch:22},{wch:20},{wch:20},{wch:14},
+    {wch:8},{wch:14},{wch:14},{wch:14},{wch:14},{wch:26},{wch:20},{wch:16},{wch:12},{wch:22},{wch:20},{wch:20},{wch:14},{wch:14},
   ]
 
   // merge title rows (3 บรรทัดบนสุด: ชื่อบริษัท / ประเภท / banner)

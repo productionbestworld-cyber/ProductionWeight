@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { Save, Printer, RefreshCw, CheckCircle2, ArrowLeft, Wind, X, Settings } from 'lucide-react'
 import QRCode from 'react-qr-code'
 import QRCodeLib from 'qrcode'
 import { supabase, fetchAll } from '../lib/supabase'
-import { restoreReworkSource } from '../lib/rework'
+import { restoreReworkSource, rewoundFlag, withRewoundNote } from '../lib/rework'
 import { loadProfiles, saveProfiles, fmtSize, convertWidth, type MachineProfile } from './MachineSettings'
 import ReworkJobList from './ReworkJobList'
 import { loadShortLayout, loadWasteLayout, type FieldConfig } from './LabelDesigner'
@@ -2031,10 +2031,36 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
   const [manualSrcText, setManualSrcText] = useState('')   // ที่มา (พิมพ์เอง)
   const [manualSrcKg, setManualSrcKg]     = useState('')   // หยิบมากี่โล
 
-  // ── ผลิตเป่าไม่มีกรอ ──
-  //   ฟีเจอร์ "ม้วนเป่ามาจากกรอ" (fromRework/is_rewound) ถูกถอดออกทั้งหมด
-  //   งานกรอทำ/โอนที่แผนกกรอ (section='rewind') โดยตรง คนละ Lot กันอยู่แล้ว
-  //   ม้วนเป่าจึงเขียน is_rewound=false, rework_source_*=null เสมอ
+  // ── ผลิตเป่า: ม้วนที่กรอเสร็จแล้ว เอามาชั่งที่ "เครื่องผลิตที่เดินอยู่" ──
+  //   ม้วนออกเลข/Lot ต่อเนื่องของเครื่องนี้ → ลูกค้าเห็นเป็นม้วนใหม่ (ไม่เห็น Lot กรอ)
+  //   ติ๊กอย่างเดียว ไม่ต้องระบุม้วนต้นทาง → เขียน is_rewound=true + หมายเหตุ "🔁 มาจากกรอ"
+  //   (ไม่แตะสถานะม้วนต้นทางในคิวกรอ เพราะไม่รู้ว่าเป็นม้วนไหน — ปิดที่แผนกกรอตามปกติ)
+  //
+  // ⚠ ติ๊ก "รายม้วน" — ปลดให้เองทุกครั้งที่บันทึกสำเร็จ ห้ามทำเป็นติ๊กค้าง
+  //   ธงนี้เป็น "บันทึกเพื่อทวนสอบ" ตามข้อกำหนดลูกค้า (ลูกค้าไม่รับม้วนจากกรอ · Lot ต้องตรงกับที่ผลิต)
+  //   ติ๊กเกินจึงเสียหายพอกับติ๊กขาด — ม้วนผลิตปกติจะกลายเป็นม้วนกรอในบันทึก
+  //   ข้อมูลจริง 155 ม้วน: ม้วนกรอมาเป็นช่วงสั้น ๆ เฉลี่ย 2.2 ม้วน (50 จาก 69 ช่วงคือ 2 ม้วนเป๊ะ)
+  //   แล้วแทรกสลับกับม้วนผลิตปกติใน Lot/เครื่องเดียวกัน (เช่น Lot 69BL04004708: #36,#37 → เว้น 46 ม้วน → #84,#85)
+  //   ถ้าติ๊กค้าง ม้วนที่เว้นตรงกลางจะถูกบันทึกผิดทั้งหมด
+  const isBlowProd = (profile.section ?? 'blow') === 'blow'
+  const [fromRework, setFromRework] = useState(false)   // ติ๊ก "ม้วนนี้มาจากกรอ"
+  const [rwSrcRolls, setRwSrcRolls] = useState<any[]>([])      // คิวม้วนที่ส่งไปกรอ (ของสินค้านี้ · ยังไม่ปิด)
+  const [rwSel, setRwSel]           = useState<any | null>(null) // ม้วนต้นทางที่เลือก (บังคับ)
+  const [rwSearch, setRwSearch]     = useState('')             // ค้นด้วย WO / Lot / เลขม้วน (ตามใบปะหน้าที่กรอถือมา)
+  // คิวม้วนต้นทาง = ม้วนเสียของสินค้านี้ที่ยังไม่ถูกปิด · ใหม่สุดขึ้นก่อน (ใบที่เพิ่งส่งไปกรอมักเป็นใบที่กรอกลับมา)
+  async function loadRwSrcRolls() {
+    const ic = (profile.itemCode ?? '').trim()
+    if (!ic) { setRwSrcRolls([]); return }
+    const { data } = await supabase.from('production_rolls')
+      .select('id, lot_no, roll_no, weight, work_order, sale_order, machine_no, remark, created_at, rework_status, product_name')
+      .eq('roll_type', 'bad').eq('item_code', ic)
+      .or('rework_status.is.null,rework_status.eq.reworking,rework_status.eq.pending')
+      .order('created_at', { ascending: false }).limit(300)
+    setRwSrcRolls(data ?? [])
+  }
+  useEffect(() => { if (fromRework && isBlowProd) loadRwSrcRolls() }, [fromRework, isBlowProd, profile.itemCode])  // eslint-disable-line react-hooks/exhaustive-deps
+  // เปลี่ยนเครื่อง/Lot/สินค้า → ปลดติ๊ก (กันค้างข้ามงาน)
+  useEffect(() => { setFromRework(false) }, [profile.machine_no, profile.lotNo, profile.itemCode])
 
   async function loadSrcRolls() {
     if (!isRework) return
@@ -2648,6 +2674,17 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
     }
   }
 
+  // เลขม้วนที่บันทึกว่า "มาจากกรอ" ใน Lot ที่กำลังชั่ง — ให้หน้างาน/QC ทวนสอบได้ทันทีโดยไม่ต้องเปิด Excel
+  // คิวม้วนต้นทางที่กรองด้วยช่องค้นหา — ใบปะหน้าที่กรอถือมาระบุ WO ไว้ จึงค้นด้วย WO เป็นหลัก
+  const rwSrcList = useMemo(() => {
+    const q = rwSearch.trim().toLowerCase()
+    if (!q) return rwSrcRolls
+    return rwSrcRolls.filter((s: any) => [s.work_order, s.sale_order, s.lot_no, String(s.roll_no), s.machine_no, s.remark]
+      .some(v => String(v ?? '').toLowerCase().includes(q)))
+  }, [rwSrcRolls, rwSearch])
+  const rewoundNos = useMemo(() => weighedRolls
+    .filter((r: any) => r?.is_rewound && r?.roll_type === 'good')
+    .map((r: any) => r.roll_no).sort((a: number, b: number) => a - b), [weighedRolls])
   const isScrap = weighType === 'scrap'
   const isGood  = weighType === 'good'
   const isBad   = weighType === 'bad'
@@ -2778,6 +2815,10 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       alert('ม้วนต้นทางนี้กรอครบแล้ว — เลือกม้วนอื่น หรือกด "🗑 เศษทั้งม้วน"'); return
     }
     if (isGood && isRework && !reworkCause.trim()) { alert('กรุณาระบุสาเหตุที่ม้วนนี้เสีย / มาจากอะไร'); return }
+    // ติ๊ก "มาจากกรอ" แล้วต้องระบุม้วนต้นทางเสมอ — ไม่งั้นปิดคิวกรอไม่ได้ + หักยอดผลิตไม่ได้
+    if (isGood && isBlowProd && !isRework && fromRework && !rwSel) {
+      alert('ติ๊ก "ม้วนนี้มาจากกรอ" แล้ว — กรุณาเลือกม้วนต้นทางจากรายการ (ค้นด้วย WO บนใบปะหน้าที่กรอส่งมา)'); return
+    }
     setSaving(true)
     try {
       const actualType = isScrap ? scrapSub : weighType
@@ -2828,6 +2869,9 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         : isGood ? Math.max(rollNo,    guardRollNo + 1) : 0)
       // หมายเหตุม้วนกรอ: หยิบม้วนต้นทางมากี่โล ชั่งได้กี่โล เศษกี่โล
       const useSrc = (isRework && isGood && selSrc) ? selSrc : null
+      // ผลิตเป่า: ติ๊ก "ม้วนนี้มาจากกรอ" — ธงติดม้วน (แดชบอร์ดกรอเห็นเป็นผลงานกรอ · แดชบอร์ดรวมไม่นับซ้ำ)
+      const rwUseSrc = (!isRework && isGood && isBlowProd && fromRework && rwSel) ? rwSel : null
+      const rwIsRewound = !!rwUseSrc
       const useManual = (isRework && isGood && manualMode && manualSrcText.trim())
         ? { text: manualSrcText.trim(), kg: parseFloat(manualSrcKg) || 0 } : null
       // กรอต่อ: ม้วนต้นทางที่ 2 (รวม 2 ม้วน → ออก 1 ม้วน)
@@ -2850,7 +2894,10 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
       const reworkRemark = (isRework && isGood)
         ? [reworkNote, reworkCause.trim() ? `เหตุผล: ${reworkCause.trim()}` : ''].filter(Boolean).join(' · ')
         : reworkNote
-      const rollRemark = isBad ? badReason : isScrap ? scrapReason : (reworkRemark || null)
+      const rollRemark = isBad ? badReason : isScrap ? scrapReason
+        : (rwUseSrc
+            ? `🔁 มาจากกรอ Lot ${rwUseSrc.lot_no} #${rwUseSrc.roll_no} · หยิบมา ${fmt(rwUseSrc.weight ?? 0, dec)} · ชั่งได้ ${fmt(saveWeight, dec)} Kg`
+            : (reworkRemark || null))
       // อ้างอิง WO/SO: ม้วนในระบบ → ตามต้นทาง · ม้วนนอกระบบ → ออกเป็น Lot/ออเดอร์ที่กำลังชั่ง
       const useWo = useSrc ? (useSrc.work_order ?? profile.woNo ?? '') : (profile.woNo ?? '')
       const useSo = useSrc ? (useSrc.sale_order ?? profile.soNo ?? '') : (profile.soNo ?? '')
@@ -2899,11 +2946,11 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         lot_no:       effLot,
         sale_order:   useSo,
         work_order:   useWo,
-        rework_source_roll_id: useSrc ? useSrc.id : null,
-        rework_source_lot:     useSrc ? useSrc.lot_no : (useManual ? useManual.text : null),
-        rework_source_weight:  (useSrc || useManual) ? srcKg : null,
+        rework_source_roll_id: useSrc ? useSrc.id     : (rwUseSrc ? rwUseSrc.id     : null),
+        rework_source_lot:     useSrc ? useSrc.lot_no : (rwUseSrc ? rwUseSrc.lot_no : (useManual ? useManual.text : null)),
+        rework_source_weight:  (useSrc || useManual) ? srcKg : (rwUseSrc ? (rwUseSrc.weight ?? null) : null),
         rework_batch:          isRework ? reworkRound : null,
-        is_rewound:            false,   // แผนกเป่าไม่มีกรอ · งานกรออยู่ที่ section='rewind'
+        is_rewound:            rwIsRewound,   // ติ๊ก "มาจากกรอ" ที่หน้าชั่งเป่า (ม้วนกรอของแผนกกรอใช้ section='rewind')
         item_code:    profile.itemCode    ?? '',
         product_code: profile.productCode ?? '',
         mat_code:     profile.matCode     ?? '',
@@ -2989,6 +3036,17 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         setSelSrc(null)
         setSrcRolls(prev => prev.filter(x => x.id !== useSrc.id))
       }
+      // ผลิตเป่า (มาจากกรอ): ปิดม้วนต้นทาง → หายจากคิวกรอ · แดชบอร์ดกรอสมดุล · ยอดผลิตหักถูก
+      //   ⚠ เฉพาะตอนเซฟสำเร็จ (online) — ออฟไลน์ม้วนใหม่ยังไม่ลง DB จึงยังไม่ปิดต้นทาง
+      if (rwUseSrc && inserted) {
+        const sc = Math.max(0, (rwUseSrc.weight ?? 0) - saveWeight)
+        await supabase.from('production_rolls').update({
+          rework_status: 'reworked',
+          rework_remark: `กรอเสร็จ (ชั่งที่เครื่องผลิต ${profile.machine_no}) · หยิบมา ${fmt(rwUseSrc.weight ?? 0, dec)} · ชั่งได้ ${fmt(saveWeight, dec)} · เศษ ${fmt(sc, dec)} Kg → ออกม้วน Lot ${effLot} #${useRollNo}`,
+        }).eq('id', rwUseSrc.id)
+        setRwSel(null)
+        setRwSrcRolls(prev => prev.filter(x => x.id !== rwUseSrc.id))
+      }
       // ปิดงาน + เด้งออกอัตโนมัติ — ทำทุกครั้งที่ชั่งม้วนกรอสำเร็จ (แม้ไม่ได้ติ๊กม้วนต้นทาง)
       //   เงื่อนไข: งานนี้ไม่มีม้วนต้นทางที่ยัง "reworking" เหลือ → ถือว่าจบ
       if (isRework && isGood && inserted && reworkJobId) {
@@ -3044,7 +3102,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
         net_weight:   parseFloat(saveWeight.toFixed(dec)),
         remark:       rollRemark,
         inspector:    inspector || null,
-        is_rewound:   false,
+        is_rewound:   rwIsRewound,
         weighed_at:   payload.created_at,
       }
       let logOk = false
@@ -3455,7 +3513,71 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
               accent="red" placeholder="เลือกเหตุผลเศษเสีย (จำเป็น)..." />
           )}
 
-          {/* ผลิตเป่า "มาจากกรอ" ถูกถอดออกทั้งหมด — งานกรอทำ/โอนที่แผนกกรอ (section='rewind') คนละ Lot กันอยู่แล้ว */}
+          {/* ผลิตเป่า: ม้วนนี้มาจากกรอ — เอามาชั่งต่อเลขผลิต (ลูกค้าเห็นเป็นม้วนใหม่) */}
+          {!isRework && isBlowProd && isGood && (
+            <div className={`space-y-1 rounded-xl p-2.5 border-2 transition-colors order-last ${
+              fromRework ? 'bg-emerald-500/15 border-emerald-400' : 'bg-slate-900 border-slate-800'}`}>
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" checked={fromRework}
+                  onChange={e => setFromRework(e.target.checked)}
+                  className="w-5 h-5 accent-emerald-500 shrink-0" />
+                <span className={`text-xs font-bold ${fromRework ? 'text-emerald-200' : 'text-emerald-300/70'}`}>
+                  🔁 ม้วนนี้มาจากกรอ (ชั่งต่อเลขผลิต — ลูกค้าเห็นเป็นม้วนใหม่)
+                </span>
+              </label>
+              {fromRework && (
+                <>
+                  <p className="text-[10px] text-emerald-300/90 leading-tight">
+                    ⚠ <b>ต้องเลือกม้วนต้นทาง</b> — ค้นด้วย WO บนใบปะหน้าที่กรอส่งมา · เลือกแล้วม้วนต้นทางจะถูกปิด
+                    (คิวกรอลดลง · ยอดผลิตหักถูก ไม่นับซ้ำ)
+                  </p>
+                  <input value={rwSearch} onChange={e => setRwSearch(e.target.value)}
+                    placeholder="🔍 ค้นด้วย WO / Lot / เลขม้วน — เช่น 69/08/037"
+                    className="w-full bg-slate-800 border border-emerald-500/40 rounded-lg px-2 py-1.5 text-xs text-white placeholder:text-slate-500" />
+                  <div className="space-y-1 max-h-[38vh] overflow-y-auto">
+                    {rwSrcList.length === 0 && (
+                      <p className="text-[10px] text-amber-300/90 py-1.5">
+                        {rwSrcRolls.length === 0
+                          ? '— ไม่มีม้วนที่ส่งไปกรอค้างอยู่สำหรับสินค้านี้ —'
+                          : `— ไม่พบม้วนที่ตรงกับ "${rwSearch}" (มีในคิว ${rwSrcRolls.length} ใบ) —`}
+                      </p>
+                    )}
+                    {rwSrcList.map(s => {
+                      const sel = rwSel?.id === s.id
+                      return (
+                        <button key={s.id} type="button" onClick={() => setRwSel(sel ? null : s)}
+                          className={`w-full text-left rounded-lg px-2 py-1.5 border transition-colors ${
+                            sel ? 'bg-emerald-600/30 border-emerald-400' : 'bg-slate-800/60 border-slate-700 hover:border-emerald-500/50'}`}>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm ${sel ? 'text-emerald-300' : 'text-slate-600'}`}>{sel ? '☑' : '☐'}</span>
+                            <span className="text-[11px] font-bold text-white">Lot {s.lot_no} #{s.roll_no}</span>
+                            <span className="text-[11px] text-emerald-300 font-bold">{fmt(s.weight ?? 0, dec)} kg</span>
+                            <span className="text-[10px] text-amber-300 ml-auto">WO {s.work_order || '—'}</span>
+                          </div>
+                          <div className="text-[9px] text-slate-500 truncate pl-6">
+                            {s.machine_no} · {s.created_at ? new Date(s.created_at).toLocaleDateString('th-TH', { timeZone:'Asia/Bangkok' }) : ''}
+                            {s.remark ? ' · ' + s.remark : ''}
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {rwSel && (
+                    <p className="text-[10px] text-emerald-200 bg-emerald-600/20 rounded px-2 py-1">
+                      ✓ ต้นทาง: Lot {rwSel.lot_no} #{rwSel.roll_no} · หยิบมา {fmt(rwSel.weight ?? 0, dec)} kg
+                      → ชั่งได้ {fmt(saveWeight, dec)} kg · เศษ {fmt(Math.max(0, (rwSel.weight ?? 0) - saveWeight), dec)} kg
+                    </p>
+                  )}
+                </>
+              )}
+              {rewoundNos.length > 0 && (
+                <p className="text-[10px] text-slate-400 leading-tight border-t border-slate-700/60 pt-1">
+                  📋 Lot นี้บันทึกม้วนจากกรอไว้ <b className="text-emerald-300">{rewoundNos.length}</b> ม้วน —
+                  <span className="text-emerald-300/80"> #{rewoundNos.join(', #')}</span>
+                </p>
+              )}
+            </div>
+          )}
 
           {/* แผนกกรอ: เลือกม้วนต้นทางที่กำลังกรอ (ติ๊กก่อนชั่ง) */}
           {isRework && isGood && (
@@ -3750,7 +3872,7 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
               {saving ? 'บันทึก...' : awaitingClear ? '⬆ ยกม้วนออกก่อน' : !stable ? 'รอค่านิ่ง...' :
                 isScrap ? `บันทึกเศษ ${fmt(gross,dec)} Kgs.` :
                 isBad   ? `กรอ ${badRollNo} · ${fmt(saveWeight,dec)} Kgs.` :
-                          `Roll ${reworkDispNo}${reworkRound>1?` (รอบ ${reworkRound})`:''} · ${fmt(saveWeight,dec)} Kgs.`}
+                          `${!isRework && fromRework ? '🔁 ' : ''}Roll ${reworkDispNo}${reworkRound>1?` (รอบ ${reworkRound})`:''} · ${fmt(saveWeight,dec)} Kgs.`}
             </button>
           </div>
 
@@ -3886,7 +4008,8 @@ body{font-family:'Sarabun','Tahoma',sans-serif;font-size:11pt;color:#000;padding
                     { header:'ประเภท', value:(r:any)=> r.roll_type==='good'?'ม้วนดี':r.roll_type==='bad'?'ม้วนกรอ':String(r.roll_type).startsWith('scrap')?'เศษ':r.roll_type },
                     { header:'นน.เต็ม (kg)', value:(r:any)=> (r.weight??0)+(r.core_weight??0) },
                     { header:'นน.สุทธิ (kg)', value:(r:any)=> r.weight??0 },
-                    { header:'เหตุผล', value:(r:any)=> r.remark ?? '', width:24 },
+                    { header:'เหตุผล', value:(r:any)=> withRewoundNote(r.remark, r.is_rewound), width:24 },
+                    { header:'มาจากกรอ', value:(r:any)=> rewoundFlag(r.is_rewound), width:12 },
                   ]}
                   fileName={`ม้วน_${profile.lotNo || 'งานนี้'}`} sheetName="ม้วนในงานนี้"
                   label="📥 Excel"

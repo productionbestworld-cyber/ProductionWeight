@@ -93,3 +93,25 @@ export async function resolveJobSources(
   }
   return { reworked: toReworked.length, queued: toQueue.length }
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// ธง "ม้วนนี้มาจากกรอ" (production_rolls.is_rewound / weigh_logs.is_rewound)
+// ────────────────────────────────────────────────────────────────────────────
+// ม้วนที่กรอเสร็จแล้วเอามาชั่งต่อเลข/Lot ของเครื่องผลิต — ลูกค้าเห็นเป็นม้วนใหม่
+// แต่ภายในต้องรู้ว่ามาจากกรอ ทั้งบนหน้าจอและ "ตอน export ออกเป็นไฟล์"
+// ใช้ 2 ตัวนี้ทุกจุดที่ทำคอลัมน์ Excel/CSV เพื่อให้ข้อความตรงกันหมดทั้งระบบ
+export const REWOUND_TAG = '🔁 มาจากกรอ'
+
+/** คอลัมน์ธงแยกท้ายตาราง — ม้วนปกติเว้นว่าง (กรอง/นับใน Excel ง่ายกว่าใส่ FALSE) */
+export const rewoundFlag = (isRewound?: boolean | null): string =>
+  isRewound ? REWOUND_TAG : ''
+
+/** ต่อท้ายคอลัมน์หมายเหตุ/เหตุผลเดิม — ถ้าหมายเหตุมีธง 🔁 อยู่แล้วไม่ต่อซ้ำ */
+export const withRewoundNote = (
+  remark: string | null | undefined,
+  isRewound?: boolean | null,
+): string => {
+  const t = (remark ?? '').trim()
+  if (!isRewound || t.includes('🔁')) return t
+  return t ? `${t} · ${REWOUND_TAG}` : REWOUND_TAG
+}

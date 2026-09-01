@@ -6,6 +6,7 @@
 // ════════════════════════════════════════════════════════════════════════
 import { useEffect, useMemo, useState } from 'react'
 import { supabase, fetchAll } from '../lib/supabase'
+import { rewoundFlag } from '../lib/rework'
 import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -93,7 +94,7 @@ export default function OwnerDashboard() {
   async function load() {
     setLoading(true)
     const since = rangeStartISO(range)
-    const cols = 'id,roll_no,roll_type,weight,gross_weight,core_weight,section,machine_no,customer,cust_code,product_name,item_code,work_order,sale_order,lot_no,created_at,inspector,new_system,transferred,length,pcs'
+    const cols = 'id,roll_no,roll_type,weight,gross_weight,core_weight,section,is_rewound,machine_no,customer,cust_code,product_name,item_code,work_order,sale_order,lot_no,created_at,inspector,new_system,transferred,length,pcs'
     const rs = await fetchAll<Roll>(() => {
       let q = supabase.from('production_rolls').select(cols).order('created_at', { ascending: false })
       if (since) q = q.gte('created_at', since)
@@ -489,9 +490,10 @@ function DrillModal({ title, rolls, onClose, onSub }:
   const byCust = useMemo(() => groupBy(r => r.customer), [rolls])
 
   const exportCsv = () => {
-    const head = ['วันที่', 'แผนก', 'เครื่อง', 'Lot', 'WO', 'SO', 'ลูกค้า', 'สินค้า', 'item', 'ม้วน', 'ชนิด', 'นน.สุทธิ', 'นน.เต็ม', 'ผู้ชั่ง']
+    const head = ['วันที่', 'แผนก', 'เครื่อง', 'Lot', 'WO', 'SO', 'ลูกค้า', 'สินค้า', 'item', 'ม้วน', 'ชนิด', 'นน.สุทธิ', 'นน.เต็ม', 'ผู้ชั่ง', 'มาจากกรอ']
     const lines = rolls.map(r => [fmtDay(r.created_at), secLabel(secOf(r)), r.machine_no, r.lot_no, r.work_order, r.sale_order,
-      r.customer, r.product_name, r.item_code, r.roll_no, r.roll_type, r.weight, r.gross_weight, r.inspector]
+      r.customer, r.product_name, r.item_code, r.roll_no, r.roll_type, r.weight, r.gross_weight, r.inspector,
+      rewoundFlag((r as any).is_rewound)]
       .map(x => `"${(x ?? '').toString().replace(/"/g, '""')}"`).join(','))
     const blob = new Blob(['﻿' + [head.join(','), ...lines].join('\n')], { type: 'text/csv;charset=utf-8' })
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob)

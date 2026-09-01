@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { RefreshCw, Search } from 'lucide-react'
 import { supabase, fetchAll } from '../lib/supabase'
+import { rewoundFlag, withRewoundNote } from '../lib/rework'
 import ExportButton from '../components/ExportButton'
 
 function fmt(n: number | null | undefined, d = 1) {
@@ -37,7 +38,7 @@ type Job = {
 //   ป็อปอัพรายละเอียด) → payload เล็กลงมาก (19MB → 13MB บนข้อมูลทั้งหมด)
 const LIST_COLS = 'machine_no, lot_no, work_order, sale_order, product_name, customer, width_cm, width_unit, thick_mc, roll_type, weight, created_at, section'
 // ── คอลัมน์เต็มสำหรับป็อปอัพรายละเอียดม้วน (ดึงเฉพาะงานที่กดเปิด) ──────────────
-const DETAIL_COLS = 'id, created_at, roll_type, roll_no, gross_weight, core_weight, weight, remark, inspector'
+const DETAIL_COLS = 'id, created_at, roll_type, roll_no, gross_weight, core_weight, weight, remark, is_rewound, inspector'
 
 // ── สร้างรายการงาน (key = machine|WO) จากม้วน + โปรไฟล์เครื่อง + สรุปงาน ──────────
 //   ยึด WO เป็นหลัก · 1 WO = 1 งาน · WO ที่ใช้หลาย lot รวมเป็นแถวเดียว
@@ -381,8 +382,9 @@ export default function Planning({ dept }: { dept?: string }) {
                       { header:'นน.เต็ม', value:(r:any)=>+((r.gross_weight??0)).toFixed(2) },
                       { header:'นน.แกน', value:(r:any)=>+((r.core_weight??0)).toFixed(2) },
                       { header:'นน.สุทธิ', value:(r:any)=>+((r.weight??0)).toFixed(2) },
-                      { header:'หมายเหตุ', value:(r:any)=>r.remark??'', width:30 },
+                      { header:'หมายเหตุ', value:(r:any)=>withRewoundNote(r.remark, r.is_rewound), width:30 },
                       { header:'ผู้ตรวจ', value:(r:any)=>r.inspector??'' },
+                      { header:'มาจากกรอ', value:(r:any)=>rewoundFlag(r.is_rewound) },
                     ]}
                     fileName={`ม้วน_${detail.machine_no}_${detail.lot_no}`} sheetName="ม้วน" label="📥 Excel" />
                   <button onClick={() => setDetail(null)} className="text-slate-400 hover:text-white text-xl leading-none">×</button>

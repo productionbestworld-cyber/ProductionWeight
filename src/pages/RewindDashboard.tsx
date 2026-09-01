@@ -4,6 +4,7 @@ import {
   Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 import { supabase, fetchAll } from '../lib/supabase'
+import { rewoundFlag } from '../lib/rework'
 import ExportButton from '../components/ExportButton'
 import { RotateCcw } from 'lucide-react'
 
@@ -262,6 +263,7 @@ function OutTable({ rows, fileName }: { rows: OutRoll[]; fileName: string }) {
   const cols = [
     { header: 'วันที่/เวลา', value: (r: OutRoll) => thaiTime(r.created_at) },
     { header: 'สถานี', value: (r: OutRoll) => r.machine_no ?? '' },
+    { header: 'ชั่งที่', value: (r: OutRoll) => r.is_rewound ? 'เครื่องผลิต (ติ๊กมาจากกรอ)' : 'สถานีกรอ' },
     { header: 'คนกรอ', value: (r: OutRoll) => r.inspector ?? '' },
     { header: 'Lot', value: (r: OutRoll) => r.lot_no ?? '' },
     { header: 'ม้วนที่', value: (r: OutRoll) => r.roll_no ?? '' },
@@ -276,6 +278,7 @@ function OutTable({ rows, fileName }: { rows: OutRoll[]; fileName: string }) {
     { header: 'ลูกค้า', value: (r: OutRoll) => r.customer ?? '' },
     { header: 'WO', value: (r: OutRoll) => r.work_order ?? '' },
     { header: 'โอนคลัง', value: (r: OutRoll) => r.transferred ? 'โอนแล้ว' : 'รอโอน' },
+    { header: 'มาจากกรอ', value: (r: OutRoll) => rewoundFlag(r.is_rewound) },
   ]
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">

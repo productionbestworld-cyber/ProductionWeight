@@ -7,6 +7,7 @@
 // ════════════════════════════════════════════════════════════════════════
 import { useEffect, useMemo, useState } from 'react'
 import { supabase, fetchAll } from '../lib/supabase'
+import { rewoundFlag, withRewoundNote } from '../lib/rework'
 
 type Log = {
   id: string; machine_no: string | null; lot_no: string | null
@@ -102,9 +103,10 @@ export default function WeighLog({ dept }: { dept?: 'blow' | 'rewind' } = {}) {
   const totNet = filtered.reduce((s, l) => s + (l.net_weight ?? 0), 0)
 
   const exportCsv = () => {
-    const head = ['เวลาชั่ง', 'เครื่อง', 'Lot', 'WO', 'SO', 'สินค้า', 'ลูกค้า', 'ม้วนที่', 'ชนิด', 'นน.เต็ม', 'แกน', 'นน.สุทธิ', 'ผู้ชั่ง', 'หมายเหตุ']
+    const head = ['เวลาชั่ง', 'เครื่อง', 'Lot', 'WO', 'SO', 'สินค้า', 'ลูกค้า', 'ม้วนที่', 'ชนิด', 'นน.เต็ม', 'แกน', 'นน.สุทธิ', 'ผู้ชั่ง', 'หมายเหตุ', 'มาจากกรอ']
     const lines = filtered.map(l => [fmtTime(l.weighed_at), l.machine_no, l.lot_no, l.work_order, l.sale_order, l.product_name, l.customer,
-      l.roll_no, typeOf(l.roll_type).label, l.gross_weight, l.core_weight, l.net_weight, l.inspector, l.remark]
+      l.roll_no, typeOf(l.roll_type).label, l.gross_weight, l.core_weight, l.net_weight, l.inspector,
+      withRewoundNote(l.remark, l.is_rewound), rewoundFlag(l.is_rewound)]
       .map(x => `"${(x ?? '').toString().replace(/"/g, '""')}"`).join(','))
     const blob = new Blob(['﻿' + [head.join(','), ...lines].join('\n')], { type: 'text/csv;charset=utf-8' })
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob)

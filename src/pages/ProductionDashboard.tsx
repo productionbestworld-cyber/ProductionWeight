@@ -38,13 +38,14 @@ type Roll = {
   roll_no: number
   section?: string | null
   remark?: string | null
+  is_rewound?: boolean | null     // true = ม้วนกรอที่เอามาชั่งที่เครื่องผลิต (ติ๊กที่หน้าชั่ง)
   rework_status?: string | null   // null=ยังไม่ส่งกรอ · 'reworking'=กำลังกรอ · 'reworked'=กรอเสร็จ
 }
 
 // ดึงเฉพาะคอลัมน์ที่หน้านี้ใช้จริง — ตัด gross_weight/core_weight/pcs ที่ไม่ได้ใช้ออก ลด egress
 const SELECT_COLS =
   'id,roll_type,weight,length,machine_no,lot_no,product_name,customer,' +
-  'width_cm,width_unit,thick_mc,inspector,work_order,sale_order,created_at,roll_no,section,remark,rework_status'
+  'width_cm,width_unit,thick_mc,inspector,work_order,sale_order,created_at,roll_no,section,remark,is_rewound,rework_status'
 
 const NO_WO = '(ไม่ระบุ WO)'
 
@@ -309,6 +310,8 @@ export default function ProductionDashboard() {
 
   const [rolls, setRolls]   = useState<Roll[]>([])
   const [loading, setLoading] = useState(true)
+  // ม้วนจากกรอที่ถูกตัดออกจากยอดผลิต (โชว์ให้รู้ว่าไม่ใช่ข้อมูลหาย)
+  const [rewoundOut, setRewoundOut] = useState<{ rolls: number; kg: number }>({ rolls: 0, kg: 0 })
   const [tab, setTab] = useState<Tab>('summary')
   // แถวที่กางดูรายละเอียดลึก — เก็บเป็น `${kind}::${key}` เพื่อให้มีที่เดียวทั่วทุกแท็บ
   const [openGroup, setOpenGroup] = useState<string | null>(null)
@@ -354,6 +357,7 @@ export default function ProductionDashboard() {
         reason:  reason.sort((a, b) => b.total - a.total),
       })
       setRolls([])
+      setRewoundOut({ rolls: 0, kg: 0 })   // โหมดเซิร์ฟเวอร์ไม่ได้ดึงรายม้วน → ไม่มีตัวเลขนี้
       setLoading(false)
       return
     }
@@ -366,7 +370,14 @@ export default function ProductionDashboard() {
       .order('created_at', { ascending: false }))
     // เฉพาะงานผลิต(เป่า) เท่านั้น — ไม่เอางานกรอ (section=rewind) และแผนกอื่น
     // ม้วนที่ไม่ระบุ section ถือเป็นผลิต(เป่า) ตามระบบเดิม
-    setRolls(data.filter(r => (r.section ?? 'blow') === 'blow'))
+    //
+    // ⚠ ตัดม้วนที่ติ๊ก "มาจากกรอ" (is_rewound) ออกด้วย — กันนับซ้ำ
+    //   เนื้อวัสดุถูกนับไปแล้วตอนชั่งเป็นม้วนเสีย ถ้านับตอนกรอกลับมาอีก ยอดผลิต/Yield จะเกินจริง
+    //   ม้วนพวกนี้เป็นผลงานของแผนกกรอ → ดูได้ที่ "แดชบอร์ดกรอ" (นับให้ครบอยู่แล้ว)
+    const blowAll = data.filter(r => (r.section ?? 'blow') === 'blow')
+    const rewound = blowAll.filter(r => r.is_rewound)
+    setRewoundOut({ rolls: rewound.length, kg: rewound.reduce((s, r) => s + (r.weight ?? 0), 0) })
+    setRolls(blowAll.filter(r => !r.is_rewound))
     setSrv(null)
     setLoading(false)
   }
@@ -788,6 +799,14 @@ export default function ProductionDashboard() {
           พบ <b className="text-gray-700">{stat.rolls.toLocaleString('th-TH')}</b> ม้วน ·
           {' '}{stat.wos} WO · {stat.machines} เครื่อง · {stat.days} วัน · ช่วงที่เลือก {rangeDays} วัน
         </p>
+        {rewoundOut.rolls > 0 && (
+          <p className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+            🔁 ช่วงนี้มีม้วนที่ติ๊กว่า <b>"มาจากกรอ"</b> {rewoundOut.rolls.toLocaleString('th-TH')} ม้วน ·
+            {' '}{rewoundOut.kg.toLocaleString('th-TH', { maximumFractionDigits: 1 })} kg —
+            <b> ไม่ถูกนับในยอดผลิต/Yield ของหน้านี้</b> เพราะเนื้อวัสดุถูกนับไปแล้วตอนชั่งเป็นม้วนเสีย (กันนับซ้ำ) ·
+            ดูรายละเอียดม้วนพวกนี้ได้ที่ <b>แดชบอร์ดกรอ</b>
+          </p>
+        )}
         {detailNarrowed && !serverMode && (
           <p className="text-[11px] text-gray-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
             ℹ️ ตัวกรอง <b>ประเภทม้วน</b>/<b>ค้นหา</b> มีผลเฉพาะแท็บ <b>"รายละเอียดงาน"</b> เท่านั้น —

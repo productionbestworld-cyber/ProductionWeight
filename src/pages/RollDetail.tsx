@@ -80,7 +80,8 @@ export default function RollDetail() {
   const typeLabel  = roll.roll_type === 'good' ? 'FG ✓' : roll.roll_type === 'scrap' ? 'ของเสีย' : 'กรอ/ซ่อม'
   const typeBg     = roll.roll_type === 'good' ? 'bg-brand-700' : roll.roll_type === 'scrap' ? 'bg-red-800' : 'bg-amber-700'
   // ม้วนกรอ (ผลผลิตจากแผนกกรอ) — ลูกค้าสแกนต้องเห็นเป็นม้วนดีปกติ: ซ่อนหมายเหตุ/ที่มาที่บอกว่าเคยเสีย
-  const isRework   = !!(roll.rework_source_lot || roll.rework_source_roll_id)
+  //   is_rewound = ม้วนที่ติ๊ก 'มาจากกรอ' ที่หน้าชั่งเป่า (ไม่มี rework_source_* ให้จับ)
+  const isRework   = !!(roll.rework_source_lot || roll.rework_source_roll_id || (roll as any).is_rewound)
   const showRemark = !isRework && roll.remark && !/🔁|กรอจาก|เหตุผล/.test(String(roll.remark))
 
   return (

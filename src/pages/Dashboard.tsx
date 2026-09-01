@@ -5,6 +5,7 @@ import {
 } from 'recharts'
 import * as XLSX from 'xlsx'
 import { supabase, fetchAll } from '../lib/supabase'
+import { rewoundFlag, withRewoundNote } from '../lib/rework'
 import { RotateCcw, Upload, X, Download, FileSpreadsheet } from 'lucide-react'
 import ExportButton from '../components/ExportButton'
 
@@ -2936,7 +2937,8 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                     { header:'ขนาด', value: r => r.width_cm && r.thick_mc ? `${r.width_cm}${(r as any).width_unit ?? 'cm'}x${r.thick_mc}mc` : '' },
                     { header:'นน.สุทธิ (kg)', value: r => r.weight ?? 0 },
                     { header:'ผู้ตรวจ', value: r => (r as any).inspector ?? '' },
-                    { header:'เหตุผล', value: r => (r as any).remark ?? '', width:24 },
+                    { header:'เหตุผล', value: r => withRewoundNote((r as any).remark, (r as any).is_rewound), width:24 },
+                    { header:'มาจากกรอ', value: r => rewoundFlag((r as any).is_rewound), width:12 },
                   ]}
                   fileName="ข้อมูลรายม้วน" sheetName="รายม้วน"
                   className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap" />

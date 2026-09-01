@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Settings, X, Trash2 } from 'lucide-react'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import { Settings, X, Trash2, Search, ChevronDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 type ReasonOption = { id: string; category: string; label: string; sort_order: number }
@@ -42,6 +42,12 @@ export default function ReasonSelect({
   const [managing, setManaging] = useState(false)
   const [newLabel, setNewLabel] = useState('')
   const [busy, setBusy]       = useState(false)
+  // ค้นหาในดรอปดาว — พิมพ์ "หล" ก็เจอ "หลุดมีด" (รายการยาว เลื่อนหาลำบากบนแท็บเล็ต)
+  const [open, setOpen]   = useState(false)
+  const [query, setQuery] = useState('')
+  const [hi, setHi]       = useState(0)
+  const boxRef  = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const fn = (o: ReasonOption[]) => setOptions([...o])
@@ -50,6 +56,41 @@ export default function ReasonSelect({
     else loadOptions(category)
     return () => { listeners[category]?.delete(fn) }
   }, [category])
+
+  // ปิดดรอปดาวเมื่อคลิกนอกกล่อง
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent | TouchEvent) => {
+      if (!boxRef.current?.contains(e.target as Node)) { setOpen(false); setQuery('') }
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('touchstart', onDown)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('touchstart', onDown)
+    }
+  }, [open])
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return options
+    return options.filter(o => o.label.toLowerCase().includes(q))
+  }, [options, query])
+
+  useEffect(() => { setHi(0) }, [query, open])
+
+  // เลื่อนรายการที่ไฮไลต์ให้อยู่ในจอ (ใช้ลูกศรขึ้น/ลง)
+  useEffect(() => {
+    if (!open) return
+    listRef.current?.querySelector<HTMLElement>('[data-hi="1"]')
+      ?.scrollIntoView({ block: 'nearest' })
+  }, [hi, open])
+
+  function pick(label: string) {
+    onChange(label)
+    setOpen(false)
+    setQuery('')
+  }
 
   const ring =
     accent === 'red'   ? 'border-red-500/40 focus:border-red-500'
@@ -90,16 +131,47 @@ export default function ReasonSelect({
   return (
     <div className="space-y-1.5">
       <div className="flex gap-1.5">
-        <select
-          value={options.some(o => o.label === value) ? value : (value ? '__custom__' : '')}
-          onChange={e => { if (e.target.value !== '__custom__') onChange(e.target.value) }}
-          className={`flex-1 min-w-0 bg-slate-800 border rounded-xl px-3 py-2 text-sm text-white outline-none ${ring}`}>
-          <option value="" disabled>{placeholder ?? 'เลือกเหตุผล...'}</option>
-          {options.map(o => <option key={o.id} value={o.label}>{o.label}</option>)}
-          {value && !options.some(o => o.label === value) && (
-            <option value="__custom__">{value} (เดิม)</option>
+        <div ref={boxRef} className="relative flex-1 min-w-0">
+          <div className={`flex items-center gap-2 bg-slate-800 border rounded-xl px-3 py-2 ${ring}`}>
+            <Search size={15} className="shrink-0 text-slate-500"/>
+            <input
+              value={open ? query : value}
+              onChange={e => { setQuery(e.target.value); setOpen(true) }}
+              onFocus={() => { setOpen(true); setQuery('') }}
+              onKeyDown={e => {
+                if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setHi(h => Math.min(h + 1, filtered.length - 1)) }
+                else if (e.key === 'ArrowUp') { e.preventDefault(); setHi(h => Math.max(h - 1, 0)) }
+                else if (e.key === 'Enter') { e.preventDefault(); if (open && filtered[hi]) pick(filtered[hi].label) }
+                else if (e.key === 'Escape') { setOpen(false); setQuery('') }
+              }}
+              placeholder={value ? undefined : (placeholder ?? 'เลือกเหตุผล...')}
+              className="flex-1 min-w-0 bg-transparent text-sm text-white outline-none placeholder-slate-500" />
+            {value && !open && (
+              <button type="button" onClick={() => onChange('')} title="ล้างเหตุผล"
+                className="shrink-0 text-slate-500 hover:text-slate-300"><X size={14}/></button>
+            )}
+            <ChevronDown size={15} className="shrink-0 text-slate-500"/>
+          </div>
+          {open && (
+            <div ref={listRef}
+              className="absolute z-30 left-0 right-0 mt-1 max-h-64 overflow-y-auto bg-slate-900 border border-slate-700 rounded-xl shadow-xl">
+              {filtered.length === 0 ? (
+                <div className="px-3 py-3 text-sm text-slate-400">
+                  ไม่พบหัวข้อที่ตรงกับ “{query.trim()}”
+                </div>
+              ) : filtered.map((o, i) => (
+                <button key={o.id} type="button" data-hi={i === hi ? '1' : undefined}
+                  onMouseEnter={() => setHi(i)}
+                  onClick={() => pick(o.label)}
+                  className={`block w-full text-left px-3 py-2 text-sm ${
+                    o.label === value ? 'text-orange-300 font-bold' : 'text-slate-200'
+                  } ${i === hi ? 'bg-slate-800' : ''}`}>
+                  {o.label}
+                </button>
+              ))}
+            </div>
           )}
-        </select>
+        </div>
         <button type="button" onClick={() => setManaging(v => !v)} title="จัดการหัวข้อ (เพิ่ม/ลบ)"
           className={`shrink-0 px-3 rounded-xl border-2 text-sm font-bold ${
             managing ? 'bg-slate-700 border-slate-600 text-slate-300'

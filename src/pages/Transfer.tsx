@@ -1047,13 +1047,51 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
     XLSX.writeFile(wb, `${doc.doc_no}_${dateStr}.xlsx`)
   }
 
+  // ⚠ ปลดม้วนออกจากใบแล้ว "ต้องแก้ยอดบนหัวใบด้วย"
+  //   เดิมแก้แต่ฝั่งม้วน หัวใบยังอ้างยอดเดิม → ใบไม่ตรงของถาวร
+  //   (เคสจริง 7 ใบในฐาน เช่น TR-52271759 หัวใบ 472 แต่ผูกจริง 447)
+  //   และม้วนที่ปลดแล้วโอนเข้าใบใหม่ได้ทันที = ม้วนเดียวถูกนับสองใบ
   async function undoTransfer(id: string) {
     if (!confirm('ยกเลิกการโอนรายการนี้?')) return
-    // เคลียร์ transfer_doc_id ด้วย — ป้องกัน reprint ใบเก่าแสดงม้วนที่ถูกยกเลิกแล้ว
-    await supabase.from('production_rolls')
-      .update({ transferred: false, transferred_at: null, transferred_by: null, transfer_doc_id: null })
-      .eq('id', id)
-    await loadRolls()
+    try {
+      // 1) จำใบเดิมไว้ก่อน — พอล้าง transfer_doc_id แล้วจะตามหาใบไม่เจอ
+      const { data: before, error: beforeErr } = await supabase.from('production_rolls')
+        .select('transfer_doc_id').eq('id', id).maybeSingle()
+      if (beforeErr) throw beforeErr
+      const docId = before?.transfer_doc_id ?? null
+
+      // 2) ปลดม้วน — เคลียร์ transfer_doc_id ด้วย ป้องกัน reprint ใบเก่าแสดงม้วนที่ถูกยกเลิกแล้ว
+      const { data: undone, error: undoErr } = await supabase.from('production_rolls')
+        .update({ transferred: false, transferred_at: null, transferred_by: null, transfer_doc_id: null })
+        .eq('id', id).select('id')
+      if (undoErr) throw undoErr
+      if (!undone?.length) { alert('ยกเลิกไม่สำเร็จ — ม้วนนี้ถูกแก้ไปแล้วจากอีกจอ'); await loadRolls(); return }
+
+      // 3) แก้ยอดหัวใบให้ตรงของที่เหลืออยู่จริง
+      if (docId) {
+        const left = await fetchAll<any>(() => supabase.from('production_rolls')
+          .select('weight').eq('transfer_doc_id', docId))
+        const kg = left.reduce((s, r) => s + (r.weight ?? 0), 0)
+        if (left.length === 0) {
+          // ม้วนสุดท้ายของใบถูกปลด → ใบเปล่า ลบทิ้ง ไม่ปล่อยเป็นใบผี
+          const { error: delErr } = await supabase.from('transfer_documents').delete().eq('id', docId)
+          alert(delErr
+            ? `ยกเลิกม้วนแล้ว\n⛔ แต่ลบใบเปล่าที่เหลือไม่สำเร็จ (${delErr.message}) — แจ้งผู้ดูแลด้วย`
+            : 'ยกเลิกม้วนแล้ว — ใบนี้ไม่เหลือของ จึงลบใบทิ้งให้แล้ว')
+        } else {
+          const { error: fixErr } = await supabase.from('transfer_documents').update({
+            total_rolls: left.length,
+            total_kg:    parseFloat(kg.toFixed(2)),
+          }).eq('id', docId)
+          if (fixErr) alert(`ยกเลิกม้วนแล้ว\n⛔ แต่แก้ยอดบนหัวใบไม่สำเร็จ (${fixErr.message}) — แจ้งผู้ดูแลด้วย`)
+        }
+      }
+    } catch (e: any) {
+      alert('ยกเลิกไม่สำเร็จ: ' + (e?.message ?? e))
+    } finally {
+      // ⚠ ต้องรีโหลดประวัติ + ตัวนับด้วย ไม่งั้นการ์ดประวัติยังโชว์ยอดเก่า
+      await Promise.all([loadRolls(), loadDocs(), loadPendingCounts()])
+    }
   }
 
   const pendingCount = filtered.filter(r => !r.transferred).length

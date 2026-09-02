@@ -409,9 +409,23 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
   const [scrapKind,  setScrapKind]  = useState<'all'|'clear'|'color'|'lump'>('all')  // แยกชนิดเศษเมื่อ typeFilter='scrap'
   const [pendingCounts, setPendingCounts] = useState<{ good: number; bad: number; scrap: number }>({ good: 0, bad: 0, scrap: 0 })
 
+  // ── กันผลลัพธ์รอบเก่ามาทับรอบใหม่ (request sequencing) ────────────────────
+  // ⚠ เคสจริง 2/9/2569 ใบ 690902-13 — กดแท็บ "เศษ" ตอนแท็บ "ม้วนดี" ยังโหลดไม่เสร็จ
+  //   ม้วนดี 49,281 แถว (50 หน้า ~6.5 วิ) ลงทีหลัง "ทับ" เศษ 5,469 แถว (6 หน้า ~1.3 วิ)
+  //   → จอเปิดแท็บเศษ แต่รายการข้างในเป็นม้วนดี · ซ้ำร้ายรอบเก่า setLoading(false) ให้ด้วย
+  //     "กำลังโหลด..." เลยหายไป ผู้ใช้ไม่มีทางรู้ว่าจอยังไม่นิ่ง
+  //   → กด "เลือกทั้งหมด" + ยืนยัน = ใบ transfer_type='scrap' ที่มีม้วน roll_type='good' 55 ม้วน
+  // ⚠ ยกเลิก request กลางคันไม่ได้ (fetchAll ยิงหลายหน้าเป็นลูป ไม่รับ AbortSignal และโหมด
+  //   non-strict เจอ error แล้วคืนแถวบางส่วนเงียบ ๆ) จึงใช้วิธี "นับรอบ" —
+  //   ปล่อยรอบเก่าโหลดจนจบ แต่ทิ้งผลตอนจะ set
+  const rollsReq  = useRef(0)
+  const docsReq   = useRef(0)
+  const countsReq = useRef(0)
+
   // โหลดจำนวนม้วนคงค้างทุกประเภท
   // ⚠ ไม่นับม้วน review_status='pending_review' (รอ ผจก พิจารณา — ยังโอนไม่ได้)
   async function loadPendingCounts() {
+    const myReq = ++countsReq.current
     // ⚠ ดึงทีละหน้าจนครบ — ม้วนรอโอนเกิน 1000 แถว (badge นับขาด)
     const data = await fetchAll(() => {
       let q = supabase.from('production_rolls').select('roll_type').eq('transferred', false)
@@ -419,6 +433,8 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
       if (dept) q = q.or(`section.eq.${dept},section.is.null`)
       return q
     })
+    // ⚠ ไม่ใช่รอบล่าสุด = ทิ้ง (ไม่งั้น badge เด้งกลับเป็นยอด "ก่อนโอน" หลังโอนเสร็จ)
+    if (myReq !== countsReq.current) return
     const c = { good: 0, bad: 0, scrap: 0 }
     for (const r of data ?? []) {
       const t = r.roll_type
@@ -429,7 +445,14 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
     setPendingCounts(c)
   }
 
-  async function loadRolls() {
+  // opts.reset = ล้างรายการ + การเลือกทิ้งก่อนโหลด — ใช้เฉพาะตอน "สลับแท็บประเภท"
+  // ⚠ แถบ "เลือกทั้งหมด" เรนเดอร์ตาม filtered.some(...) ไม่ได้ถูก loading คุม
+  //   ถ้าไม่ล้าง ผู้ใช้ยังกดเลือกม้วนของแท็บเก่าได้ระหว่างรอโหลด
+  // ⚠ ห้ามส่ง reset ให้ปุ่มรีเฟรช / handleTransfer / undoTransfer —
+  //   จุดพวกนั้นไม่ได้ตั้งใจล้างการเลือกของผู้ใช้
+  async function loadRolls(opts?: { reset?: boolean }) {
+    const myReq = ++rollsReq.current
+    if (opts?.reset) { setRolls([]); setSelected(new Set()) }
     setLoading(true)
     // ⚠ ดึงทีละหน้าจนครบ (Supabase จำกัด 1000 แถว/query) — ไม่งั้นม้วนเก่าที่ยังไม่โอนหลุดหาย
     const data = await fetchAll(() => {
@@ -444,20 +467,31 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
       if (dept) q = q.or(`section.eq.${dept},section.is.null`)
       return q
     })
+    // ⚠ ไม่ใช่รอบล่าสุด = ทิ้งทั้งข้อมูล "และ" loading
+    //   ห้ามให้รอบเก่าปิด loading แทนรอบใหม่ — นั่นคือจุดที่ทำให้ผู้ใช้กดโอนต่อได้
+    if (myReq !== rollsReq.current) return
     setRolls(data ?? [])
     setLoading(false)
   }
   async function loadDocs() {
+    const myReq = ++docsReq.current
     // ดึงทุกใบแบบแบ่งหน้า (เดิม .limit(50) ทำให้ประวัติเก่าหาย เมื่อโอนเกิน 50 ใบ)
     const data = await fetchAll(() => supabase.from('transfer_documents')
       .select('*').order('transferred_at', { ascending: false }))
+    // ⚠ รอบเก่ามาช้า — ทิ้ง (ไม่งั้นใบที่เพิ่งโอนหายจากประวัติ ผู้ใช้จะโอนซ้ำ)
+    if (myReq !== docsReq.current) return
     setDocs(data ?? [])
   }
-  useEffect(() => { loadRolls(); loadPendingCounts() }, [typeFilter])
+
+  // ── โหลดม้วน + ตัวนับ: ตอน mount และทุกครั้งที่สลับแท็บประเภท ──
+  //   เดิมแยกเป็น 2 effect ([typeFilter] กับ []) ตอน mount จึงยิงซ้อนกัน 2 ชุด
+  //   (แท็บม้วนดี 49,281 แถว = 50 request × 2) — ยิ่งเปิดหน้าต่างเสี่ยงให้กว้างขึ้น
+  useEffect(() => { loadRolls({ reset: true }); loadPendingCounts() }, [typeFilter])
+
+  // ── โหลดครั้งเดียวตอน mount: ประวัติใบโอน + lot ปัจจุบันของแต่ละเครื่อง ──
+  //   ⚠ ห้ามย้ายสองอย่างนี้ไปรวมกับ effect ข้างบน — จะโหลดซ้ำทุกครั้งที่สลับแท็บ
   useEffect(() => {
-    loadRolls()
     loadDocs()
-    loadPendingCounts()
     // โหลด lot_no ปัจจุบันของแต่ละเครื่อง
     supabase.from('machine_profiles').select('machine_no, lot_no, work_order, section').then(({ data }) => {
       if (!data) return
@@ -710,8 +744,45 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
     }
   }
 
-  const selectedRolls = filtered.filter(r => selected.has(r.id))
+  // ⚠ ต้องอ้างจาก rolls "ทั้งก้อน" ไม่ใช่ filtered — ตัวกรองบนจอ (ช่องค้นหา/เครื่อง/Lot/WO)
+  //   ไม่ควรมีผลกับ "ของที่เลือกไว้แล้ว" · เดิมใช้ filtered ทำให้พอพิมพ์ช่องค้นหา ม้วนที่เลือกไว้
+  //   หลุดออกจาก selectedRolls → ยอด Kgs. บนแถบสรุปเพี้ยน และด่านชั้น 1 บล็อกงานที่ถูกต้อง
+  //   (ช่องค้นหาไม่ล้าง selected ต่างจากปุ่มสลับแท็บ/การ์ดงานที่ล้างให้)
+  const rollById = new Map(rolls.map(r => [r.id, r]))
+  const selectedRolls = Array.from(selected).map(id => rollById.get(id)).filter(Boolean) as any[]
   const totalKg       = selectedRolls.reduce((s,r) => s + (r.weight??0), 0)
+
+  // ── ด่านกันโอนผิดประเภท ────────────────────────────────────────────────────
+  //   เคสจริง 2/9/2569 ใบ 690902-13 — คำอธิบายเต็มอยู่ที่ loadRolls
+  const rollTypeOk = (t: any) =>
+    typeFilter === 'scrap' ? String(t ?? '').startsWith('scrap') : t === typeFilter
+  // ชนิดเศษ: บังคับเฉพาะตอนผู้ใช้เจาะชนิดอยู่
+  //   ตอน scrapKind='all' ห้ามบังคับ — ใบเศษรวมทั้งวันเป็นของถูกต้อง (buildScrapSheet แยกชนิดให้แล้ว)
+  const scrapKindOk = (t: any) =>
+    typeFilter !== 'scrap' || scrapKind === 'all' || t === `scrap_${scrapKind}`
+  const typeNameTh = (t: any) =>
+    t === 'good' ? 'ม้วนดี' : t === 'bad' ? 'ม้วนกรอ'
+    : String(t ?? '').startsWith('scrap') ? scrapKindLabel(t) : `ประเภท "${t ?? 'ไม่ระบุ'}"`
+
+  // เงื่อนไข "ของที่โอนได้จริง" ชุดเดียว — ใช้ทั้งตอนถาม DB (ชั้น 2) และตอน update (ชั้น 3)
+  // ⚠ ต้องเป็นสูตรเดียวกันเสมอ และต้องไม่เข้มกว่าสิ่งที่ loadRolls ยอมให้ขึ้นจอ
+  //   (ถ้าเข้มกว่า = ของที่เห็นอยู่บนจอกดโอนไม่ได้ กลายเป็นบั๊กใหม่)
+  const applyTransferGuard = (q: any) => {
+    // 1) ประเภทต้องตรงแท็บ — ตรรกะเดียวกับ loadRolls
+    let x = typeFilter !== 'scrap' ? q.eq('roll_type', typeFilter)
+          : scrapKind  !== 'all'   ? q.eq('roll_type', `scrap_${scrapKind}`)
+          :                          q.like('roll_type', 'scrap%')
+    // 2) ยังไม่เคยโอน — กันแสตมป์ซ้ำ / ดึงม้วนหลุดจากใบที่พิมพ์ให้คลังไปแล้ว
+    //    ⚠ ใช้ .not(...,'is',true) ไม่ใช่ .eq(false) เพราะจอเช็คด้วย !r.transferred (NULL = ยังไม่โอน)
+    x = x.not('transferred', 'is', true)
+    // 3) ยังไม่ถูกส่งให้ลูกค้า (แพทเทิร์นเดียวกับ Warehouse.tsx)
+         .not('shipped', 'is', true)
+    // 4) ไม่ใช่ม้วนรอ ผจก พิจารณา — ตรรกะเดียวกับ loadRolls
+         .or('review_status.is.null,review_status.eq.approved_rework')
+    // 5) ไม่ข้ามแผนก — ตรรกะเดียวกับ loadRolls
+    if (dept) x = x.or(`section.eq.${dept},section.is.null`)
+    return x
+  }
 
   async function handleTransfer() {
     if (!staff.trim()) { alert('กรุณากรอกชื่อเจ้าหน้าที่'); return }
@@ -719,9 +790,70 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
     const unit = typeFilter === 'scrap' ? 'ถุง' : 'ม้วน'
     const typeLabel = typeFilter === 'good' ? 'ม้วนดี (FG)' : typeFilter === 'bad' ? 'ม้วนกรอ' : 'เศษเสีย'
     const destLabel = typeFilter === 'bad' ? 'ไปแผนกกรอ' : 'เข้าคลัง'
+
+    // ══ ชั้น 1 — เช็คจากจอ (เร็ว ไม่ต้องรอเน็ต · วางก่อน confirm จะได้ไม่ถามยืนยันฟรี) ══
+
+    // 1.1 id ที่เลือกไว้ต้องยังอยู่ในรายการที่โหลดมา
+    //     ⚠ เทียบกับ rolls ทั้งก้อน (ผ่าน selectedRolls) ไม่ใช่ filtered — ตัวกรองบนจอไม่เกี่ยว
+    //       เหลือไว้จับเคสเดียว: ตารางถูกโหลดใหม่ระหว่างที่กำลังเลือก แล้ว id ที่เลือกหายไปเลย
+    if (selectedRolls.length !== selected.size) {
+      alert(`⚠ มี ${selected.size - selectedRolls.length} ${unit} ที่เลือกไว้ หายไปจากรายการแล้ว\n\n`
+        + `เลือกไว้ ${selected.size} ${unit} · ยังอยู่จริง ${selectedRolls.length} ${unit}\n`
+        + `(รายการถูกโหลดใหม่ระหว่างที่กำลังไล่เลือกอยู่)\n\n`
+        + `กด "รีเฟรช" มุมขวาบน รอจนรายการขึ้นครบ แล้วเลือกใหม่\n`
+        + `— ยังไม่ได้โอนอะไรทั้งสิ้น`)
+      return
+    }
+
+    // 1.2 ของที่เลือกต้องเป็นประเภทเดียวกับแท็บที่เปิดอยู่
+    const wrongType = selectedRolls.filter(r => !rollTypeOk(r.roll_type) || !scrapKindOk(r.roll_type))
+    if (wrongType.length) {
+      const kinds = [...new Set(wrongType.map(r => typeNameTh(r.roll_type)))].join(' / ')
+      const s0 = wrongType[0]
+      alert(`⛔ หยุด — ของที่เลือกไม่ใช่ "${typeLabel}"\n\n`
+        + `เจอ ${kinds} ปนอยู่ ${wrongType.length} จาก ${selectedRolls.length} ${unit}\n`
+        + `ตัวอย่าง: #${s0.roll_no ?? '—'} · เครื่อง ${s0.machine_no ?? '—'} · Lot ${s0.lot_no ?? '—'}\n\n`
+        + `สาเหตุที่พบบ่อย: สลับแท็บตอนรายการยังโหลดไม่เสร็จ ของแท็บเก่าเลยค้างอยู่ในตาราง\n\n`
+        + `กด "รีเฟรช" มุมขวาบน รอจนรายการขึ้นครบ แล้วเลือกใหม่\n`
+        + `— ยังไม่ได้โอนอะไรทั้งสิ้น`)
+      return
+    }
+
     if (!confirm(`โอน ${typeLabel} ${selected.size} ${unit} รวม ${fmt(totalKg)} Kgs. ${destLabel}?\n\n(จะพิมพ์ใบโอนให้อัตโนมัติ)`)) return
     setSaving(true)
     try {
+      // ══ ชั้น 2 — ยิงถามฐานข้อมูลใหม่ (ด่านจริง) ══
+      // ⚠ ห้ามเชื่อ state ในเครื่องอย่างเดียว — state คือสิ่งที่พังในเคส 690902-13
+      //   ชั้น 1 จับเคสนั้นได้เพราะแถวที่ค้างยังพก roll_type ของจริงติดมา
+      //   แต่จับไม่ได้เลยเมื่อ: มีคนโอน/ส่งของชุดนี้จากอีกจอ · ผจก เพิ่งดึงม้วนเข้าคิว pending_review
+      // ⚠ ต้องอยู่ "ก่อน" การออกเลขใบและก่อน insert หัวใบ
+      //   ไม่งั้นเวลาไม่ผ่านจะเหลือใบเปล่าค้างในประวัติ + กินเลขลำดับของวันนั้นไปฟรี ๆ
+      const ids = Array.from(selected)
+      const okIds = new Set<string>()
+      for (let i = 0; i < ids.length; i += 200) {   // ⚠ แบ่งชุด — .in() ยัด id ลง URL ยาวเกินจะล้มทั้งก้อน
+        const { data, error } = await applyTransferGuard(
+          supabase.from('production_rolls').select('id').in('id', ids.slice(i, i + 200)))
+        if (error) throw error
+        for (const r of data ?? []) okIds.add(r.id)
+      }
+      if (okIds.size !== ids.length) {
+        const bad = selectedRolls.filter(r => !okIds.has(r.id))
+        const s0  = bad[0]
+        alert(`⛔ หยุด — ตรวจกับฐานข้อมูลแล้วไม่ผ่าน ${ids.length - okIds.size} ${unit}\n\n`
+          + `จะโอน ${typeLabel} ${ids.length} ${unit} · ผ่านตรวจจริง ${okIds.size} ${unit}\n`
+          + (s0 ? `ตัวอย่างที่ไม่ผ่าน: #${s0.roll_no ?? '—'} · เครื่อง ${s0.machine_no ?? '—'} · ${typeNameTh(s0.roll_type)}\n` : '')
+          + `\nสาเหตุที่พบบ่อย:\n`
+          + `• ไม่ใช่ ${typeLabel} จริง (สลับแท็บตอนรายการยังโหลดไม่เสร็จ)\n`
+          + `• มีคนโอนของชุดนี้ไปแล้วจากอีกเครื่อง\n`
+          + `• ถูกส่งให้ลูกค้าไปแล้ว หรือถูกดึงเข้าคิวรอ ผจก พิจารณา\n\n`
+          + `ยังไม่ได้สร้างใบโอน และยังไม่ได้แก้ข้อมูลใด ๆ\n`
+          + `รีเฟรชรายการให้แล้ว — ดูใหม่แล้วเลือกอีกครั้ง`)
+        // รีเฟรชให้เลย ผู้ใช้จะได้ไม่ต้องไปกดปุ่มเอง (พฤติกรรมเดียวกับเคส 2.1)
+        setSearch('')
+        await Promise.all([loadRolls({ reset: true }), loadPendingCounts()])
+        return
+      }
+
       const transferTime = new Date().toISOString()
       // เลขใบโอน = ปีเดือนวัน(พ.ศ.2หลัก)-ลำดับใบของวันนั้น เช่น 690704-1
       const _n = new Date()
@@ -765,17 +897,99 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
       if (docErr) throw docErr
 
       // 2. อัพ rolls + ผูก doc_id
-      const { error: rollErr } = await supabase.from('production_rolls')
-        .update({
-          transferred:     true,
-          transferred_at:  transferTime,
-          transferred_by:  staff,
-          transfer_doc_id: doc.id,
-        })
-        .in('id', Array.from(selected))
-      if (rollErr) throw rollErr
+      //    ══ ชั้น 3 — ย้ำเงื่อนไขเดิมซ้ำระดับ DB ══
+      //    ⚠ ระหว่างชั้น 2 กับบรรทัดนี้ยังมีช่องว่างจริง (insert หัวใบ + เวลาไป-กลับเน็ต)
+      //      สองจอกดโอนพร้อมกันผ่านชั้น 2 ได้ทั้งคู่ — ถ้าไม่กันตรงนี้ คนที่กดทีหลังจะเขียนทับ
+      //      transfer_doc_id = "ดึงม้วนหลุด" ออกจากใบที่พิมพ์ให้คลังไปแล้ว
+      //    ⚠ แบ่งชุด 200 — เคสจริง 25-26/8/2569 ใบผี 690825-14 / 690826-2 / 690826-3
+      //      กด "เลือกทั้งหมด" 3,379 ถุง → .in() ยิงรวดเดียว URL ยาวเกิน ล้มทั้งก้อน
+      //      หัวใบที่ insert ไปแล้วไม่ถูกลบ → เหลือใบผีอ้าง 53 ตันที่ไม่มีม้วนสักม้วน
+      const doneIds = new Set<string>()
+      const chunkErrs: string[] = []
+      for (let i = 0; i < ids.length; i += 200) {
+        const { data: stamped, error: rollErr } = await applyTransferGuard(
+          supabase.from('production_rolls').update({
+            transferred:     true,
+            transferred_at:  transferTime,
+            transferred_by:  staff,
+            transfer_doc_id: doc.id,
+          }).in('id', ids.slice(i, i + 200))
+        ).select('id')                       // ← นับผลจริง ไม่เดาจากจำนวนที่เลือก
+        if (rollErr) { chunkErrs.push(rollErr.message); continue }   // ไม่ throw — ต้องไปซ่อมหัวใบต่อ
+        for (const r of stamped ?? []) doneIds.add(r.id)
+      }
 
-      const transferred = selectedRolls.map(r => ({
+      // ⚠ มีชุดที่ error (เน็ตหลุด/timeout) → ไม่รู้ว่าฝั่งเซิร์ฟเวอร์เขียนไปแล้วหรือยัง
+      //   doneIds จึงเชื่อไม่ได้ ต้องถาม DB ว่าสุดท้ายผูกกับใบนี้จริงกี่ม้วน
+      //   ถ้าเชื่อ doneIds แล้วลบหัวใบทิ้ง = เหลือม้วนกำพร้า (transferred=true แต่ไม่มีใบ)
+      if (chunkErrs.length) {
+        try {
+          const real = await fetchAll<{ id: string }>(
+            () => supabase.from('production_rolls').select('id').eq('transfer_doc_id', doc.id),
+            { strict: true })   // ⚠ strict — ยอมให้ throw ดีกว่าได้ยอดขาดมาเงียบ ๆ แล้วตัดสินผิด
+          doneIds.clear()
+          for (const r of real) doneIds.add(r.id)
+        } catch {
+          setSelected(new Set())
+          await Promise.all([loadRolls(), loadDocs(), loadPendingCounts()])
+          alert(`⛔ ระบบขัดข้องระหว่างบันทึก และตรวจสอบซ้ำไม่ได้\n\n`
+            + `เหตุผลจากระบบ: ${chunkErrs[0]}\n`
+            + `ใบ ${docNo} ถูกสร้างไว้แล้ว แต่ยังไม่รู้ว่ามีของผูกครบหรือไม่\n\n`
+            + `⚠ อย่ากดโอนซ้ำ — เปิดแท็บ "ประวัติการโอน" ดูใบ ${docNo} ก่อน\n`
+            + `ถ้ายอดไม่ตรงของจริง แจ้งผู้ดูแลให้ตรวจใบนี้`)
+          return
+        }
+      }
+
+      // 2.1 ไม่ได้เลยสักม้วน → ลบใบที่เพิ่งสร้างทิ้ง ไม่ให้เหลือใบผีค้างในประวัติ
+      if (doneIds.size === 0) {
+        const { error: delErr } = await supabase.from('transfer_documents').delete().eq('id', doc.id)
+        setSelected(new Set())
+        setSearch('')
+        await Promise.all([loadRolls({ reset: true }), loadDocs(), loadPendingCounts()])
+        alert(`⚠ ไม่ได้โอนสัก ${unit}\n\n`
+          + (chunkErrs.length
+              ? `ระบบขัดข้องระหว่างบันทึก: ${chunkErrs[0]}\n(ตรวจซ้ำกับฐานข้อมูลแล้ว — ไม่มีของผูกกับใบนี้เลย)\n`
+              : `มีคนโอน/ส่งของชุดนี้ไปก่อนแล้ว\n`)
+          + (delErr
+              ? `⛔ ลบใบ ${docNo} ไม่สำเร็จ (${delErr.message})\n   แจ้งผู้ดูแลให้ลบใบนี้ทิ้ง ไม่งั้นจะค้างเป็นใบเปล่า\n`
+              : `ยกเลิกใบ ${docNo} ให้แล้ว ไม่มีใบเปล่าค้างในประวัติ\n`)
+          + `รีเฟรชรายการให้แล้ว — ดูใหม่แล้วเลือกอีกครั้ง`)
+        return
+      }
+
+      // 2.2 ได้ไม่ครบ → แก้ยอดบนหัวใบให้ตรงของที่แสตมป์ได้จริง (ไม่งั้นคลังเซ็นรับของที่ไม่ได้มา)
+      const okRolls = selectedRolls.filter(r => doneIds.has(r.id))
+      if (doneIds.size < ids.length) {
+        const okKg = okRolls.reduce((s, r) => s + (r.weight ?? 0), 0)
+        // ⚠ ต้องคำนวณช่อง "ระบุตัวงาน" ใหม่ทั้งหมดด้วย ไม่ใช่แค่ยอดรวม —
+        //   ไม่งั้นหัวใบยังโชว์เครื่อง/Lot/WO/SO/ลูกค้า ของม้วนที่โอนไม่สำเร็จ
+        //   คลังจะตามหาของที่ไม่เคยมาถึง และค้นประวัติด้วย WO นั้นแล้วเจอใบที่ไม่มีของ
+        const uniq = (f: (r: any) => any) => [...new Set(okRolls.map(f).filter(Boolean))].join(', ')
+        const s1 = okRolls[0]
+        const { error: fixErr } = await supabase.from('transfer_documents').update({
+          total_rolls:  doneIds.size,
+          total_kg:     parseFloat(okKg.toFixed(2)),
+          machine_no:   uniq(r => r.machine_no),
+          product_name: uniq(r => r.product_name),
+          lot_no:       uniq(r => r.lot_no),
+          work_order:   uniq(r => r.work_order),
+          sale_order:   uniq(r => r.sale_order),
+          customer:     uniq(r => r.customer),
+          item_code:    uniq(r => r.item_code),
+          size:         s1?.width_cm && s1?.thick_mc ? `${s1.width_cm}${s1.width_unit ?? 'cm'}×${s1.thick_mc}mc` : '',
+        }).eq('id', doc.id)
+        alert(`⚠ โอนได้ ${doneIds.size} จาก ${ids.length} ${unit}\n\n`
+          + `อีก ${ids.length - doneIds.size} ${unit} (${fmt(totalKg - okKg)} Kgs.) โอนไม่ได้\n`
+          + (chunkErrs.length ? `เหตุผลจากระบบ: ${chunkErrs[0]}\n` : `— มีคนโอน/ส่งไปก่อนแล้วระหว่างที่กำลังกดยืนยัน\n`)
+          + (fixErr
+              ? `\n⛔ แก้ยอดบนใบ ${docNo} ไม่สำเร็จ — หัวใบยังเป็นยอดเดิม แจ้งผู้ดูแลด้วย\n`
+              : `\nแก้ยอดบนใบ ${docNo} ให้ตรงของจริงแล้ว (${doneIds.size} ${unit} · ${fmt(okKg)} Kgs.)\n`)
+          + `ใบที่พิมพ์ออกมาจะเป็นยอดที่โอนได้จริงเท่านั้น`)
+      }
+
+      // พิมพ์เฉพาะม้วนที่แสตมป์สำเร็จจริง (เดิมใช้ selectedRolls ทั้งก้อน = ใบไม่ตรงของ)
+      const transferred = okRolls.map(r => ({
         ...r, transferred_at: transferTime, transferred_by: staff,
       }))
 
@@ -857,7 +1071,9 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
             </h1>
             <p className="text-slate-400 text-xs mt-0.5">{typeFilter==='bad'?'เจ้าหน้าที่เลือกม้วนกรอที่ผลิตเสร็จแล้ว โอนไปแผนกกรอ':`เจ้าหน้าที่เลือก${typeFilter==='scrap'?'ถุงเศษ':'ม้วน'}ที่ผลิตเสร็จแล้วโอนเข้าคลัง`}</p>
           </div>
-          <button onClick={() => { loadRolls(); loadDocs() }} className="flex items-center gap-1.5 text-slate-400 hover:text-white text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg">
+          {/* ⚠ รีเฟรชต้องล้างช่องค้นหา + การเลือกด้วย — ทุก alert ของด่านกันพลาดบอกให้ "กดรีเฟรช
+              แล้วเลือกใหม่" ถ้าไม่ล้างให้ ผู้ใช้จะกดตามแล้วเจอ alert เดิมซ้ำ วนออกไม่ได้ */}
+          <button onClick={() => { setSearch(''); loadRolls({ reset: true }); loadDocs() }} className="flex items-center gap-1.5 text-slate-400 hover:text-white text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg">
             <RefreshCw size={12}/> รีเฟรช
           </button>
         </div>

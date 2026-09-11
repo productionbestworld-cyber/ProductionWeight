@@ -553,9 +553,13 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
 
   // คีย์ของ "งาน" — ใช้ร่วมกันทั้งตอนแยกการ์ดและตอนกรองตารางฝั่งขวา (ต้องเป็นสูตรเดียวกันเสมอ)
   //   ชุดระบบใหม่(กรอ) รวมทุก WO ใน lot เดียวแต่แยกตามสินค้า · งานปกติแยกตาม WO
-  const jobKeyOfRoll = (r: any) => r.new_system
-    ? `${r.machine_no ?? ''}__${r.lot_no ?? ''}__${r.item_code ?? ''}__${NS_WO}`
-    : `${r.machine_no ?? ''}__${r.lot_no ?? ''}__${r.work_order ?? ''}`
+  //   ⚠ ต้องเป็น function declaration (hoisted) — docRollsJob ด้านบนเรียกใช้ก่อนบรรทัดนี้
+  //      ถ้าเป็น const arrow จะพัง "Cannot access before initialization" ตอนกดการ์ดงาน (docJob != null)
+  function jobKeyOfRoll(r: any) {
+    return r.new_system
+      ? `${r.machine_no ?? ''}__${r.lot_no ?? ''}__${r.item_code ?? ''}__${NS_WO}`
+      : `${r.machine_no ?? ''}__${r.lot_no ?? ''}__${r.work_order ?? ''}`
+  }
   const jobsOfRolls = (rs: any[]) => {
     const m = new Map<string, any[]>()
     for (const r of rs) {

@@ -3,7 +3,7 @@
 //  เปิดผ่าน  ?weighlog=1  หรือ  /weighlog
 //  ดึงจาก weigh_logs (เขียนทุกครั้งที่กดบันทึกชั่ง) — แสดง WO/SO/เวลา/นน./ผู้ชั่ง ครบ
 //  แยก log ตามแผนก: ส่ง dept='blow'/'rewind' เข้ามา → กรองให้เห็นเฉพาะของแผนกตัวเอง
-//  (weigh_logs ไม่มีคอลัมน์ section → จำแนกจากเครื่อง: S01–S04 = กรอ · BLxx = เป่า · is_rewound=กรอ)
+//  (weigh_logs ไม่มีคอลัมน์ section → จำแนกจากเครื่อง: S01–S05 = กรอ · BLxx = เป่า · is_rewound=กรอ)
 // ════════════════════════════════════════════════════════════════════════
 import { useEffect, useMemo, useState } from 'react'
 import { supabase, fetchAll } from '../lib/supabase'
@@ -68,7 +68,7 @@ export default function WeighLog({ dept }: { dept?: 'blow' | 'rewind' } = {}) {
   }
   useEffect(() => { load() }, [range]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // โหลด map เครื่อง→แผนก ครั้งเดียว (S01–S04=rewind · BLxx=blow)
+  // โหลด map เครื่อง→แผนก ครั้งเดียว (S01–S05=rewind · BLxx=blow)
   useEffect(() => {
     supabase.from('machine_profiles').select('machine_no,section').then(({ data }) => {
       const m: Record<string, string> = {}

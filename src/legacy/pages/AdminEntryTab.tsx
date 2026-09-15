@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, Save, X, Edit2, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { fmt, MACHINE_COLORS, BLS } from '../lib/utils'
+import { fmt, machineColor, BLS } from '../lib/utils'
 import type { ProductionRecord } from '../lib/types'
 
 const SHIFTS = ['A', 'B', 'C', 'unknown']
@@ -339,7 +339,7 @@ export default function AdminEntryTab() {
             ) : records.map((r, i) => (
               <tr key={r.id ?? i} className="hover:bg-gray-50 group">
                 <td className="px-3 py-2.5 font-medium text-gray-700 whitespace-nowrap">{r.production_date}</td>
-                <td className="px-3 py-2.5 font-bold" style={{ color: MACHINE_COLORS[r.machine] ?? '#374151' }}>{r.machine}</td>
+                <td className="px-3 py-2.5 font-bold" style={{ color: machineColor(r.machine) }}>{r.machine}</td>
                 <td className="px-3 py-2.5 text-gray-500">{r.shift ?? '-'}</td>
                 <td className="px-3 py-2.5 text-gray-700">{r.customer ?? '-'}</td>
                 <td className="px-3 py-2.5 text-gray-400 text-xs">{r.size ?? '-'}</td>

@@ -3,7 +3,7 @@ import {
   BarChart as HBarChart, Cell
 } from 'recharts'
 import type { ProductionRecord, KpiData } from '../lib/types'
-import { fmt, pct, machineAgg, customerAgg, MACHINE_COLORS, PALETTE } from '../lib/utils'
+import { fmt, pct, machineAgg, customerAgg, machineColor, PALETTE } from '../lib/utils'
 
 interface Props { data: ProductionRecord[]; kpi: KpiData }
 
@@ -149,7 +149,7 @@ export default function DashboardTab({ data, kpi }: Props) {
             <tbody className="divide-y divide-gray-50">
               {machRows.map(r => (
                 <tr key={r.m} className="hover:bg-gray-50">
-                  <td className="px-3 py-2 font-bold text-sm" style={{ color: MACHINE_COLORS[r.m] ?? '#374151' }}>{r.m}</td>
+                  <td className="px-3 py-2 font-bold text-sm" style={{ color: machineColor(r.m) }}>{r.m}</td>
                   <td className="px-3 py-2 text-right font-medium text-gray-700">{fmt(r.fg, 1)}</td>
                   <td className="px-3 py-2 text-right text-gray-500">{r.rolls.toLocaleString()}</td>
                   <td className="px-3 py-2 text-right text-red-600">{fmt(r.sc, 1)}</td>

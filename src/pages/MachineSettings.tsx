@@ -633,7 +633,7 @@ export default function MachineSettings({ dept }: { dept?: 'blow'|'rewind' }) {
           ? data.map(dbToProfile)
           : loadProfiles()
 
-        // ── ลบเครื่อง RW* เก่า (ถ้ามี) ก่อน seed S01-S04 ──
+        // ── ลบเครื่อง RW* เก่า (ถ้ามี) ก่อน seed S01-S05 ──
         const legacyRW = loaded.filter(p => /^RW\d+$/i.test(p.machine_no))
         if (legacyRW.length > 0) {
           for (const rw of legacyRW) {
@@ -646,9 +646,9 @@ export default function MachineSettings({ dept }: { dept?: 'blow'|'rewind' }) {
           }
         }
 
-        // seed BL01..BL11 + S01..S04 ถ้ายังไม่มี
+        // seed BL01..BL11 + S01..S05 ถ้ายังไม่มี
         const blowDefaults   = Array.from({ length: 11 }, (_, i) => `BL${String(i + 1).padStart(2, '0')}`)
-        const rewindDefaults = Array.from({ length: 4 },  (_, i) => `S${String(i + 1).padStart(2, '0')}`)
+        const rewindDefaults = Array.from({ length: 5 },  (_, i) => `S${String(i + 1).padStart(2, '0')}`)
         const have = new Set(loaded.map(p => p.machine_no.toUpperCase()))
         const toSeed: { name: string; section: 'blow' | 'rewind' }[] = [
           ...blowDefaults.filter(n => !have.has(n)).map(n => ({ name: n, section: 'blow' as const })),

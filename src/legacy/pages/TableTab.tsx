@@ -1,5 +1,5 @@
 import type { ProductionRecord } from '../lib/types'
-import { fmt, MACHINE_COLORS } from '../lib/utils'
+import { fmt, machineColor } from '../lib/utils'
 
 interface Props { data: ProductionRecord[] }
 
@@ -23,7 +23,7 @@ export default function TableTab({ data }: Props) {
             {data.slice(0, 500).map((r, i) => (
               <tr key={i} className="hover:bg-gray-50">
                 <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{r.production_date ?? '-'}</td>
-                <td className="px-3 py-2 font-bold" style={{ color: MACHINE_COLORS[r.machine] ?? '#374151' }}>{r.machine ?? '-'}</td>
+                <td className="px-3 py-2 font-bold" style={{ color: machineColor(r.machine) }}>{r.machine ?? '-'}</td>
                 <td className="px-3 py-2 text-gray-500">{r.shift ?? '-'}</td>
                 <td className="px-3 py-2 text-gray-700">{r.customer ?? '-'}</td>
                 <td className="px-3 py-2 text-gray-400 text-xs">{r.size ?? '-'}</td>

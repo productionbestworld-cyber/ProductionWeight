@@ -49,7 +49,7 @@ const IN_COLS =
 type OutRoll = {
   id: string
   created_at: string
-  machine_no?: string | null        // สถานีกรอ (S01–S04)
+  machine_no?: string | null        // สถานีกรอ (S01–S05)
   inspector?: string | null         // คนกรอ
   weight?: number | null
   roll_type: string                 // good | scrap_clear | scrap_color | scrap_lump | (bad พบน้อยมาก)
@@ -127,7 +127,7 @@ const TABS: { key: Tab; label: string; desc: string }[] = [
   { key: 'summary',  label: '📊 สรุปเข้า–ออก', desc: 'ภาพรวมช่วงที่เลือก — ม้วนที่มาจากผลิต เทียบกับที่กรอออกไปแล้ว' },
   { key: 'day',      label: '📅 ตามวัน',       desc: 'แต่ละวัน รับเข้ากี่ม้วน · กรอออกไปกี่ม้วน · เศษ · โอนเข้าคลัง — กดแถวเพื่อดูรายละเอียด' },
   { key: 'product',  label: '📦 ตามสินค้า',     desc: 'แยกตามสินค้า — รับเข้าเทียบกับกรอออก แต่ละรายการ' },
-  { key: 'station',  label: '🏭 ตามสถานี/คนกรอ', desc: 'ผลงานกรอแยกตามสถานีกรอ (S01–S04) และคนกรอ' },
+  { key: 'station',  label: '🏭 ตามสถานี/คนกรอ', desc: 'ผลงานกรอแยกตามสถานีกรอ (S01–S05) และคนกรอ' },
   { key: 'trace',    label: '🎯 ไล่ม้วนตาม WO', desc: 'ม้วนเสียที่มาจากผลิต แยกตาม WO — ขาว = ยังไม่ได้กรอ · เขียว = กรอแล้ว' },
   { key: 'incoming', label: '📥 ม้วนเข้ามา',     desc: 'รายม้วนที่มาจากผลิตทั้งหมดในช่วงนี้ (เบิกแล้ว/ยังไม่เบิก) — Export ได้' },
   { key: 'output',   label: '📤 ผลงานกรอ (รายม้วน)', desc: 'รายม้วนที่แผนกกรอชั่งเสร็จทุกใบตามตัวกรอง — Export ได้' },
@@ -417,8 +417,14 @@ export default function RewindDashboard() {
   }, [dateFrom, dateTo])
 
   // ── ตัวเลือก dropdown ──────────────────────────────────────────────────────
+  // สถานีกรอทั้งหมดจาก machine_profiles (section=rewind) — เครื่องใหม่ (เช่น S05) โผล่แม้ยังไม่มีม้วน
+  const [rewindStations, setRewindStations] = useState<string[]>([])
+  useEffect(() => {
+    supabase.from('machine_profiles').select('machine_no').eq('section', 'rewind')
+      .then(({ data }) => setRewindStations((data ?? []).map((d: any) => d.machine_no).filter(Boolean)))
+  }, [])
   const stationOptions = useMemo(() =>
-    Array.from(new Set(outRolls.map(r => r.machine_no).filter(Boolean) as string[])).sort(), [outRolls])
+    Array.from(new Set([...rewindStations, ...(outRolls.map(r => r.machine_no).filter(Boolean) as string[])])).sort(), [outRolls, rewindStations])
   const productOptions = useMemo(() => Array.from(new Set([
     ...inRolls.map(r => (r.product_name ?? '').trim()),
     ...outRolls.map(r => (r.product_name ?? '').trim()),
@@ -610,7 +616,15 @@ export default function RewindDashboard() {
     }
     return Array.from(m.values()).sort((a, b) => b.goodKg - a.goodKg)
   }
-  const byStation   = useMemo(() => groupOut(scopedOut, r => r.machine_no || '(ไม่ระบุสถานี)'), [scopedOut])
+  const byStation   = useMemo(() => {
+    const g = groupOut(scopedOut, r => r.machine_no || '(ไม่ระบุสถานี)')
+    // ใส่สถานีที่ยังไม่มีม้วนในช่วงนี้เป็นแถว 0 (ไม่ใส่ถ้ากรองสถานีหรือค้นหาอยู่)
+    if (!fStation && !q.trim()) {
+      const have = new Set(g.map(x => x.key))
+      for (const s of [...rewindStations].sort()) if (!have.has(s)) g.push({ key: s, goodRolls: 0, goodKg: 0, scrapKg: 0, total: 0 })
+    }
+    return g
+  }, [scopedOut, rewindStations, fStation, q])
   const byRewinder  = useMemo(() => groupOut(scopedOut, r => (r.inspector ?? '').trim() || '(ไม่ระบุคนกรอ)'), [scopedOut])
 
   // ── ข้อมูลกราฟ ─────────────────────────────────────────────────────────────

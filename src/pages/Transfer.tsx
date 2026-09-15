@@ -512,7 +512,7 @@ export default function Transfer({ dept, readOnly = false }: { dept?: 'blow'|'re
   //   (เดิมประวัติดึงมาทุกใบ → ฝั่งผลิตเห็นใบของกรอปนมาด้วย ซึ่งกรอรวมหลาย WO ต่อ item
   //    ต่างจากผลิตที่เดินทีละ WO — เลยดูเหมือน "WO มั่ว")
   //   เครื่องที่ไม่รู้จัก (ถูกลบ/ชั่งนอกระบบ) → ยังแสดง กันประวัติเก่าหาย
-  const secOfMachine = (m: string) => machineSections[m] || (/กรอ|rewind|^rw/i.test(m) ? 'rewind' : '')
+  const secOfMachine = (m: string) => machineSections[m] || (/กรอ|rewind|^rw|^S\d+$/i.test(m) ? 'rewind' : '')
   const matchDept = (d: any) => {
     if (!dept || docAllDept) return true
     const ms = String(d.machine_no ?? '').split(',').map(x => x.trim()).filter(Boolean)

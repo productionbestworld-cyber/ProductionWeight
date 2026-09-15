@@ -8,8 +8,9 @@ export const MACHINE_COLORS: Record<string, string> = {
   BL09:'#14b8a6', BL10:'#ef4444', BL11:'#84cc16',
 }
 
-// เครื่องที่ไม่ได้อยู่ใน MACHINE_COLORS (เช่น S01–S04) ให้สีจาก PALETTE แบบคงที่ตามชื่อ
-export function machineColor(m: string): string {
+// เครื่องที่ไม่ได้อยู่ใน MACHINE_COLORS (เช่น S01–S05) ให้สีจาก PALETTE แบบคงที่ตามชื่อ
+export function machineColor(m: string | null | undefined): string {
+  if (!m) return '#374151'
   if (MACHINE_COLORS[m]) return MACHINE_COLORS[m]
   let h = 0
   for (let i = 0; i < m.length; i++) h = (h * 31 + m.charCodeAt(i)) >>> 0
@@ -70,7 +71,7 @@ export function kpiCalc(data: ProductionRecord[]): KpiData {
   return { fg, rolls, sc, rw, pl, t, rwFg, rwScrap, fgP: t > 0 ? fgFirst/t*100 : 0, lossP: t > 0 ? (rw+prodScrap)/t*100 : 0, scP: fg > 0 ? sc/fg*100 : 0, rwP: fg > 0 ? rw/fg*100 : 0 }
 }
 
-// เรียงเครื่อง: ตามลำดับใน BLS ก่อน ที่เหลือ (เช่น S01–S04) ต่อท้ายแบบเรียงตัวอักษร
+// เรียงเครื่อง: ตามลำดับใน BLS ก่อน ที่เหลือ (เช่น S01–S05) ต่อท้ายแบบเรียงตัวอักษร
 // hardcode BLS อย่างเดียวทำให้เครื่องใหม่หายไปจากรายงานเงียบๆ
 export function machineOrder(keys: string[]): string[] {
   const known = BLS.filter(b => keys.includes(b))
@@ -258,7 +259,7 @@ export function parseExcelRows(rows: unknown[][]): ProductionRecord[] {
     // machine normalise
     if (rec.machine) {
       const m = String(rec.machine).trim().toUpperCase()
-      rec.machine = m.startsWith('BL') ? m : 'BL' + m.replace(/\D/g, '').padStart(2, '0')
+      rec.machine = /^(BL|S)\d+$/.test(m) ? m : 'BL' + m.replace(/\D/g, '').padStart(2, '0')
     }
     if (rec.production_date && rec.machine) {
       // row_key เป็น fingerprint ของเนื้อหา — ถ้าเหมือนเดิมเป๊ะ จะถูกข้าม

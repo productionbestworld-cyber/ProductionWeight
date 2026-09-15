@@ -821,7 +821,7 @@ function ReceiveModal({ roll, onClose }: { roll: any; onClose: () => void }) {
         </div>
 
         <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-2.5 mt-3 text-xs text-blue-200">
-          💡 ระบบจะสร้าง <b>job</b> ใหม่ในรายการแผนกกรอ — operator คลิก card → เลือกเครื่อง S01-S04 → ชั่งได้เลย<br/>
+          💡 ระบบจะสร้าง <b>job</b> ใหม่ในรายการแผนกกรอ — operator คลิก card → เลือกเครื่อง S01-S05 → ชั่งได้เลย<br/>
           กดเข้า-ออกระหว่างหลาย job ได้ตามต้องการ (job ไม่ผูกเครื่อง)
         </div>
 

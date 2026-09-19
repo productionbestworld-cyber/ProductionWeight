@@ -19,12 +19,24 @@ type Row = {
 type Preset = 'today' | '7d' | 'month' | 'custom'
 type Group = 'day' | 'week' | 'month'
 type Sect = 'all' | 'blow' | 'rewind'
+type Split = 'type' | 'machine' | 'shift'
+type Col = { key: string; label: string; color: string }
 
 const TYPES = [
   { key: 'scrap_clear', label: 'เศษใส',  color: '#38bdf8' },
   { key: 'scrap_color', label: 'เศษสี',  color: '#f59e0b' },
   { key: 'scrap_lump',  label: 'เศษก้อน', color: '#ef4444' },
 ] as const
+// กะ: เช้า 08:00–20:00 · ดึก 20:00–08:00 — ชั่วโมงหลังเที่ยงคืนถึง 08:00 นับเป็นกะดึกของ "วันก่อนหน้า"
+const SHIFTS: Col[] = [
+  { key: 'day',   label: 'กะเช้า (08–20)', color: '#f59e0b' },
+  { key: 'night', label: 'กะดึก (20–08)',  color: '#6366f1' },
+]
+const bkkHour = (iso: string) => Number(new Date(iso).toLocaleString('en-US', { timeZone: 'Asia/Bangkok', hour: '2-digit', hour12: false })) % 24
+const shiftOf = (iso: string) => { const h = bkkHour(iso); return h >= 8 && h < 20 ? 'day' : 'night' }
+const shiftDay = (iso: string) => ymd(new Date(new Date(iso).getTime() - 8 * 3600_000))
+const shiftLabel = (k: string) => SHIFTS.find(x => x.key === k)?.label ?? k
+const PALETTE = ['#0ea5e9', '#f59e0b', '#ef4444', '#10b981', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16', '#06b6d4', '#a855f7', '#64748b', '#eab308', '#22c55e', '#e11d48']
 const typeLabel = (t: string) => TYPES.find(x => x.key === t)?.label ?? t
 
 const ymd = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
@@ -54,15 +66,16 @@ function presetRange(p: Preset): [string, string] {
   return [today.slice(0, 7) + '-01', today]
 }
 
-type Agg = { key: string; label: string; total: number; count: number; scrap_clear: number; scrap_color: number; scrap_lump: number }
+type Agg = { key: string; label: string; total: number; count: number; by: Record<string, number> }
 function emptyAgg(key: string, label: string): Agg {
-  return { key, label, total: 0, count: 0, scrap_clear: 0, scrap_color: 0, scrap_lump: 0 }
+  return { key, label, total: 0, count: 0, by: {} }
 }
-function add(a: Agg, r: Row) {
+function add(a: Agg, r: Row, col: string) {
   const w = Number(r.weight ?? 0)
   a.total += w; a.count += 1
-  if (r.roll_type in a) (a as any)[r.roll_type] += w
+  a.by[col] = (a.by[col] ?? 0) + w
 }
+const machineKey = (r: Row) => r.machine_no || '(ไม่ระบุ)'
 
 export default function ScrapReport() {
   const [preset, setPreset] = useState<Preset>('7d')
@@ -70,6 +83,7 @@ export default function ScrapReport() {
   const [group, setGroup] = useState<Group>('day')
   const [sect, setSect] = useState<Sect>('all')
   const [machine, setMachine] = useState('')
+  const [split, setSplit] = useState<Split>('type')
   const [rows, setRows] = useState<Row[]>([])
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState('')
@@ -86,7 +100,8 @@ export default function ScrapReport() {
     setLoading(true); setErr('')
     // ขอบเวลาไทย (UTC+7)
     const fromIso = new Date(from + 'T00:00:00+07:00').toISOString()
-    const toIso = new Date(to + 'T23:59:59.999+07:00').toISOString()
+    // ดึงเผื่อถึง 08:00 ของวันถัดไป — กะดึกของวันสุดท้ายจะได้ครบ (ตัดตามวันอีกทีตอนกรอง)
+    const toIso = new Date(addDays(to, 1) + 'T07:59:59.999+07:00').toISOString()
     fetchAll<Row>(() => supabase
       .from('production_rolls')
       .select('id,roll_type,weight,machine_no,section,created_at,lot_no,work_order,customer,remark')
@@ -100,15 +115,29 @@ export default function ScrapReport() {
     return () => { alive = false }
   }, [from, to])
 
-  const scoped = useMemo(() => rows.filter(r =>
-    (sect === 'all' || (r.section ?? 'blow') === sect) && (!machine || r.machine_no === machine)
-  ), [rows, sect, machine])
+  // โหมดแยกกะ นับวันตาม "วันของกะ" · โหมดอื่นนับตามวันปฏิทิน
+  const dayOf = (r: Row) => split === 'shift' ? shiftDay(r.created_at) : thaiDay(r.created_at)
+  const scoped = useMemo(() => rows.filter(r => {
+    const d = dayOf(r)
+    return d >= from && d <= to
+      && (sect === 'all' || (r.section ?? 'blow') === sect) && (!machine || r.machine_no === machine)
+  }), [rows, sect, machine, split, from, to])
 
   const machines = useMemo(() =>
     [...new Set(rows.map(r => r.machine_no).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
   [rows])
 
-  const total = useMemo(() => { const a = emptyAgg('', 'รวม'); scoped.forEach(r => add(a, r)); return a }, [scoped])
+  const colOf = (r: Row) => split === 'type' ? r.roll_type : split === 'shift' ? shiftOf(r.created_at) : machineKey(r)
+  const cols: Col[] = useMemo(() => {
+    if (split === 'type') return TYPES.map(t => ({ ...t }))
+    if (split === 'shift') return SHIFTS
+    return [...new Set(scoped.map(machineKey))]
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+      .map((k, i) => ({ key: k, label: k, color: PALETTE[i % PALETTE.length] }))
+  }, [split, scoped])
+
+  const total = useMemo(() => { const a = emptyAgg('', 'รวม'); scoped.forEach(r => add(a, r, colOf(r))); return a }, [scoped, split])
+  const typeTotal = useMemo(() => { const a = emptyAgg('', 'รวม'); scoped.forEach(r => add(a, r, r.roll_type)); return a }, [scoped])
 
   const byPeriod = useMemo(() => {
     const m = new Map<string, Agg>()
@@ -119,64 +148,70 @@ export default function ScrapReport() {
       }
     }
     scoped.forEach(r => {
-      const k = bucketOf(thaiDay(r.created_at), group)
+      const k = bucketOf(dayOf(r), group)
       if (!m.has(k)) m.set(k, emptyAgg(k, bucketLabel(k, group)))
-      add(m.get(k)!, r)
+      add(m.get(k)!, r, colOf(r))
     })
     return [...m.values()].sort((a, b) => a.key.localeCompare(b.key))
-  }, [scoped, group, from, to])
+  }, [scoped, group, from, to, split])
 
   const byMachine = useMemo(() => {
     const m = new Map<string, Agg>()
     scoped.forEach(r => {
-      const k = r.machine_no || '(ไม่ระบุ)'
+      const k = machineKey(r)
       if (!m.has(k)) m.set(k, emptyAgg(k, k))
-      add(m.get(k)!, r)
+      add(m.get(k)!, r, r.roll_type)
     })
     return [...m.values()].sort((a, b) => b.total - a.total)
   }, [scoped])
 
+  const byShift = useMemo(() => {
+    const m = new Map<string, Agg>(SHIFTS.map(x => [x.key, emptyAgg(x.key, x.label)]))
+    scoped.forEach(r => add(m.get(shiftOf(r.created_at))!, r, r.roll_type))
+    return [...m.values()]
+  }, [scoped])
+
   const periodsWithData = byPeriod.filter(p => p.count > 0).length
   const avg = byPeriod.length ? total.total / byPeriod.length : 0
+  const splitName = split === 'type' ? 'ชนิดเศษ' : split === 'machine' ? 'เครื่อง' : 'กะ'
   const groupName = group === 'day' ? 'วัน' : group === 'week' ? 'สัปดาห์' : 'เดือน'
 
   const btn = (on: boolean) =>
     `px-3 py-1.5 rounded-lg text-sm font-semibold border ${on ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`
 
-  const aggCols = (first: string) => [
+  const typeCols: Col[] = TYPES.map(t => ({ ...t }))
+  const aggCols = (first: string, cs: Col[]) => [
     { header: first, value: (r: Agg) => r.label },
-    { header: 'เศษใส (kg)', value: (r: Agg) => Number(r.scrap_clear.toFixed(1)) },
-    { header: 'เศษสี (kg)', value: (r: Agg) => Number(r.scrap_color.toFixed(1)) },
-    { header: 'เศษก้อน (kg)', value: (r: Agg) => Number(r.scrap_lump.toFixed(1)) },
+    ...cs.map(c => ({ header: `${c.label} (kg)`, value: (r: Agg) => Number((r.by[c.key] ?? 0).toFixed(1)) })),
     { header: 'รวม (kg)', value: (r: Agg) => Number(r.total.toFixed(1)) },
-    { header: 'จำนวนถุง/ครั้ง', value: (r: Agg) => r.count },
+    { header: 'จำนวนครั้ง', value: (r: Agg) => r.count },
   ]
 
-  const AggTable = ({ data, first }: { data: Agg[]; first: string }) => (
+  const AggTable = ({ data, first, cs, sum }: { data: Agg[]; first: string; cs: Col[]; sum: Agg }) => (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-full text-sm text-gray-800">
         <thead className="bg-gray-50 text-gray-500 text-xs">
           <tr>
             <th className="px-3 py-2 text-left">{first}</th>
-            {TYPES.map(t => <th key={t.key} className="px-3 py-2 text-right">{t.label} (kg)</th>)}
+            {cs.map(t => <th key={t.key} className="px-3 py-2 text-right whitespace-nowrap">{t.label} (kg)</th>)}
             <th className="px-3 py-2 text-right">รวม (kg)</th>
             <th className="px-3 py-2 text-right">ครั้ง</th>
           </tr>
         </thead>
         <tbody>
           {data.map(r => (
-            <tr key={r.key} className={`border-t border-gray-100 ${r.count ? '' : 'text-gray-300'}`}>
+            <tr key={r.key} className={`border-t border-gray-100 ${r.count ? '' : 'text-gray-400'}`}>
               <td className="px-3 py-2 whitespace-nowrap">{r.label}</td>
-              {TYPES.map(t => <td key={t.key} className="px-3 py-2 text-right">{num((r as any)[t.key])}</td>)}
+              {cs.map(t => <td key={t.key} className="px-3 py-2 text-right">{num(r.by[t.key] ?? 0)}</td>)}
               <td className="px-3 py-2 text-right font-bold">{num(r.total)}</td>
               <td className="px-3 py-2 text-right">{r.count}</td>
             </tr>
           ))}
           <tr className="border-t-2 border-gray-300 bg-amber-50 font-bold">
             <td className="px-3 py-2">รวม</td>
-            {TYPES.map(t => <td key={t.key} className="px-3 py-2 text-right">{num((total as any)[t.key])}</td>)}
-            <td className="px-3 py-2 text-right">{num(total.total)}</td>
-            <td className="px-3 py-2 text-right">{total.count}</td>
+            {cs.map(t => <td key={t.key} className="px-3 py-2 text-right">{num(sum.by[t.key] ?? 0)}</td>)}
+            <td className="px-3 py-2 text-right">{num(sum.total)}</td>
+            <td className="px-3 py-2 text-right">{sum.count}</td>
           </tr>
         </tbody>
       </table>
@@ -206,6 +241,12 @@ export default function ScrapReport() {
           <button className={btn(group === 'day')} onClick={() => setGroup('day')}>ต่อวัน</button>
           <button className={btn(group === 'week')} onClick={() => setGroup('week')}>ต่อ 7 วัน (สัปดาห์)</button>
           <button className={btn(group === 'month')} onClick={() => setGroup('month')}>ต่อเดือน</button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-gray-500 w-14">แยกตาม</span>
+          <button className={btn(split === 'type')} onClick={() => setSplit('type')}>ชนิดเศษ</button>
+          <button className={btn(split === 'machine')} onClick={() => setSplit('machine')}>ต่อเครื่อง</button>
+          <button className={btn(split === 'shift')} onClick={() => setSplit('shift')}>ต่อกะ</button>
           <span className="w-4" />
           <select value={sect} onChange={e => setSect(e.target.value as Sect)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white text-gray-700 [color-scheme:light]">
             <option value="all">ทุกแผนก</option>
@@ -217,6 +258,7 @@ export default function ScrapReport() {
             {machines.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
         </div>
+        {split === 'shift' && <p className="text-xs text-gray-400">กะเช้า 08:00–20:00 · กะดึก 20:00–08:00 — ช่วงหลังเที่ยงคืนถึง 08:00 นับเป็นกะดึกของวันก่อนหน้า</p>}
         {from > to && <p className="text-sm text-red-500">วันเริ่มต้องไม่เกินวันสิ้นสุด</p>}
         {err && <p className="text-sm text-red-500">⚠ {err}</p>}
       </div>
@@ -224,14 +266,14 @@ export default function ScrapReport() {
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <div className="bg-white rounded-xl shadow-sm p-3">
           <p className="text-xs text-gray-500">เศษรวม</p>
-          <p className="text-2xl font-bold text-amber-600">{num(total.total)} <span className="text-sm font-normal">kg</span></p>
-          <p className="text-xs text-gray-400">{total.count} ครั้ง</p>
+          <p className="text-2xl font-bold text-amber-600">{num(typeTotal.total)} <span className="text-sm font-normal">kg</span></p>
+          <p className="text-xs text-gray-400">{typeTotal.count} ครั้ง</p>
         </div>
         {TYPES.map(t => (
           <div key={t.key} className="bg-white rounded-xl shadow-sm p-3">
             <p className="text-xs text-gray-500">{t.label}</p>
-            <p className="text-2xl font-bold" style={{ color: t.color }}>{num((total as any)[t.key])} <span className="text-sm font-normal text-gray-500">kg</span></p>
-            <p className="text-xs text-gray-400">{total.total ? num((total as any)[t.key] / total.total * 100, 0) : 0}%</p>
+            <p className="text-2xl font-bold" style={{ color: t.color }}>{num(typeTotal.by[t.key] ?? 0)} <span className="text-sm font-normal text-gray-500">kg</span></p>
+            <p className="text-xs text-gray-400">{typeTotal.total ? num((typeTotal.by[t.key] ?? 0) / typeTotal.total * 100, 0) : 0}%</p>
           </div>
         ))}
         <div className="bg-white rounded-xl shadow-sm p-3">
@@ -246,16 +288,16 @@ export default function ScrapReport() {
       ) : (
         <>
           <div className="bg-white rounded-xl shadow-sm p-4">
-            <p className="font-semibold text-gray-700 mb-2">เศษต่อ{groupName}</p>
+            <p className="font-semibold text-gray-700 mb-2">เศษต่อ{groupName} · แยก{splitName}</p>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={byPeriod.map(p => ({ name: p.label, ...Object.fromEntries(TYPES.map(t => [t.label, Number((p as any)[t.key].toFixed(1))])) }))}>
+                <BarChart data={byPeriod.map(p => ({ name: p.label, ...Object.fromEntries(cols.map(t => [t.label, Number((p.by[t.key] ?? 0).toFixed(1))])) }))}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip formatter={(v: any) => `${num(Number(v))} kg`} />
                   <Legend />
-                  {TYPES.map(t => <Bar key={t.key} dataKey={t.label} stackId="s" fill={t.color} />)}
+                  {cols.map(t => <Bar key={t.key} dataKey={t.label} stackId="s" fill={t.color} isAnimationActive={false} />)}
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -263,18 +305,26 @@ export default function ScrapReport() {
 
           <div className="bg-white rounded-xl shadow-sm">
             <div className="flex items-center justify-between p-3">
-              <p className="font-semibold text-gray-700">ตารางเศษต่อ{groupName}</p>
-              <ExportButton rows={byPeriod} cols={aggCols(groupName)} fileName={`เศษต่อ${groupName}_${from}_${to}`} sheetName="เศษ" />
+              <p className="font-semibold text-gray-700">ตารางเศษต่อ{groupName} · แยก{splitName}</p>
+              <ExportButton rows={byPeriod} cols={aggCols(groupName, cols)} fileName={`เศษต่อ${groupName}_แยก${splitName}_${from}_${to}`} sheetName="เศษ" />
             </div>
-            <AggTable data={byPeriod} first={groupName} />
+            <AggTable data={byPeriod} first={groupName} cs={cols} sum={total} />
           </div>
 
           <div className="bg-white rounded-xl shadow-sm">
             <div className="flex items-center justify-between p-3">
               <p className="font-semibold text-gray-700">แยกตามเครื่อง</p>
-              <ExportButton rows={byMachine} cols={aggCols('เครื่อง')} fileName={`เศษตามเครื่อง_${from}_${to}`} sheetName="เครื่อง" />
+              <ExportButton rows={byMachine} cols={aggCols('เครื่อง', typeCols)} fileName={`เศษตามเครื่อง_${from}_${to}`} sheetName="เครื่อง" />
             </div>
-            {byMachine.length ? <AggTable data={byMachine} first="เครื่อง" /> : <p className="p-6 text-center text-gray-400 text-sm">ไม่มีเศษในช่วงนี้</p>}
+            {byMachine.length ? <AggTable data={byMachine} first="เครื่อง" cs={typeCols} sum={typeTotal} /> : <p className="p-6 text-center text-gray-400 text-sm">ไม่มีเศษในช่วงนี้</p>}
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm">
+            <div className="flex items-center justify-between p-3">
+              <p className="font-semibold text-gray-700">แยกตามกะ</p>
+              <ExportButton rows={byShift} cols={aggCols('กะ', typeCols)} fileName={`เศษตามกะ_${from}_${to}`} sheetName="กะ" />
+            </div>
+            <AggTable data={byShift} first="กะ" cs={typeCols} sum={typeTotal} />
           </div>
 
           <div className="bg-white rounded-xl shadow-sm">
@@ -282,6 +332,7 @@ export default function ScrapReport() {
               <p className="font-semibold text-gray-700">รายการชั่งเศษ</p>
               <ExportButton rows={scoped} fileName={`รายการเศษ_${from}_${to}`} sheetName="รายการ" cols={[
                 { header: 'เวลา', value: (r: Row) => new Date(r.created_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' }) },
+                { header: 'กะ', value: (r: Row) => shiftLabel(shiftOf(r.created_at)) },
                 { header: 'แผนก', value: (r: Row) => (r.section ?? 'blow') === 'rewind' ? 'กรอ' : 'ผลิต' },
                 { header: 'เครื่อง', value: 'machine_no' },
                 { header: 'ประเภท', value: (r: Row) => typeLabel(r.roll_type) },
@@ -292,14 +343,15 @@ export default function ScrapReport() {
               ]} />
             </div>
             <div className="overflow-x-auto max-h-96 overflow-y-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm text-gray-800">
                 <thead className="bg-gray-50 text-gray-500 text-xs sticky top-0">
-                  <tr>{['เวลา', 'แผนก', 'เครื่อง', 'ประเภท', 'น้ำหนัก (kg)', 'Lot', 'WO', 'หมายเหตุ'].map(h => <th key={h} className="px-3 py-2 text-left">{h}</th>)}</tr>
+                  <tr>{['เวลา', 'กะ', 'แผนก', 'เครื่อง', 'ประเภท', 'น้ำหนัก (kg)', 'Lot', 'WO', 'หมายเหตุ'].map(h => <th key={h} className="px-3 py-2 text-left">{h}</th>)}</tr>
                 </thead>
                 <tbody>
                   {scoped.map(r => (
                     <tr key={r.id} className="border-t border-gray-100">
                       <td className="px-3 py-1.5 whitespace-nowrap">{new Date(r.created_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
+                      <td className="px-3 py-1.5 whitespace-nowrap">{shiftOf(r.created_at) === 'day' ? 'เช้า' : 'ดึก'}</td>
                       <td className="px-3 py-1.5">{(r.section ?? 'blow') === 'rewind' ? 'กรอ' : 'ผลิต'}</td>
                       <td className="px-3 py-1.5">{r.machine_no}</td>
                       <td className="px-3 py-1.5">{typeLabel(r.roll_type)}</td>
@@ -309,7 +361,7 @@ export default function ScrapReport() {
                       <td className="px-3 py-1.5 text-gray-500">{r.remark ?? ''}</td>
                     </tr>
                   ))}
-                  {!scoped.length && <tr><td colSpan={8} className="p-6 text-center text-gray-400">ไม่มีเศษในช่วงนี้</td></tr>}
+                  {!scoped.length && <tr><td colSpan={9} className="p-6 text-center text-gray-400">ไม่มีเศษในช่วงนี้</td></tr>}
                 </tbody>
               </table>
             </div>

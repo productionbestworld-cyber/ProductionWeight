@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Scale, LayoutDashboard, Settings, Package, History, Warehouse as WarehouseIcon, ChevronDown, Wifi, WifiOff, AlertTriangle, Lock, Search, Boxes, CalendarClock, ClipboardList, Factory, Repeat } from 'lucide-react'
+import { Scale, LayoutDashboard, Settings, Package, History, Warehouse as WarehouseIcon, ChevronDown, Wifi, WifiOff, AlertTriangle, Lock, Search, Boxes, CalendarClock, ClipboardList, Factory, Repeat, Trash2 } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import WeighStation from './pages/WeighStation'
 import Dashboard from './pages/Dashboard'
@@ -18,9 +18,10 @@ import WeighLog from './pages/WeighLog'
 import RollSearch from './pages/RollSearch'
 import ProductionDashboard from './pages/ProductionDashboard'
 import RewindDashboard from './pages/RewindDashboard'
+import ScrapReport from './pages/ScrapReport'
 import { APP_VERSION, APP_BUILD_DATE, CHANGELOG } from './version'
 
-type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings' | 'admin' | 'review' | 'nc' | 'products' | 'planning' | 'combined' | 'weighlog' | 'rollsearch' | 'proddash' | 'rewinddash'
+type Page = 'weigh' | 'transfer' | 'dashboard' | 'history' | 'warehouse' | 'settings' | 'admin' | 'review' | 'nc' | 'products' | 'planning' | 'combined' | 'weighlog' | 'rollsearch' | 'proddash' | 'rewinddash' | 'scrap'
 type Dept = DeptType
 
 // section ของ "ข้อมูล" (อยู่บนม้วน/เครื่อง) — คนละเรื่องกับแผนกที่ใช้ล็อกอิน
@@ -200,6 +201,16 @@ export default function App() {
     if (isRewindDash) return <RewindDashboard />
   }
 
+  // ── ลิงก์แยก: รายงานเศษ — ...?scrap=1 หรือ /scrap ──
+  {
+    const sp = new URLSearchParams(window.location.search)
+    const path = window.location.pathname.replace(/\/+$/, '').toLowerCase()
+    const isScrap = sp.get('scrap') !== null
+      || window.location.hash.replace('#', '').toLowerCase() === 'scrap'
+      || path === '/scrap'
+    if (isScrap) return <ScrapReport />
+  }
+
   // ── ลิงก์แยก: ค้นหาม้วน — ...?rollsearch=1 หรือ /rollsearch ──
   {
     const sp = new URLSearchParams(window.location.search)
@@ -342,6 +353,7 @@ export default function App() {
     { key: 'products',  label: 'คลังข้อมูล',     icon: Boxes,           own: ['purchase'], view: ['sales','planning','blow'] },
     { key: 'proddash',  label: 'แดชบอร์ดผลิต',  icon: Factory,         own: [], view: ['blow'] },
     { key: 'rewinddash',label: 'แดชบอร์ดกรอ',   icon: Repeat,          own: [], view: ['rewind'] },
+    { key: 'scrap',     label: 'รายงานเศษ',     icon: Trash2,          own: [], view: ['blow','rewind','planning','warehouse'] },
     { key: 'dashboard', label: 'Dashboard',      icon: LayoutDashboard, own: [], view: ['blow','rewind','warehouse','planning','sales'] },
     { key: 'combined',  label: 'รวมเทียบทั้งปี',  icon: LayoutDashboard, own: [], view: ['planning','sales'] },
     { key: 'rollsearch',label: 'ค้นหาม้วน',     icon: Search,          own: [], view: ['blow','rewind','warehouse','logistics','sales','planning'] },
@@ -568,6 +580,17 @@ export default function App() {
               </a>
             </div>
             <RewindDashboard />
+          </div>
+        )}
+        {page === 'scrap'     && (
+          <div>
+            <div className="flex justify-end px-4 pt-3">
+              <a href="/scrap" target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg px-3 py-1.5">
+                🔗 เปิดแยกหน้าต่าง
+              </a>
+            </div>
+            <ScrapReport />
           </div>
         )}
         {page === 'products'  && <ProductsPage readOnly={pageReadOnly} />}

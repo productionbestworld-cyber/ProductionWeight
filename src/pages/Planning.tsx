@@ -143,7 +143,16 @@ export default function Planning({ dept }: { dept?: string }) {
     // โปรไฟล์เครื่อง + สรุปงาน (เล็ก) — ใช้ทั้งสองจังหวะ
     const [{ data: profs }, { data: sums }] = await Promise.all([
       supabase.from('machine_profiles').select('machine_no, lot_no, work_order, sale_order, product_name, cust_name, width_cm, width_unit, thick_mc, planned_qty, section'),
-      supabase.from('job_summaries').select('machine_no, lot_no, work_order, planned_qty, closed_at').limit(2000),
+      // ⚠ .limit(2000) ไม่ช่วย — PostgREST ตัดเหลือ max-rows 1000 อยู่ดี และไม่ได้เรียงลำดับ
+      //   แปลว่าได้ 1000 แถวแบบสุ่ม → เป้า/ยอดปิดของบาง WO หายไปเงียบ ๆ · ดึงทีละหน้าให้ครบ
+      //   ⚠ .order ต้อง unique — fetchAll แบ่งหน้าด้วย .range() ถ้าเรียงด้วยคีย์ที่ซ้ำได้
+      //     แถวเดียวกันจะโผล่ 2 หน้า (หรือหายไป) → เป้า/ยอดปิดของ WO เพี้ยน
+      //   ⚠ เรียงเก่า→ใหม่ — buildJobs ยึดเป้าของสรุปแรกที่เจอ · WO ที่เดินซ้ำหลายรอบ (เป้าต่างกัน)
+      //     ต้องได้เป้ารอบแรกเหมือนเดิม (id เป็น uuid เรียงตาม id ไม่ได้ลำดับเวลา)
+      fetchAll(() => supabase.from('job_summaries')
+        .select('id, machine_no, lot_no, work_order, planned_qty, closed_at')
+        .order('closed_at', { ascending: true })
+        .order('id', { ascending: true })).then(d => ({ data: d })),
     ])
     const P = profs ?? [], S = sums ?? []
 

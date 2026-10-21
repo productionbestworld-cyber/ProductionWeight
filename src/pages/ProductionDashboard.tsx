@@ -61,13 +61,11 @@ function thaiTime(iso?: string) {
   if (!iso) return '—'
   try { return new Date(iso).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) } catch { return '—' }
 }
-function num(n: number, d = 1) {
+function num(n: number, d = 2) {
   return (n ?? 0).toLocaleString('th-TH', { minimumFractionDigits: d, maximumFractionDigits: d })
 }
 function fmtKg(n: number) {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
-  if (n >= 1_000)     return (n / 1_000).toFixed(1) + 'k'
-  return String(Math.round(n))
+  return num(n, 2)
 }
 // tooltip ของกราฟ — kg ใส่ทศนิยม 1 ตำแหน่ง ส่วนค่าที่เป็น % ใส่หน่วย %
 function KgTooltip({ active, payload, label }: any) {
@@ -80,7 +78,7 @@ function KgTooltip({ active, payload, label }: any) {
           <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: pl.color }} />
           <span className="text-gray-600">{pl.name}:</span>
           <span className="font-bold text-gray-800">
-            {String(pl.dataKey).includes('%') ? `${pl.value}%` : `${num(pl.value, 1)} kg`}
+            {String(pl.dataKey).includes('%') ? `${pl.value}%` : `${num(pl.value, 2)} kg`}
           </span>
         </div>
       ))}
@@ -186,7 +184,7 @@ function MiniBreak({ title, rows, limit = 8, tone = 'bg-rose-400' }: { title: st
             <div key={r.key} className="space-y-0.5">
               <div className="flex items-center justify-between gap-2 text-[11px]">
                 <span className="text-gray-700 truncate font-mono" title={r.key}>{r.key}</span>
-                <span className="text-gray-500 whitespace-nowrap"><b className="text-gray-700">{num(r.kg, 0)}</b> kg · {r.rolls}</span>
+                <span className="text-gray-500 whitespace-nowrap"><b className="text-gray-700">{num(r.kg, 2)}</b> kg · {r.rolls}</span>
               </div>
               <Bar pct={(r.kg / max) * 100} tone={tone} />
             </div>
@@ -282,12 +280,12 @@ function Drill({ title, rows, dims, fileName }: { title: string; rows: Roll[]; d
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-bold text-gray-800">🔎 {title}</span>
-        <span className="text-[11px] bg-gray-100 text-gray-600 rounded-full px-2 py-0.5">รวม {num(totalKg, 0)} kg · {rows.length.toLocaleString('th-TH')} ม้วน</span>
-        <span className="text-[11px] bg-emerald-50 text-emerald-700 rounded-full px-2 py-0.5">ผลิตดี {num(goodKg, 0)} kg · {good.length} · Yield {yieldPct.toFixed(1)}%</span>
-        <span className="text-[11px] bg-red-50 text-red-600 rounded-full px-2 py-0.5">ม้วนเสีย {num(badKg, 0)} kg · {bad.length}</span>
-        <span className="text-[11px] bg-amber-50 text-amber-600 rounded-full px-2 py-0.5">เศษ {num(scrapKg, 0)} kg · {scrap.length}</span>
+        <span className="text-[11px] bg-gray-100 text-gray-600 rounded-full px-2 py-0.5">รวม {num(totalKg, 2)} kg · {rows.length.toLocaleString('th-TH')} ม้วน</span>
+        <span className="text-[11px] bg-emerald-50 text-emerald-700 rounded-full px-2 py-0.5">ผลิตดี {num(goodKg, 2)} kg · {good.length} · Yield {yieldPct.toFixed(2)}%</span>
+        <span className="text-[11px] bg-red-50 text-red-600 rounded-full px-2 py-0.5">ม้วนเสีย {num(badKg, 2)} kg · {bad.length}</span>
+        <span className="text-[11px] bg-amber-50 text-amber-600 rounded-full px-2 py-0.5">เศษ {num(scrapKg, 2)} kg · {scrap.length}</span>
         {sent.length > 0 && (
-          <span className="text-[11px] bg-blue-50 text-blue-600 rounded-full px-2 py-0.5">ส่งไปกรอ {sent.length} ม้วน ({num(sumKg(sent), 0)} kg)</span>
+          <span className="text-[11px] bg-blue-50 text-blue-600 rounded-full px-2 py-0.5">ส่งไปกรอ {sent.length} ม้วน ({num(sumKg(sent), 2)} kg)</span>
         )}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
@@ -664,7 +662,7 @@ export default function ProductionDashboard() {
                     <td className="px-3 py-2.5 text-right text-amber-600 whitespace-nowrap">{num(r.scrapKg)}</td>
                     <td className="px-3 py-2.5 text-right font-bold text-gray-800 whitespace-nowrap">{num(r.total)}</td>
                     <td className={`px-3 py-2.5 text-right font-bold whitespace-nowrap ${r.yieldPct >= 95 ? 'text-emerald-600' : r.yieldPct >= 90 ? 'text-amber-600' : 'text-red-500'}`}>
-                      {r.yieldPct.toFixed(1)}%
+                      {r.yieldPct.toFixed(2)}%
                     </td>
                     <td className="px-3 py-2.5 w-28"><Bar pct={(r.total / max) * 100} tone="bg-brand-500" /></td>
                     <td className="px-3 py-2.5 text-gray-600 font-mono text-xs truncate max-w-[140px]">
@@ -692,7 +690,7 @@ export default function ProductionDashboard() {
                   <td className="px-3 py-2.5 text-right text-red-600">{num(stat.badKg)}</td>
                   <td className="px-3 py-2.5 text-right text-amber-700">{num(stat.scrapKg)}</td>
                   <td className="px-3 py-2.5 text-right">{num(stat.total)}</td>
-                  <td className="px-3 py-2.5 text-right">{stat.yieldPct.toFixed(1)}%</td>
+                  <td className="px-3 py-2.5 text-right">{stat.yieldPct.toFixed(2)}%</td>
                   <td colSpan={3} />
                 </tr>
               </tfoot>
@@ -706,25 +704,25 @@ export default function ProductionDashboard() {
   // ── ข้อมูลที่ป้อนให้กราฟ (recharts) ──────────────────────────────────────
   const chartDaily = useMemo(() => byDay.slice(0, 45).slice().reverse().map(d => ({
     key: d.key.slice(5),                       // MM-DD อ่านง่ายบนแกน x
-    'ผลิตดี': Number(d.goodKg.toFixed(1)),
-    'ม้วนเสีย': Number(d.badKg.toFixed(1)),
-    'เศษ': Number(d.scrapKg.toFixed(1)),
-    'Yield %': Number(d.yieldPct.toFixed(1)),
+    'ผลิตดี': Number(d.goodKg.toFixed(2)),
+    'ม้วนเสีย': Number(d.badKg.toFixed(2)),
+    'เศษ': Number(d.scrapKg.toFixed(2)),
+    'Yield %': Number(d.yieldPct.toFixed(2)),
   })), [byDay])
   const chartMachine = useMemo(() => byMachine.slice(0, 15).map(m => ({
     key: m.key,
-    'ผลิตดี': Number(m.goodKg.toFixed(1)),
-    'ม้วนเสีย': Number(m.badKg.toFixed(1)),
-    'เศษ': Number(m.scrapKg.toFixed(1)),
+    'ผลิตดี': Number(m.goodKg.toFixed(2)),
+    'ม้วนเสีย': Number(m.badKg.toFixed(2)),
+    'เศษ': Number(m.scrapKg.toFixed(2)),
   })), [byMachine])
   const chartPareto = useMemo(() => paretoRows.slice(0, 15).map(r => ({
     key: r.key.length > 18 ? r.key.slice(0, 17) + '…' : r.key,
-    'ม้วนเสีย': Number(r.badKg.toFixed(1)),
-    'เศษ': Number(r.scrapKg.toFixed(1)),
-    '% สะสม': Number(r.cumPct.toFixed(1)),
+    'ม้วนเสีย': Number(r.badKg.toFixed(2)),
+    'เศษ': Number(r.scrapKg.toFixed(2)),
+    '% สะสม': Number(r.cumPct.toFixed(2)),
   })), [paretoRows])
   const topReasonNote = paretoRows.length
-    ? `อันดับ 1: ${paretoRows[0].key} (${paretoRows[0].pct.toFixed(0)}%)`
+    ? `อันดับ 1: ${paretoRows[0].key} (${paretoRows[0].pct.toFixed(2)}%)`
     : 'ไม่มีของเสียในช่วงนี้'
 
   const tabDesc = TABS.find(t => t.key === tab)?.desc ?? ''
@@ -802,7 +800,7 @@ export default function ProductionDashboard() {
         {rewoundOut.rolls > 0 && (
           <p className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
             🔁 ช่วงนี้มีม้วนที่ติ๊กว่า <b>"มาจากกรอ"</b> {rewoundOut.rolls.toLocaleString('th-TH')} ม้วน ·
-            {' '}{rewoundOut.kg.toLocaleString('th-TH', { maximumFractionDigits: 1 })} kg —
+            {' '}{rewoundOut.kg.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg —
             <b> ไม่ถูกนับในยอดผลิต/Yield ของหน้านี้</b> เพราะเนื้อวัสดุถูกนับไปแล้วตอนชั่งเป็นม้วนเสีย (กันนับซ้ำ) ·
             ดูรายละเอียดม้วนพวกนี้ได้ที่ <b>แดชบอร์ดกรอ</b>
           </p>
@@ -866,9 +864,9 @@ export default function ProductionDashboard() {
         <div className="space-y-4">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <Kpi icon="🏭" tone="blue"  label="ผลิตทั้งหมด" value={num(stat.total)}   unit="kg" sub={`${stat.rolls.toLocaleString('th-TH')} ม้วน · ${stat.wos.toLocaleString('th-TH')} WO · ${stat.days} วัน`} />
-            <Kpi icon="✅" tone="green" label="ผลิตดี (FG)" value={num(stat.goodKg)}  unit="kg" sub={`${stat.good.length.toLocaleString('th-TH')} ม้วน · Yield ${stat.yieldPct.toFixed(1)}%`} />
+            <Kpi icon="✅" tone="green" label="ผลิตดี (FG)" value={num(stat.goodKg)}  unit="kg" sub={`${stat.good.length.toLocaleString('th-TH')} ม้วน · Yield ${stat.yieldPct.toFixed(2)}%`} />
             <Kpi icon="🔁" tone="amber" label="ออกไปกรอ"    value={num(stat.badKg)}   unit="kg" sub={`${stat.bad.length.toLocaleString('th-TH')} ม้วน`} />
-            <Kpi icon="🗑" tone="red"   label="เศษ"         value={num(stat.scrapKg)} unit="kg" sub={`ใส ${num(stat.clearKg, 0)} · สี ${num(stat.colorKg, 0)} · ก้อน ${num(stat.lumpKg, 0)}`} />
+            <Kpi icon="🗑" tone="red"   label="เศษ"         value={num(stat.scrapKg)} unit="kg" sub={`ใส ${num(stat.clearKg, 2)} · สี ${num(stat.colorKg, 2)} · ก้อน ${num(stat.lumpKg, 2)}`} />
           </div>
 
           {/* Top 10 WO และ Top เครื่อง */}
@@ -888,7 +886,7 @@ export default function ProductionDashboard() {
                         <div className="flex items-center justify-between gap-2 text-xs">
                           <span className="font-mono font-bold text-gray-700 truncate">{r.key}</span>
                           <span className="text-gray-500 whitespace-nowrap">
-                            <b className="text-emerald-600">{num(r.goodKg, 0)}</b> / {num(r.total, 0)} kg · {r.yieldPct.toFixed(0)}%
+                            <b className="text-emerald-600">{num(r.goodKg, 2)}</b> / {num(r.total, 2)} kg · {r.yieldPct.toFixed(2)}%
                           </span>
                         </div>
                         <Bar pct={(r.total / max) * 100} tone="bg-brand-500" />
@@ -951,7 +949,7 @@ export default function ProductionDashboard() {
             <Kpi icon="⚠️" tone="red"   label="ของเสียรวม" value={num(stat.badKg + stat.scrapKg)} unit="kg"
               sub={`${stat.total ? ((stat.badKg + stat.scrapKg) / stat.total * 100).toFixed(2) : '0.00'}% ของยอดชั่งทั้งหมด`} />
             <Kpi icon="🔧" tone="amber" label="ม้วนเสีย"   value={num(stat.badKg)} unit="kg" sub={`${stat.bad.length.toLocaleString('th-TH')} ม้วน`} />
-            <Kpi icon="🗑" tone="amber" label="เศษ"        value={num(stat.scrapKg)} unit="kg" sub={`ใส ${num(stat.clearKg, 0)} · สี ${num(stat.colorKg, 0)} · ก้อน ${num(stat.lumpKg, 0)}`} />
+            <Kpi icon="🗑" tone="amber" label="เศษ"        value={num(stat.scrapKg)} unit="kg" sub={`ใส ${num(stat.clearKg, 2)} · สี ${num(stat.colorKg, 2)} · ก้อน ${num(stat.lumpKg, 2)}`} />
             <Kpi icon="🔎" tone="blue"  label="จำนวนสาเหตุ" value={byReason.length.toLocaleString('th-TH')} unit="แบบ"
               sub={topReasonNote} />
           </div>
@@ -1021,11 +1019,11 @@ export default function ProductionDashboard() {
                       <td className="px-3 py-2 text-right text-red-500">{num(r.badKg)}</td>
                       <td className="px-3 py-2 text-right text-amber-600">{num(r.scrapKg)}</td>
                       <td className="px-3 py-2 text-right font-bold text-gray-800">{num(r.total)}</td>
-                      <td className="px-3 py-2 text-right text-gray-600">{r.pct.toFixed(1)}%</td>
+                      <td className="px-3 py-2 text-right text-gray-600">{r.pct.toFixed(2)}%</td>
                       <td className="px-3 py-2 w-40">
                         <div className="flex items-center gap-1.5">
                           <Bar pct={r.cumPct} tone="bg-blue-500" />
-                          <span className="text-[10px] text-gray-400 w-9 text-right">{r.cumPct.toFixed(0)}%</span>
+                          <span className="text-[10px] text-gray-400 w-9 text-right">{r.cumPct.toFixed(2)}%</span>
                         </div>
                       </td>
                       <td className="px-3 py-2 text-gray-600 font-mono text-xs truncate max-w-[140px]">{r.machines.join(', ') || '—'}</td>
@@ -1070,7 +1068,7 @@ export default function ProductionDashboard() {
                           <div className="flex items-center justify-between gap-2 text-xs">
                             <span className="font-semibold text-gray-700 truncate">{r.key}</span>
                             <span className="text-gray-500 whitespace-nowrap">
-                              เสีย <b className="text-red-500">{num(r.badKg, 0)}</b> · เศษ <b className="text-amber-600">{num(r.scrapKg, 0)}</b> kg · {r.rolls} ม้วน
+                              เสีย <b className="text-red-500">{num(r.badKg, 2)}</b> · เศษ <b className="text-amber-600">{num(r.scrapKg, 2)}</b> kg · {r.rolls} ม้วน
                             </span>
                           </div>
                           <Bar pct={(r.total / max) * 100} tone="bg-red-400" />
@@ -1095,8 +1093,8 @@ export default function ProductionDashboard() {
                   <p className="font-bold text-gray-700 text-sm">🔁 ม้วนเสียที่ส่งไปกรอ</p>
                   <p className="text-[11px] text-gray-500 mt-0.5">
                     ส่งไปกรอ <b className="text-emerald-600">{reworkStat.rolls.toLocaleString('th-TH')}</b> ม้วน
-                    ({num(reworkStat.kg, 0)} kg) จากม้วนเสียทั้งหมด {reworkStat.badRolls.toLocaleString('th-TH')} ม้วน
-                    {reworkStat.badRolls > 0 && <> · คิดเป็น {(reworkStat.rolls / reworkStat.badRolls * 100).toFixed(0)}%</>}
+                    ({num(reworkStat.kg, 2)} kg) จากม้วนเสียทั้งหมด {reworkStat.badRolls.toLocaleString('th-TH')} ม้วน
+                    {reworkStat.badRolls > 0 && <> · คิดเป็น {(reworkStat.rolls / reworkStat.badRolls * 100).toFixed(2)}%</>}
                     {' · '}กรอเสร็จ {reworkStat.done} · กำลังกรอ {reworkStat.doing}
                   </p>
                 </div>

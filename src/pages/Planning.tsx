@@ -4,7 +4,7 @@ import { supabase, fetchAll } from '../lib/supabase'
 import { rewoundFlag, withRewoundNote } from '../lib/rework'
 import ExportButton from '../components/ExportButton'
 
-function fmt(n: number | null | undefined, d = 1) {
+function fmt(n: number | null | undefined, d = 2) {
   if (n == null || isNaN(n as number)) return (0).toFixed(d)
   return (n as number).toLocaleString('th-TH', { minimumFractionDigits: d, maximumFractionDigits: d })
 }
@@ -233,12 +233,12 @@ export default function Planning({ dept }: { dept?: string }) {
                 { header:'เริ่มผลิต', value:(j:Job)=>dt(j.start), width:14 },
                 { header:'จบงาน', value:(j:Job)=>j.active?'':dt(j.end||j.closedAt), width:14 },
                 { header:'เป้า (kg)', value:'target' },
-                { header:'ผลิตได้ (kg)', value:(j:Job)=>+j.goodKg.toFixed(1) },
+                { header:'ผลิตได้ (kg)', value:(j:Job)=>+j.goodKg.toFixed(2) },
                 { header:'ม้วนดี', value:'goodRolls' },
-                { header:'ดี+กรอ รวม (kg)', value:(j:Job)=>+(j.goodKg+j.badKg).toFixed(1) },
-                { header:'ม้วนกรอ (kg)', value:(j:Job)=>+j.badKg.toFixed(1) },
-                { header:'เศษ (kg)', value:(j:Job)=>+j.scrapKg.toFixed(1) },
-                { header:'คงเหลือขาด ไม่รวมกรอ (kg)', value:(j:Job)=>+Math.max(0, j.target - j.goodKg).toFixed(1) },
+                { header:'ดี+กรอ รวม (kg)', value:(j:Job)=>+(j.goodKg+j.badKg).toFixed(2) },
+                { header:'ม้วนกรอ (kg)', value:(j:Job)=>+j.badKg.toFixed(2) },
+                { header:'เศษ (kg)', value:(j:Job)=>+j.scrapKg.toFixed(2) },
+                { header:'คงเหลือขาด ไม่รวมกรอ (kg)', value:(j:Job)=>+Math.max(0, j.target - j.goodKg).toFixed(2) },
               ]}
               fileName="แผนงาน_ติดตามผลิต" sheetName="ติดตามงาน" label="📥 Export" />
             <button onClick={load} className="flex items-center gap-1.5 text-slate-400 hover:text-white text-xs bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-lg">
@@ -255,15 +255,15 @@ export default function Planning({ dept }: { dept?: string }) {
           </div>
           <div className="bg-slate-900 border-l-4 border-brand-500 border border-slate-800 rounded-xl p-3">
             <p className="text-[11px] text-slate-500">ผลิตได้รวม</p>
-            <p className="text-2xl font-black text-brand-300">{fmt(totGood,0)} <span className="text-xs font-normal text-slate-500">kg</span></p>
+            <p className="text-2xl font-black text-brand-300">{fmt(totGood, 2)} <span className="text-xs font-normal text-slate-500">kg</span></p>
           </div>
           <div className="bg-slate-900 border-l-4 border-amber-500 border border-slate-800 rounded-xl p-3">
             <p className="text-[11px] text-slate-500">ม้วนกรอรวม</p>
-            <p className="text-2xl font-black text-amber-400">{fmt(totBad,0)} <span className="text-xs font-normal text-slate-500">kg</span></p>
+            <p className="text-2xl font-black text-amber-400">{fmt(totBad, 2)} <span className="text-xs font-normal text-slate-500">kg</span></p>
           </div>
           <div className="bg-slate-900 border-l-4 border-red-500 border border-slate-800 rounded-xl p-3">
             <p className="text-[11px] text-slate-500">เศษรวม</p>
-            <p className="text-2xl font-black text-red-400">{fmt(totScrap,0)} <span className="text-xs font-normal text-slate-500">kg</span></p>
+            <p className="text-2xl font-black text-red-400">{fmt(totScrap, 2)} <span className="text-xs font-normal text-slate-500">kg</span></p>
           </div>
         </div>
 
@@ -316,7 +316,7 @@ export default function Planning({ dept }: { dept?: string }) {
                   <tr><td colSpan={12} className="py-16 text-center text-slate-600">ไม่มีงาน</td></tr>
                 ) : filtered.map(j => {
                   const remain = Math.max(0, j.target - j.goodKg)
-                  const pct = j.target > 0 ? Math.min(100, Math.round(j.goodKg / j.target * 100)) : 0
+                  const pct = j.target > 0 ? Math.min(100, j.goodKg / j.target * 100) : 0
                   return (
                     <tr key={j.key} onClick={() => openDetail(j)} title="คลิกดูรายละเอียดม้วน"
                       className={`hover:bg-slate-800/50 cursor-pointer ${j.active ? 'bg-green-500/5' : ''}`}>
@@ -340,7 +340,7 @@ export default function Planning({ dept }: { dept?: string }) {
                       </td>
                       <td className="px-3 py-2 text-slate-300 text-xs whitespace-nowrap">{dt(j.start)}</td>
                       <td className="px-3 py-2 text-slate-300 text-xs whitespace-nowrap">{j.active ? '—' : dt(j.end || j.closedAt)}</td>
-                      <td className="px-3 py-2 text-right text-slate-300 whitespace-nowrap">{j.target ? fmt(j.target,0) : '—'}</td>
+                      <td className="px-3 py-2 text-right text-slate-300 whitespace-nowrap">{j.target ? fmt(j.target, 2) : '—'}</td>
                       <td className="px-3 py-2 text-right whitespace-nowrap"><b className="text-green-400">{fmt(j.goodKg)}</b><span className="text-slate-600 text-[10px]"> · {j.goodRolls}ม้วน</span></td>
                       <td className="px-3 py-2 text-right whitespace-nowrap"><b className="text-emerald-300">{fmt(j.goodKg+j.badKg)}</b><span className="text-slate-600 text-[10px]"> · {j.goodRolls+j.badRolls}ม้วน</span></td>
                       <td className="px-3 py-2 text-right text-amber-400 whitespace-nowrap">{j.badKg ? fmt(j.badKg) : '—'}</td>
@@ -354,7 +354,7 @@ export default function Planning({ dept }: { dept?: string }) {
                             <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden min-w-[40px]">
                               <div className={`h-full rounded-full ${pct >= 100 ? 'bg-green-500' : pct >= 70 ? 'bg-brand-500' : pct >= 40 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${pct}%` }}/>
                             </div>
-                            <span className="text-[11px] font-semibold text-slate-400 w-9 text-right">{pct}%</span>
+                            <span className="text-[11px] font-semibold text-slate-400 w-9 text-right">{pct.toFixed(2)}%</span>
                           </div>
                         ) : <span className="text-slate-600 text-xs">—</span>}
                       </td>

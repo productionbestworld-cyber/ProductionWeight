@@ -41,7 +41,7 @@ const typeLabel = (t: string) => TYPES.find(x => x.key === t)?.label ?? t
 
 const ymd = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
 const thaiDay = (iso: string) => ymd(new Date(iso))
-const num = (n: number, d = 1) => (n ?? 0).toLocaleString('th-TH', { minimumFractionDigits: d, maximumFractionDigits: d })
+const num = (n: number, d = 2) => (n ?? 0).toLocaleString('th-TH', { minimumFractionDigits: d, maximumFractionDigits: d })
 function addDays(s: string, n: number) {
   const d = new Date(s + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10)
 }
@@ -182,8 +182,8 @@ export default function ScrapReport() {
   const typeCols: Col[] = TYPES.map(t => ({ ...t }))
   const aggCols = (first: string, cs: Col[]) => [
     { header: first, value: (r: Agg) => r.label },
-    ...cs.map(c => ({ header: `${c.label} (kg)`, value: (r: Agg) => Number((r.by[c.key] ?? 0).toFixed(1)) })),
-    { header: 'รวม (kg)', value: (r: Agg) => Number(r.total.toFixed(1)) },
+    ...cs.map(c => ({ header: `${c.label} (kg)`, value: (r: Agg) => Number((r.by[c.key] ?? 0).toFixed(2)) })),
+    { header: 'รวม (kg)', value: (r: Agg) => Number(r.total.toFixed(2)) },
     { header: 'จำนวนครั้ง', value: (r: Agg) => r.count },
   ]
 
@@ -273,7 +273,7 @@ export default function ScrapReport() {
           <div key={t.key} className="bg-white rounded-xl shadow-sm p-3">
             <p className="text-xs text-gray-500">{t.label}</p>
             <p className="text-2xl font-bold" style={{ color: t.color }}>{num(typeTotal.by[t.key] ?? 0)} <span className="text-sm font-normal text-gray-500">kg</span></p>
-            <p className="text-xs text-gray-400">{typeTotal.total ? num((typeTotal.by[t.key] ?? 0) / typeTotal.total * 100, 0) : 0}%</p>
+            <p className="text-xs text-gray-400">{typeTotal.total ? num((typeTotal.by[t.key] ?? 0) / typeTotal.total * 100, 2) : 0}%</p>
           </div>
         ))}
         <div className="bg-white rounded-xl shadow-sm p-3">
@@ -291,7 +291,7 @@ export default function ScrapReport() {
             <p className="font-semibold text-gray-700 mb-2">เศษต่อ{groupName} · แยก{splitName}</p>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={byPeriod.map(p => ({ name: p.label, ...Object.fromEntries(cols.map(t => [t.label, Number((p.by[t.key] ?? 0).toFixed(1))])) }))}>
+                <BarChart data={byPeriod.map(p => ({ name: p.label, ...Object.fromEntries(cols.map(t => [t.label, Number((p.by[t.key] ?? 0).toFixed(2))])) }))}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} />

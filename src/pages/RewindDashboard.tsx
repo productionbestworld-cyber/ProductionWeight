@@ -91,13 +91,11 @@ function thaiTime(iso?: string) {
   if (!iso) return '—'
   try { return new Date(iso).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) } catch { return '—' }
 }
-function num(n: number, d = 1) {
+function num(n: number, d = 2) {
   return (n ?? 0).toLocaleString('th-TH', { minimumFractionDigits: d, maximumFractionDigits: d })
 }
 function fmtKg(n: number) {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
-  if (n >= 1_000)     return (n / 1_000).toFixed(1) + 'k'
-  return String(Math.round(n))
+  return num(n, 2)
 }
 function KgTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null
@@ -108,7 +106,7 @@ function KgTooltip({ active, payload, label }: any) {
         <div key={pl.dataKey} className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: pl.color }} />
           <span className="text-gray-600">{pl.name}:</span>
-          <span className="font-bold text-gray-800">{num(pl.value, 1)} kg</span>
+          <span className="font-bold text-gray-800">{num(pl.value, 2)} kg</span>
         </div>
       ))}
     </div>
@@ -186,7 +184,7 @@ function MiniBreak({ title, rows, limit = 8, tone = 'bg-brand-400' }: { title: s
             <div key={r.key} className="space-y-0.5">
               <div className="flex items-center justify-between gap-2 text-[11px]">
                 <span className="text-gray-700 truncate font-mono" title={r.key}>{r.key}</span>
-                <span className="text-gray-500 whitespace-nowrap"><b className="text-gray-700">{num(r.kg, 0)}</b> kg · {r.rolls}</span>
+                <span className="text-gray-500 whitespace-nowrap"><b className="text-gray-700">{num(r.kg, 2)}</b> kg · {r.rolls}</span>
               </div>
               <Bar pct={(r.kg / max) * 100} tone={tone} />
             </div>
@@ -630,14 +628,14 @@ export default function RewindDashboard() {
   // ── ข้อมูลกราฟ ─────────────────────────────────────────────────────────────
   const chartDaily = useMemo(() => byDay.slice(0, 45).slice().reverse().map(d => ({
     key: d.key.slice(5),
-    'มาจากผลิต': Number(d.inKg.toFixed(1)),
-    'กรอออก-ดี': Number(d.goodKg.toFixed(1)),
-    'เศษ': Number(d.scrapKg.toFixed(1)),
+    'มาจากผลิต': Number(d.inKg.toFixed(2)),
+    'กรอออก-ดี': Number(d.goodKg.toFixed(2)),
+    'เศษ': Number(d.scrapKg.toFixed(2)),
   })), [byDay])
   const chartStation = useMemo(() => byStation.slice(0, 15).map(m => ({
     key: m.key,
-    'กรอดี': Number(m.goodKg.toFixed(1)),
-    'เศษ': Number(m.scrapKg.toFixed(1)),
+    'กรอดี': Number(m.goodKg.toFixed(2)),
+    'เศษ': Number(m.scrapKg.toFixed(2)),
   })), [byStation])
 
   function resetFilters() { setFStation(''); setFProduct(''); setQ('') }
@@ -754,14 +752,14 @@ export default function RewindDashboard() {
       {tab === 'summary' && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Kpi icon="📥" tone="blue"  label="รับจากผลิต" value={num(flow.inKg, 0)} unit="kg"
+            <Kpi icon="📥" tone="blue"  label="รับจากผลิต" value={num(flow.inKg, 2)} unit="kg"
               sub={`${flow.rolls.toLocaleString('th-TH')} ม้วน · ${stat.inLots} Lot`}
               onClick={() => openTrace('all')} />
-            <Kpi icon="✅" tone="green" label="กรอออกไปแล้ว" value={num(flow.outGoodKg, 0)} unit="kg"
-              sub={`จากม้วนที่กรอเสร็จ ${flow.doneRolls.toLocaleString('th-TH')} ม้วน · ${num(flow.doneInKg, 0)} kg (เสียไป ${num(flow.lossKg, 0)} kg)`}
+            <Kpi icon="✅" tone="green" label="กรอออกไปแล้ว" value={num(flow.outGoodKg, 2)} unit="kg"
+              sub={`จากม้วนที่กรอเสร็จ ${flow.doneRolls.toLocaleString('th-TH')} ม้วน · ${num(flow.doneInKg, 2)} kg (เสียไป ${num(flow.lossKg, 2)} kg)`}
               onClick={() => openTrace('done')} />
-            <Kpi icon="⏳" tone="amber" label="เหลือ (ยังไม่ได้กรอ)" value={num(flow.pendKg, 0)} unit="kg"
-              sub={`${flow.pendRolls.toLocaleString('th-TH')} ม้วน${flow.scrappedKg > 0 ? ` · ไม่นับที่ทำลายทิ้ง ${num(flow.scrappedKg, 0)} kg` : ''}`}
+            <Kpi icon="⏳" tone="amber" label="เหลือ (ยังไม่ได้กรอ)" value={num(flow.pendKg, 2)} unit="kg"
+              sub={`${flow.pendRolls.toLocaleString('th-TH')} ม้วน${flow.scrappedKg > 0 ? ` · ไม่นับที่ทำลายทิ้ง ${num(flow.scrappedKg, 2)} kg` : ''}`}
               onClick={() => openTrace('pending')} />
           </div>
 
@@ -773,17 +771,17 @@ export default function RewindDashboard() {
               <div className="flex h-6 rounded-lg overflow-hidden border border-gray-200 bg-gray-100">
                 <div className="bg-emerald-500 flex items-center justify-center text-[10px] font-bold text-white overflow-hidden whitespace-nowrap"
                   style={{ width: `${flow.inKg ? (flow.doneInKg / flow.inKg) * 100 : 0}%` }}>
-                  {flow.doneInKg > 0 && `กรอแล้ว ${num(flow.doneInKg, 0)} kg`}
+                  {flow.doneInKg > 0 && `กรอแล้ว ${num(flow.doneInKg, 2)} kg`}
                 </div>
                 <div className="flex items-center justify-center text-[10px] font-bold text-gray-600 overflow-hidden whitespace-nowrap"
                   style={{ width: `${flow.inKg ? (flow.pendKg / flow.inKg) * 100 : 0}%` }}>
-                  {flow.pendKg > 0 && `ยังไม่กรอ ${num(flow.pendKg, 0)} kg`}
+                  {flow.pendKg > 0 && `ยังไม่กรอ ${num(flow.pendKg, 2)} kg`}
                 </div>
               </div>
               <div className="flex flex-wrap gap-3 mt-2 text-[11px] text-gray-500">
-                <span><span className="inline-block w-2.5 h-2.5 rounded-sm bg-emerald-500 mr-1" />กรอแล้ว <b className="text-gray-700">{num(flow.doneInKg, 0)}</b> kg · {flow.doneRolls} ม้วน (กรอออกได้ {num(flow.outGoodKg, 0)} kg)</span>
-                <span><span className="inline-block w-2.5 h-2.5 rounded-sm bg-white border border-gray-300 mr-1" />ยังไม่ได้กรอ <b className="text-gray-700">{num(flow.pendKg, 0)}</b> kg · {flow.pendRolls} ม้วน</span>
-                <span className="text-gray-400">· ผลงานกรอที่ชั่งในช่วงนี้ {num(stat.goodKg, 0)} kg ({stat.goodCount.toLocaleString('th-TH')} ม้วน) · เศษชั่งแยก {num(stat.scrapKg, 0)} kg</span>
+                <span><span className="inline-block w-2.5 h-2.5 rounded-sm bg-emerald-500 mr-1" />กรอแล้ว <b className="text-gray-700">{num(flow.doneInKg, 2)}</b> kg · {flow.doneRolls} ม้วน (กรอออกได้ {num(flow.outGoodKg, 2)} kg)</span>
+                <span><span className="inline-block w-2.5 h-2.5 rounded-sm bg-white border border-gray-300 mr-1" />ยังไม่ได้กรอ <b className="text-gray-700">{num(flow.pendKg, 2)}</b> kg · {flow.pendRolls} ม้วน</span>
+                <span className="text-gray-400">· ผลงานกรอที่ชั่งในช่วงนี้ {num(stat.goodKg, 2)} kg ({stat.goodCount.toLocaleString('th-TH')} ม้วน) · เศษชั่งแยก {num(stat.scrapKg, 2)} kg</span>
               </div>
             </div>
           </div>
@@ -801,7 +799,7 @@ export default function RewindDashboard() {
                       <div className="flex items-center justify-between gap-2 text-xs">
                         <span className="font-semibold text-gray-700 truncate" title={r.key}>{r.key}</span>
                         <span className="text-gray-500 whitespace-nowrap">
-                          เข้า <b className="text-blue-600">{num(r.inKg, 0)}</b> → ออก <b className="text-emerald-600">{num(r.goodKg, 0)}</b> kg · {r.goodRolls} ม้วน
+                          เข้า <b className="text-blue-600">{num(r.inKg, 2)}</b> → ออก <b className="text-emerald-600">{num(r.goodKg, 2)}</b> kg · {r.goodRolls} ม้วน
                         </span>
                       </div>
                       <Bar pct={(r.goodKg / max) * 100} tone="bg-emerald-500" />
@@ -820,7 +818,7 @@ export default function RewindDashboard() {
                     <div key={r.key} className="space-y-1">
                       <div className="flex items-center justify-between gap-2 text-xs">
                         <span className="font-mono font-bold text-gray-700 truncate">{r.key}</span>
-                        <span className="text-gray-500 whitespace-nowrap"><b className="text-emerald-600">{num(r.goodKg, 0)}</b> kg · {r.goodRolls} ม้วน</span>
+                        <span className="text-gray-500 whitespace-nowrap"><b className="text-emerald-600">{num(r.goodKg, 2)}</b> kg · {r.goodRolls} ม้วน</span>
                       </div>
                       <Bar pct={(r.goodKg / max) * 100} tone="bg-brand-500" />
                     </div>
@@ -915,9 +913,9 @@ export default function RewindDashboard() {
                             <div className="space-y-3">
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className="text-sm font-bold text-gray-800">🔎 {r.key}</span>
-                                <span className="text-[11px] bg-blue-50 text-blue-700 rounded-full px-2 py-0.5">จากผลิต {r.inRolls} ม้วน · {num(r.inKg, 0)} kg</span>
-                                <span className="text-[11px] bg-emerald-50 text-emerald-700 rounded-full px-2 py-0.5">กรอดี {r.goodRolls} ม้วน · {num(r.goodKg, 0)} kg</span>
-                                <span className="text-[11px] bg-amber-50 text-amber-700 rounded-full px-2 py-0.5">เศษ {num(r.scrapKg, 0)} kg</span>
+                                <span className="text-[11px] bg-blue-50 text-blue-700 rounded-full px-2 py-0.5">จากผลิต {r.inRolls} ม้วน · {num(r.inKg, 2)} kg</span>
+                                <span className="text-[11px] bg-emerald-50 text-emerald-700 rounded-full px-2 py-0.5">กรอดี {r.goodRolls} ม้วน · {num(r.goodKg, 2)} kg</span>
+                                <span className="text-[11px] bg-amber-50 text-amber-700 rounded-full px-2 py-0.5">เศษ {num(r.scrapKg, 2)} kg</span>
                               </div>
                               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
                                 <MiniBreak title="📦 จากผลิต — ตามสินค้า" tone="bg-blue-400" rows={miniGroup(dayIn(r.key), x => (x.product_name ?? '').trim() || NO_PROD, x => x.weight ?? 0)} />
@@ -1014,7 +1012,7 @@ export default function RewindDashboard() {
                       <div className="flex items-center justify-between gap-2 text-xs">
                         <span className="font-semibold text-gray-700 truncate" title={r.key}>{r.key}</span>
                         <span className="text-gray-500 whitespace-nowrap">
-                          <b className="text-emerald-600">{num(r.goodKg, 0)}</b> kg · {r.goodRolls} ม้วน{r.scrapKg > 0 && <> · เศษ <b className="text-amber-600">{num(r.scrapKg, 0)}</b></>}
+                          <b className="text-emerald-600">{num(r.goodKg, 2)}</b> kg · {r.goodRolls} ม้วน{r.scrapKg > 0 && <> · เศษ <b className="text-amber-600">{num(r.scrapKg, 2)}</b></>}
                         </span>
                       </div>
                       <Bar pct={(r.goodKg / max) * 100} tone="bg-emerald-500" />
@@ -1032,9 +1030,9 @@ export default function RewindDashboard() {
         <div className="space-y-3">
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3 flex flex-wrap items-center gap-2">
             {([
-              { k: 'all',     label: `ทั้งหมด ${num(flow.inKg, 0)} kg (${flow.rolls} ม้วน)`,          cls: 'bg-brand-600' },
-              { k: 'pending', label: `ยังไม่ได้กรอ ${num(flow.pendKg, 0)} kg (${flow.pendRolls} ม้วน)`, cls: 'bg-slate-600' },
-              { k: 'done',    label: `กรอแล้ว ${num(flow.doneInKg, 0)} kg (${flow.doneRolls} ม้วน)`,    cls: 'bg-emerald-600' },
+              { k: 'all',     label: `ทั้งหมด ${num(flow.inKg, 2)} kg (${flow.rolls} ม้วน)`,          cls: 'bg-brand-600' },
+              { k: 'pending', label: `ยังไม่ได้กรอ ${num(flow.pendKg, 2)} kg (${flow.pendRolls} ม้วน)`, cls: 'bg-slate-600' },
+              { k: 'done',    label: `กรอแล้ว ${num(flow.doneInKg, 2)} kg (${flow.doneRolls} ม้วน)`,    cls: 'bg-emerald-600' },
             ] as { k: Focus; label: string; cls: string }[]).map(b => (
               <button key={b.k} onClick={() => { setFocus(b.k); setOpenWo(null) }}
                 className={`px-3 py-1.5 rounded-lg text-sm font-bold ${focus === b.k ? `${b.cls} text-white` : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
@@ -1086,10 +1084,10 @@ export default function RewindDashboard() {
                       <span className="font-mono font-bold text-gray-800 text-sm">
                         <span className="text-gray-400 mr-1">{open ? '▾' : '▸'}</span>{g.wo}
                       </span>
-                      <span className="text-[11px] text-gray-500"><b className="text-gray-800 text-xs">{num(g.kg, 0)}</b> kg · {g.rows.length} ม้วน</span>
-                      <span className="text-[11px] bg-emerald-50 text-emerald-700 rounded-full px-2 py-0.5">กรอแล้ว {num(g.doneKg, 0)} kg ({doneN})</span>
-                      <span className="text-[11px] bg-slate-100 text-gray-600 rounded-full px-2 py-0.5">ยังไม่กรอ {num(g.kg - g.doneKg, 0)} kg ({g.rows.length - doneN})</span>
-                      {g.outKg > 0 && <span className="text-[11px] text-gray-400">กรอออกได้ {num(g.outKg, 0)} kg</span>}
+                      <span className="text-[11px] text-gray-500"><b className="text-gray-800 text-xs">{num(g.kg, 2)}</b> kg · {g.rows.length} ม้วน</span>
+                      <span className="text-[11px] bg-emerald-50 text-emerald-700 rounded-full px-2 py-0.5">กรอแล้ว {num(g.doneKg, 2)} kg ({doneN})</span>
+                      <span className="text-[11px] bg-slate-100 text-gray-600 rounded-full px-2 py-0.5">ยังไม่กรอ {num(g.kg - g.doneKg, 2)} kg ({g.rows.length - doneN})</span>
+                      {g.outKg > 0 && <span className="text-[11px] text-gray-400">กรอออกได้ {num(g.outKg, 2)} kg</span>}
                       <div className="flex-1 min-w-[80px] max-w-[220px] ml-auto">
                         <div className="flex h-2 rounded-full overflow-hidden bg-gray-100 border border-gray-200">
                           <div className="bg-emerald-500" style={{ width: `${g.kg ? (g.doneKg / g.kg) * 100 : 0}%` }} />
@@ -1145,7 +1143,7 @@ export default function RewindDashboard() {
       {tab === 'incoming' && (
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] bg-blue-50 text-blue-700 rounded-full px-2 py-0.5">มาจากผลิต {inDetail.length.toLocaleString('th-TH')} ม้วน · {num(inKg(inDetail), 0)} kg</span>
+            <span className="text-[11px] bg-blue-50 text-blue-700 rounded-full px-2 py-0.5">มาจากผลิต {inDetail.length.toLocaleString('th-TH')} ม้วน · {num(inKg(inDetail), 2)} kg</span>
             <span className="text-[11px] bg-slate-100 text-gray-600 rounded-full px-2 py-0.5">Lot {new Set(inDetail.map(r => (r.lot_no ?? '').trim()).filter(Boolean)).size.toLocaleString('th-TH')}</span>
           </div>
           <InTable rows={inDetail} fileName="rewind-incoming" />

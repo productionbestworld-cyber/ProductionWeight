@@ -148,14 +148,14 @@ export default function OwnerDashboard() {
       m.set(key, e)
     }
     return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([d, v]) => ({ d, label: useMonthly ? d : d.slice(5), good: +v.good.toFixed(1), waste: +v.waste.toFixed(1) }))
+      .map(([d, v]) => ({ d, label: useMonthly ? d : d.slice(5), good: +v.good.toFixed(2), waste: +v.waste.toFixed(2) }))
   }, [R, useMonthly])
 
   // ── แยกตามแผนก ──────────────────────────────────────────────────────
   const bySection = useMemo(() => {
     const m = new Map<string, number>()
     for (const r of R.filter(isGood)) m.set(secOf(r), (m.get(secOf(r)) ?? 0) + wkg(r))
-    return [...m.entries()].map(([s, kg]) => ({ s, name: secLabel(s), kg: +kg.toFixed(1) })).sort((a, b) => b.kg - a.kg)
+    return [...m.entries()].map(([s, kg]) => ({ s, name: secLabel(s), kg: +kg.toFixed(2) })).sort((a, b) => b.kg - a.kg)
   }, [R])
 
   // ── Top ลูกค้า / สินค้า / เครื่อง / ผู้ชั่ง ────────────────────────────
@@ -165,7 +165,7 @@ export default function OwnerDashboard() {
       const key = keyFn(r) || '(ไม่ระบุ)'
       const e = m.get(key) ?? { kg: 0, rolls: 0 }; e.kg += wkg(r); e.rolls++; m.set(key, e)
     }
-    return [...m.entries()].map(([name, v]) => ({ name, kg: +v.kg.toFixed(1), rolls: v.rolls }))
+    return [...m.entries()].map(([name, v]) => ({ name, kg: +v.kg.toFixed(2), rolls: v.rolls }))
       .sort((a, b) => b.kg - a.kg).slice(0, n)
   }
   const topCust = useMemo(() => topBy(r => r.customer), [R])
@@ -181,7 +181,7 @@ export default function OwnerDashboard() {
     }
     return [...m.entries()].map(([machine, v]) => {
       const tot = v.good + v.waste
-      return { machine, good: +v.good.toFixed(1), waste: +v.waste.toFixed(1), rolls: v.rolls,
+      return { machine, good: +v.good.toFixed(2), waste: +v.waste.toFixed(2), rolls: v.rolls,
         yield: tot > 0 ? Math.round(v.good / tot * 100) : 0 }
     }).sort((a, b) => b.good - a.good)
   }, [R])
@@ -192,7 +192,7 @@ export default function OwnerDashboard() {
       const key = r.inspector || '(ไม่ระบุ)'
       const e = m.get(key) ?? { kg: 0, rolls: 0 }; e.kg += wkg(r); e.rolls++; m.set(key, e)
     }
-    return [...m.entries()].map(([name, v]) => ({ name, kg: +v.kg.toFixed(1), rolls: v.rolls }))
+    return [...m.entries()].map(([name, v]) => ({ name, kg: +v.kg.toFixed(2), rolls: v.rolls }))
       .sort((a, b) => b.rolls - a.rolls)
   }, [R])
 
@@ -252,17 +252,17 @@ export default function OwnerDashboard() {
         <div className="p-4 space-y-4">
           {/* ── KPI cards (คลิกได้) ── */}
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-            <KpiCard label="ผลิตดี (FG)" value={`${nf(k.goodKg, 0)}`} unit="kg" sub={`${nf(k.good.length)} ม้วน`} color="text-green-400" emoji="✅"
+            <KpiCard label="ผลิตดี (FG)" value={`${nf(k.goodKg, 2)}`} unit="kg" sub={`${nf(k.good.length)} ม้วน`} color="text-green-400" emoji="✅"
               onClick={() => open(`ม้วนดีทั้งหมด (${nf(k.good.length)} ม้วน)`, k.good)} />
-            <KpiCard label="เศษทิ้ง + ส่งกรอ" value={`${nf(k.wasteKg, 0)}`} unit="kg"
-              sub={`เศษทิ้ง ${nf(k.scrapKg, 0)} · ส่งกรอ ${nf(k.badKg, 0)}`} color="text-red-400" emoji="⚠️"
+            <KpiCard label="เศษทิ้ง + ส่งกรอ" value={`${nf(k.wasteKg, 2)}`} unit="kg"
+              sub={`เศษทิ้ง ${nf(k.scrapKg, 2)} · ส่งกรอ ${nf(k.badKg, 2)}`} color="text-red-400" emoji="⚠️"
               onClick={() => open(`เศษทิ้ง + ส่งกรอ (${nf(k.waste.length)} ม้วน)`, k.waste)} />
-            <KpiCard label="Yield เฉลี่ย" value={`${nf(k.yieldPct, 1)}`} unit="%" sub={`ดี/ผลิตรวม`} color="text-brand-300" emoji="🎯"
+            <KpiCard label="Yield เฉลี่ย" value={`${nf(k.yieldPct, 2)}`} unit="%" sub={`ดี/ผลิตรวม`} color="text-brand-300" emoji="🎯"
               onClick={() => open(`ม้วนทั้งหมด (${nf(R.length)} ม้วน)`, R)} />
             {/* pcs ยังไม่มีการบันทึกจริง — โชว์ "0 ชิ้น" จะอ่านเป็นผลิตได้ 0 ชิ้น */}
             <KpiCard label="ความยาวรวม" value={`${nf(k.lenM, 0)}`} unit="m" sub={k.pcs > 0 ? `${nf(k.pcs)} ชิ้น` : 'ยังไม่บันทึกจำนวนชิ้น'} color="text-cyan-300" emoji="📏"
               onClick={() => open(`ม้วนดี (ความยาว/ชิ้น)`, k.good)} />
-            <KpiCard label="โอนเข้าคลัง" value={`${nf(k.shipKg, 0)}`} unit="kg" sub={`${nf(docs.length)} ใบโอน`} color="text-amber-300" emoji="📦"
+            <KpiCard label="โอนเข้าคลัง" value={`${nf(k.shipKg, 2)}`} unit="kg" sub={`${nf(docs.length)} ใบโอน`} color="text-amber-300" emoji="📦"
               onClick={() => setDocDrill({ title: `ใบโอนเข้าคลัง (${nf(docs.length)} ใบ)`, docs })} />
             <KpiCard label="ลูกค้า / WO / สินค้า" value={`${nf(k.customers)}`} unit="ราย" sub={`${nf(k.wos)} WO · ${nf(k.items)} สินค้า`} color="text-purple-300" emoji="🧾"
               onClick={() => open(`ม้วนทั้งหมด (${nf(R.length)} ม้วน)`, R)} />
@@ -284,7 +284,7 @@ export default function OwnerDashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                 <XAxis dataKey="label" stroke="#64748b" fontSize={11} />
                 <YAxis stroke="#64748b" fontSize={11} />
-                <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }} formatter={(v: any) => `${nf(v, 1)} kg`} />
+                <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }} formatter={(v: any) => `${nf(v, 2)} kg`} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Area type="monotone" dataKey="good" name="ผลิตดี" stroke="#22c55e" fill="url(#gGood)" strokeWidth={2} />
                 <Area type="monotone" dataKey="waste" name="ของเสีย" stroke="#ef4444" fill="url(#gWaste)" strokeWidth={2} />
@@ -302,7 +302,7 @@ export default function OwnerDashboard() {
                       onClick={(e: any) => { const s = e?.s; if (s) open(`${secLabel(s)} (ดี)`, R.filter(rr => isGood(rr) && secOf(rr) === s)) }}>
                       {bySection.map((e, i) => <Cell key={i} fill={SECTIONS[e.s]?.color ?? PIE[i % PIE.length]} cursor="pointer" />)}
                     </Pie>
-                    <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }} formatter={(v: any) => `${nf(v, 1)} kg`} />
+                    <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }} formatter={(v: any) => `${nf(v, 2)} kg`} />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="flex-1 space-y-2">
@@ -311,8 +311,8 @@ export default function OwnerDashboard() {
                       className="w-full flex items-center gap-2 text-sm hover:bg-slate-800 rounded-lg px-2 py-1.5 transition-colors">
                       <span className="w-3 h-3 rounded-sm" style={{ background: SECTIONS[e.s]?.color ?? PIE[i] }} />
                       <span className="text-slate-300 flex-1 text-left">{e.name}</span>
-                      <span className="text-white font-bold">{nf(e.kg, 0)} kg</span>
-                      <span className="text-slate-500 text-xs">{k.goodKg > 0 ? nf(e.kg / k.goodKg * 100, 0) : 0}%</span>
+                      <span className="text-white font-bold">{nf(e.kg, 2)} kg</span>
+                      <span className="text-slate-500 text-xs">{k.goodKg > 0 ? nf(e.kg / k.goodKg * 100, 2) : 0}%</span>
                     </button>
                   ))}
                 </div>
@@ -327,7 +327,7 @@ export default function OwnerDashboard() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
                   <XAxis type="number" stroke="#64748b" fontSize={10} />
                   <YAxis type="category" dataKey="name" stroke="#94a3b8" fontSize={10} width={110} tickFormatter={(v: string) => v.length > 14 ? v.slice(0, 14) + '…' : v} />
-                  <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }} formatter={(v: any) => `${nf(v, 0)} kg`} />
+                  <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }} formatter={(v: any) => `${nf(v, 2)} kg`} />
                   <Bar dataKey="kg" radius={[0, 4, 4, 0]} cursor="pointer">
                     {topCust.map((_, i) => <Cell key={i} fill={PIE[i % PIE.length]} />)}
                   </Bar>
@@ -345,7 +345,7 @@ export default function OwnerDashboard() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
                   <XAxis type="number" stroke="#64748b" fontSize={10} />
                   <YAxis type="category" dataKey="name" stroke="#94a3b8" fontSize={10} width={110} tickFormatter={(v: string) => v.length > 14 ? v.slice(0, 14) + '…' : v} />
-                  <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }} formatter={(v: any) => `${nf(v, 0)} kg`} />
+                  <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }} formatter={(v: any) => `${nf(v, 2)} kg`} />
                   <Bar dataKey="kg" radius={[0, 4, 4, 0]} cursor="pointer">
                     {topProd.map((_, i) => <Cell key={i} fill={PIE[(i + 3) % PIE.length]} />)}
                   </Bar>
@@ -366,7 +366,7 @@ export default function OwnerDashboard() {
                         className="border-t border-slate-800 hover:bg-slate-800/50 cursor-pointer">
                         <td className="px-2 py-1.5 text-slate-200">{e.name}</td>
                         <td className="px-2 text-right text-slate-300">{nf(e.rolls)}</td>
-                        <td className="px-2 text-right text-green-400 font-bold">{nf(e.kg, 0)}</td>
+                        <td className="px-2 text-right text-green-400 font-bold">{nf(e.kg, 2)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -395,8 +395,8 @@ export default function OwnerDashboard() {
                       className="border-t border-slate-800 hover:bg-slate-800/50 cursor-pointer">
                       <td className="px-3 py-2"><span className="font-bold text-brand-300">{m.machine}</span></td>
                       <td className="px-3 text-right text-slate-300">{nf(m.rolls)}</td>
-                      <td className="px-3 text-right text-green-400 font-bold">{nf(m.good, 0)}</td>
-                      <td className="px-3 text-right text-red-400">{nf(m.waste, 0)}</td>
+                      <td className="px-3 text-right text-green-400 font-bold">{nf(m.good, 2)}</td>
+                      <td className="px-3 text-right text-red-400">{nf(m.waste, 2)}</td>
                       <td className="px-3 text-right font-bold" style={{ color: m.yield >= 95 ? '#22c55e' : m.yield >= 85 ? '#f59e0b' : '#ef4444' }}>{m.yield}%</td>
                       <td className="px-3">
                         <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
@@ -429,7 +429,7 @@ export default function OwnerDashboard() {
                       <td className="px-3 text-slate-200">{d.customer || '—'}</td>
                       <td className="px-3 text-slate-400 text-xs max-w-[200px] truncate">{d.product_name || '—'}</td>
                       <td className="px-3 text-right text-slate-300">{nf(d.total_rolls ?? 0)}</td>
-                      <td className="px-3 text-right text-green-400 font-bold">{nf(d.total_kg ?? 0, 1)}</td>
+                      <td className="px-3 text-right text-green-400 font-bold">{nf(d.total_kg ?? 0, 2)}</td>
                       <td className="px-3 text-slate-400 text-xs">{d.transferred_by || '—'}</td>
                     </tr>
                   ))}
@@ -484,7 +484,7 @@ function DrillModal({ title, rolls, onClose, onSub }:
   const groupBy = (fn: (r: Roll) => string | null) => {
     const m = new Map<string, { kg: number; rolls: Roll[] }>()
     for (const r of rolls) { const key = fn(r) || '(ไม่ระบุ)'; const e = m.get(key) ?? { kg: 0, rolls: [] }; e.kg += wkg(r); e.rolls.push(r); m.set(key, e) }
-    return [...m.entries()].map(([name, v]) => ({ name, kg: +v.kg.toFixed(1), rolls: v.rolls })).sort((a, b) => b.kg - a.kg)
+    return [...m.entries()].map(([name, v]) => ({ name, kg: +v.kg.toFixed(2), rolls: v.rolls })).sort((a, b) => b.kg - a.kg)
   }
   const byWo = useMemo(() => groupBy(r => r.work_order), [rolls])
   const byCust = useMemo(() => groupBy(r => r.customer), [rolls])
@@ -506,7 +506,7 @@ function DrillModal({ title, rolls, onClose, onSub }:
         <div className="px-5 py-3.5 border-b border-slate-800 flex items-center gap-3">
           <div className="flex-1 min-w-0">
             <p className="text-white font-bold truncate">{title}</p>
-            <p className="text-slate-500 text-xs">{nf(rolls.length)} ม้วน · ดี {nf(goodKg, 1)} kg · เสีย {nf(wasteKg, 1)} kg · Yield {tot > 0 ? nf(goodKg / tot * 100, 1) : 0}%</p>
+            <p className="text-slate-500 text-xs">{nf(rolls.length)} ม้วน · ดี {nf(goodKg, 2)} kg · เสีย {nf(wasteKg, 2)} kg · Yield {tot > 0 ? nf(goodKg / tot * 100, 2) : 0}%</p>
           </div>
           <button onClick={exportCsv} className="text-xs font-bold bg-green-600/20 text-green-300 border border-green-600/40 rounded-lg px-3 py-1.5 hover:bg-green-600/30">⬇ Excel/CSV</button>
           <button onClick={onClose} className="text-slate-400 hover:text-white text-2xl leading-none">×</button>
@@ -560,7 +560,7 @@ function DrillModal({ title, rolls, onClose, onSub }:
                   <tr key={g.name} className="border-t border-slate-800 hover:bg-slate-800/40 cursor-pointer" onClick={() => onSub(`${tab === 'wo' ? 'WO' : 'ลูกค้า'}: ${g.name}`, g.rolls)}>
                     <td className="px-3 py-2 text-slate-200">{g.name}</td>
                     <td className="px-3 text-right text-slate-300">{nf(g.rolls.length)}</td>
-                    <td className="px-3 text-right text-green-400 font-bold">{nf(g.kg, 1)}</td>
+                    <td className="px-3 text-right text-green-400 font-bold">{nf(g.kg, 2)}</td>
                     <td className="px-3 text-right text-brand-400 text-xs">ดูม้วน →</td>
                   </tr>
                 ))}
@@ -580,7 +580,7 @@ function DocModal({ title, docs, onClose }: { title: string; docs: Doc[]; onClos
     <div className="fixed inset-0 bg-black/75 z-[80] flex items-center justify-center p-3" onClick={onClose}>
       <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="px-5 py-3.5 border-b border-slate-800 flex items-center gap-3">
-          <div className="flex-1"><p className="text-white font-bold">{title}</p><p className="text-slate-500 text-xs">{nf(docs.length)} ใบ · รวม {nf(totKg, 1)} kg</p></div>
+          <div className="flex-1"><p className="text-white font-bold">{title}</p><p className="text-slate-500 text-xs">{nf(docs.length)} ใบ · รวม {nf(totKg, 2)} kg</p></div>
           <button onClick={onClose} className="text-slate-400 hover:text-white text-2xl leading-none">×</button>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-3">
@@ -597,7 +597,7 @@ function DocModal({ title, docs, onClose }: { title: string; docs: Doc[]; onClos
                   <td className="px-2 text-slate-400 max-w-[180px] truncate">{d.product_name || '—'}</td>
                   <td className="px-2 text-amber-300">{d.work_order || '—'}</td>
                   <td className="px-2 text-right text-slate-300">{nf(d.total_rolls ?? 0)}</td>
-                  <td className="px-2 text-right text-green-400 font-bold">{nf(d.total_kg ?? 0, 1)}</td>
+                  <td className="px-2 text-right text-green-400 font-bold">{nf(d.total_kg ?? 0, 2)}</td>
                   <td className="px-2 text-slate-400">{d.transferred_by || '—'}</td>
                 </tr>
               ))}

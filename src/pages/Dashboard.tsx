@@ -108,7 +108,7 @@ function CustomTooltip({ active, payload, label }: any) {
         <div key={p.dataKey} className="flex items-center gap-2">
           <div className="w-2.5 h-2.5 rounded-sm" style={{ background: p.color }}/>
           <span className="text-gray-600">{p.name}:</span>
-          <span className="font-bold text-gray-800">{num(p.value, 1)} kg</span>
+          <span className="font-bold text-gray-800">{num(p.value, 2)} kg</span>
         </div>
       ))}
     </div>
@@ -707,7 +707,7 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
             {showBadOther && badOther.length > 0 && (
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-                  <p className="text-sm font-bold text-gray-700">• ม้วนกรอที่ยังไม่จัดการ ({badOther.length} ม้วน · {num(sumW(badOther),1)} kg)</p>
+                  <p className="text-sm font-bold text-gray-700">• ม้วนกรอที่ยังไม่จัดการ ({badOther.length} ม้วน · {num(sumW(badOther), 2)} kg)</p>
                   <button onClick={()=>setShowBadOther(false)} className="text-gray-400 hover:text-gray-700 text-xs">ปิด ✕</button>
                 </div>
                 <div className="overflow-x-auto">
@@ -743,7 +743,7 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                             <td className="px-3 py-1.5">#{r.roll_no ?? '—'}</td>
                             <td className="px-3 py-1.5">{r.product_name || '—'}</td>
                             <td className="px-3 py-1.5">{r.customer || '—'}</td>
-                            <td className="px-3 py-1.5 text-right font-bold">{num(r.weight ?? 0,1)}</td>
+                            <td className="px-3 py-1.5 text-right font-bold">{num(r.weight ?? 0, 2)}</td>
                             <td className="px-3 py-1.5 text-rose-600">{r.remark || '—'}</td>
                             <td className="px-3 py-1.5">{st}</td>
                             <td className="px-3 py-1.5 text-gray-400">{r.created_at ? new Date(r.created_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—'}</td>
@@ -783,7 +783,7 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                           <td className="px-3 py-1.5 text-right">{w.total}</td>
                           <td className="px-3 py-1.5 text-right text-green-600">{w.done}</td>
                           <td className={`px-3 py-1.5 text-right font-black ${w.pending>0 ? 'text-red-600' : 'text-gray-400'}`}>{w.pending || '—'}</td>
-                          <td className="px-3 py-1.5 text-right">{w.kg>0 ? num(w.kg,1) : '—'}</td>
+                          <td className="px-3 py-1.5 text-right">{w.kg>0 ? num(w.kg, 2) : '—'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -835,7 +835,7 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
               <button onClick={()=>setTab('control')} className="bg-white rounded-xl border-l-4 border-amber-500 border border-gray-200 shadow-sm p-4 text-left">
                 <p className="text-xs text-gray-500">⏳ NC รอตัดสิน</p>
                 <p className="text-3xl font-black text-amber-600 mt-1">{ncPending.length}</p>
-                <p className="text-[11px] text-gray-400">{num(ncPendingKg,1)} kg</p>
+                <p className="text-[11px] text-gray-400">{num(ncPendingKg, 2)} kg</p>
               </button>
               <button onClick={()=>setTab('rework')} className="bg-white rounded-xl border-l-4 border-blue-500 border border-gray-200 shadow-sm p-4 text-left">
                 <p className="text-xs text-gray-500">🔧 งานกรอเปิดอยู่</p>
@@ -859,7 +859,7 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
                 <p className="font-bold text-gray-700">⚠ NC รอตัดสิน (สั่งการได้เลย)</p>
-                <span className="text-xs text-gray-400">{ncPending.length} ม้วน · {num(ncPendingKg,1)} kg</span>
+                <span className="text-xs text-gray-400">{ncPending.length} ม้วน · {num(ncPendingKg, 2)} kg</span>
               </div>
               {ncPending.length === 0 ? (
                 <p className="text-center py-8 text-gray-400 text-sm">✓ ไม่มีม้วน NC รอตัดสิน</p>
@@ -1000,10 +1000,10 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
               </p>
               <p className="text-blue-500 text-xs mt-0.5 mb-1">{fg.length} ม้วน</p>
               <div className="pt-2 border-t border-gray-100 space-y-0.5 text-[11px]">
-                <p className="flex justify-between"><span className="text-gray-500">🏭 FG ครั้งแรก</span><span className="font-bold text-gray-700">{num(fgFirstKg,1)} kg · {fgFirst.length}</span></p>
-                <p className="flex justify-between"><span className="text-emerald-600">🔧 FG จากกรอ</span><span className="font-bold text-emerald-700">{num(fgReworkKg,1)} kg · {fgRework.length}</span></p>
+                <p className="flex justify-between"><span className="text-gray-500">🏭 FG ครั้งแรก</span><span className="font-bold text-gray-700">{num(fgFirstKg, 2)} kg · {fgFirst.length}</span></p>
+                <p className="flex justify-between"><span className="text-emerald-600">🔧 FG จากกรอ</span><span className="font-bold text-emerald-700">{num(fgReworkKg, 2)} kg · {fgRework.length}</span></p>
                 {fgBlowRework.length > 0 && (
-                  <p className="flex justify-between pl-3 text-[10px]"><span className="text-emerald-500/80">↳ 🔁 กรอ ชั่งที่เครื่องผลิต</span><span className="font-bold text-emerald-600">{num(fgBlowReworkKg,1)} kg · {fgBlowRework.length}</span></p>
+                  <p className="flex justify-between pl-3 text-[10px]"><span className="text-emerald-500/80">↳ 🔁 กรอ ชั่งที่เครื่องผลิต</span><span className="font-bold text-emerald-600">{num(fgBlowReworkKg, 2)} kg · {fgBlowRework.length}</span></p>
                 )}
               </div>
             </div>
@@ -1046,37 +1046,37 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                     {review.length > 0 && (
                       <>
                         <span className="text-purple-600">⏳ รอพิจารณา</span>
-                        <span className="text-purple-700 font-bold text-right">{review.length} ม้วน · {num(sumKg(review),1)}</span>
+                        <span className="text-purple-700 font-bold text-right">{review.length} ม้วน · {num(sumKg(review), 2)}</span>
                       </>
                     )}
                     {pending.length > 0 && (
                       <>
                         <span className="text-amber-600">📥 ส่งไปกรอ (รอเริ่ม)</span>
-                        <span className="text-amber-700 font-bold text-right">{pending.length} ม้วน · {num(sumKg(pending),1)}</span>
+                        <span className="text-amber-700 font-bold text-right">{pending.length} ม้วน · {num(sumKg(pending), 2)}</span>
                       </>
                     )}
                     {working.length > 0 && (
                       <>
                         <span className="text-blue-600">⚙ กำลังกรอ</span>
-                        <span className="text-blue-700 font-bold text-right">{working.length} ม้วน · {num(sumKg(working),1)}</span>
+                        <span className="text-blue-700 font-bold text-right">{working.length} ม้วน · {num(sumKg(working), 2)}</span>
                       </>
                     )}
                     {reworked.length > 0 && (
                       <>
                         <span className="text-green-600">✓ กรอเสร็จ</span>
-                        <span className="text-green-700 font-bold text-right">{reworked.length} ม้วน · {num(sumKg(reworked),1)}</span>
+                        <span className="text-green-700 font-bold text-right">{reworked.length} ม้วน · {num(sumKg(reworked), 2)}</span>
                       </>
                     )}
                     {keep.length > 0 && (
                       <>
                         <span className="text-slate-600">📦 เก็บไว้ (ผจก)</span>
-                        <span className="text-slate-700 font-bold text-right">{keep.length} ม้วน · {num(sumKg(keep),1)}</span>
+                        <span className="text-slate-700 font-bold text-right">{keep.length} ม้วน · {num(sumKg(keep), 2)}</span>
                       </>
                     )}
                     {scrapped.length > 0 && (
                       <>
                         <span className="text-red-600">🗑 ทำลายทิ้ง</span>
-                        <span className="text-red-700 font-bold text-right">{scrapped.length} ม้วน · {num(sumKg(scrapped),1)}</span>
+                        <span className="text-red-700 font-bold text-right">{scrapped.length} ม้วน · {num(sumKg(scrapped), 2)}</span>
                       </>
                     )}
                   </div>
@@ -1268,9 +1268,9 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                         <tr key={r.reason} className="hover:bg-gray-50">
                           <td className="px-3 py-2 text-gray-700">{r.reason}</td>
                           <td className="px-3 py-2 text-right text-gray-500">{r.count}</td>
-                          <td className="px-3 py-2 text-right font-bold text-red-500">{num(r.weight, 1)}</td>
+                          <td className="px-3 py-2 text-right font-bold text-red-500">{num(r.weight, 2)}</td>
                           <td className="px-3 py-2 text-right text-gray-500 text-xs">
-                            {allScrapKg ? (r.weight / allScrapKg * 100).toFixed(1) : 0}%
+                            {allScrapKg ? (r.weight / allScrapKg * 100).toFixed(2) : 0}%
                           </td>
                         </tr>
                       ))}
@@ -1304,9 +1304,9 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                         <tr key={r.reason} className="hover:bg-gray-50">
                           <td className="px-3 py-2 text-gray-700">{r.reason}</td>
                           <td className="px-3 py-2 text-right text-gray-500">{r.count}</td>
-                          <td className="px-3 py-2 text-right font-bold text-orange-500">{num(r.weight, 1)}</td>
+                          <td className="px-3 py-2 text-right font-bold text-orange-500">{num(r.weight, 2)}</td>
                           <td className="px-3 py-2 text-right text-gray-500 text-xs">
-                            {badKg ? (r.weight / badKg * 100).toFixed(1) : 0}%
+                            {badKg ? (r.weight / badKg * 100).toFixed(2) : 0}%
                           </td>
                         </tr>
                       ))}
@@ -1333,9 +1333,9 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                 <div className="p-5 space-y-4">
                   {/* แถบสัดส่วน */}
                   <div className="h-7 w-full rounded-lg overflow-hidden flex text-[10px] font-bold text-white">
-                    {fgP > 0 && <div className="bg-blue-500 flex items-center justify-center" style={{ width: `${fgP}%` }} title={`FG ${fgP.toFixed(1)}%`}>{fgP >= 8 ? `FG ${fgP.toFixed(0)}%` : ''}</div>}
-                    {rwP > 0 && <div className="bg-orange-500 flex items-center justify-center" style={{ width: `${rwP}%` }} title={`ซ่อม ${rwP.toFixed(1)}%`}>{rwP >= 8 ? `ซ่อม ${rwP.toFixed(0)}%` : ''}</div>}
-                    {scP > 0 && <div className="bg-red-500 flex items-center justify-center" style={{ width: `${scP}%` }} title={`เศษ ${scP.toFixed(1)}%`}>{scP >= 8 ? `เศษ ${scP.toFixed(0)}%` : ''}</div>}
+                    {fgP > 0 && <div className="bg-blue-500 flex items-center justify-center" style={{ width: `${fgP}%` }} title={`FG ${fgP.toFixed(2)}%`}>{fgP >= 8 ? `FG ${fgP.toFixed(2)}%` : ''}</div>}
+                    {rwP > 0 && <div className="bg-orange-500 flex items-center justify-center" style={{ width: `${rwP}%` }} title={`ซ่อม ${rwP.toFixed(2)}%`}>{rwP >= 8 ? `ซ่อม ${rwP.toFixed(2)}%` : ''}</div>}
+                    {scP > 0 && <div className="bg-red-500 flex items-center justify-center" style={{ width: `${scP}%` }} title={`เศษ ${scP.toFixed(2)}%`}>{scP >= 8 ? `เศษ ${scP.toFixed(2)}%` : ''}</div>}
                   </div>
 
                   {/* 5 หมวด (มาตรฐาน In=Out): FG / RW / WIP / SCRAP / LOSS */}
@@ -1398,21 +1398,21 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                         <td className="px-3 py-2.5">
                           <span className="bg-blue-100 text-blue-700 font-bold text-xs px-2 py-0.5 rounded">{row.machine}</span>
                         </td>
-                        <td className="px-3 py-2.5 font-bold text-blue-600">{num(row.fgKg, 1)}</td>
-                        <td className="px-3 py-2.5 font-bold text-gray-700">{num(row.tot, 1)}</td>
+                        <td className="px-3 py-2.5 font-bold text-blue-600">{num(row.fgKg, 2)}</td>
+                        <td className="px-3 py-2.5 font-bold text-gray-700">{num(row.tot, 2)}</td>
                         <td className="px-3 py-2.5 text-gray-500">{row.fgRolls}</td>
-                        <td className="px-3 py-2.5 text-orange-500">{num(row.badKg, 1)}</td>
+                        <td className="px-3 py-2.5 text-orange-500">{num(row.badKg, 2)}</td>
                         <td className="px-3 py-2.5">
                           <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${row.badPct > 5 ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'}`}>
-                            {row.badPct.toFixed(1)}%
+                            {row.badPct.toFixed(2)}%
                           </span>
                         </td>
-                        <td className="px-3 py-2.5 text-slate-500">{num(row.scClear, 1)}</td>
-                        <td className="px-3 py-2.5 text-purple-500">{num(row.scColor, 1)}</td>
-                        <td className="px-3 py-2.5 text-amber-600">{num(row.scLump, 1)}</td>
+                        <td className="px-3 py-2.5 text-slate-500">{num(row.scClear, 2)}</td>
+                        <td className="px-3 py-2.5 text-purple-500">{num(row.scColor, 2)}</td>
+                        <td className="px-3 py-2.5 text-amber-600">{num(row.scLump, 2)}</td>
                         <td className="px-3 py-2.5">
                           <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${row.scPct > 5 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                            {row.scPct.toFixed(1)}%
+                            {row.scPct.toFixed(2)}%
                           </span>
                         </td>
                       </tr>
@@ -1423,15 +1423,15 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                   <tfoot>
                     <tr className="bg-gray-100 border-t-2 border-gray-300 font-bold text-sm">
                       <td className="px-3 py-2.5 text-gray-700">รวม</td>
-                      <td className="px-3 py-2.5 text-blue-600">{num(fgKg, 1)}</td>
-                      <td className="px-3 py-2.5 text-gray-800">{num(totalKg, 1)}</td>
+                      <td className="px-3 py-2.5 text-blue-600">{num(fgKg, 2)}</td>
+                      <td className="px-3 py-2.5 text-gray-800">{num(totalKg, 2)}</td>
                       <td className="px-3 py-2.5 text-gray-600">{fg.length}</td>
-                      <td className="px-3 py-2.5 text-orange-500">{num(badKg, 1)}</td>
-                      <td className="px-3 py-2.5 text-gray-500">{totalKg ? (badKg/totalKg*100).toFixed(1) : 0}%</td>
-                      <td className="px-3 py-2.5 text-slate-500">{num(scrapClearKg, 1)}</td>
-                      <td className="px-3 py-2.5 text-purple-500">{num(scrapColorKg, 1)}</td>
-                      <td className="px-3 py-2.5 text-amber-600">{num(scrapLumpKg, 1)}</td>
-                      <td className="px-3 py-2.5 text-gray-500">{totalKg ? (allScrapKg/totalKg*100).toFixed(1) : 0}%</td>
+                      <td className="px-3 py-2.5 text-orange-500">{num(badKg, 2)}</td>
+                      <td className="px-3 py-2.5 text-gray-500">{totalKg ? (badKg/totalKg*100).toFixed(2) : 0}%</td>
+                      <td className="px-3 py-2.5 text-slate-500">{num(scrapClearKg, 2)}</td>
+                      <td className="px-3 py-2.5 text-purple-500">{num(scrapColorKg, 2)}</td>
+                      <td className="px-3 py-2.5 text-amber-600">{num(scrapLumpKg, 2)}</td>
+                      <td className="px-3 py-2.5 text-gray-500">{totalKg ? (allScrapKg/totalKg*100).toFixed(2) : 0}%</td>
                     </tr>
                   </tfoot>
                 )}
@@ -1473,13 +1473,13 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                             <span className="bg-blue-100 text-blue-700 font-bold text-xs px-2 py-0.5 rounded">{row.machine}</span>
                           </td>
                           <td className="px-3 py-2.5 font-bold text-blue-600">{row.fgRolls.toLocaleString()}</td>
-                          <td className="px-3 py-2.5 font-bold text-blue-600">{num(row.fgKg, 1)}</td>
-                          <td className="px-3 py-2.5 text-orange-500">{num(row.badKg, 1)}</td>
-                          <td className="px-3 py-2.5 text-red-500">{num(row.scKg, 1)}</td>
-                          <td className="px-3 py-2.5 font-bold text-gray-700">{num(row.tot, 1)}</td>
+                          <td className="px-3 py-2.5 font-bold text-blue-600">{num(row.fgKg, 2)}</td>
+                          <td className="px-3 py-2.5 text-orange-500">{num(row.badKg, 2)}</td>
+                          <td className="px-3 py-2.5 text-red-500">{num(row.scKg, 2)}</td>
+                          <td className="px-3 py-2.5 font-bold text-gray-700">{num(row.tot, 2)}</td>
                           <td className="px-3 py-2.5">
                             <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${yieldP >= 95 ? 'bg-green-100 text-green-700' : yieldP >= 85 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-600'}`}>
-                              {yieldP.toFixed(1)}%
+                              {yieldP.toFixed(2)}%
                             </span>
                           </td>
                         </tr>
@@ -1521,7 +1521,7 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                   {(() => {
                     const tot = soGroups.reduce((s, g) => s + g.total, 0)
                     const gd  = soGroups.reduce((s, g) => s + g.goodKg, 0)
-                    return tot ? (gd / tot * 100).toFixed(1) : '0.0'
+                    return tot ? (gd / tot * 100).toFixed(2) : '0.0'
                   })()}<span className="text-sm text-gray-400 font-semibold">%</span>
                 </p>
               </div>
@@ -1550,7 +1550,7 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                               <span className="font-mono font-black text-white text-sm bg-gradient-to-r from-amber-500 to-orange-500 px-3 py-1 rounded-lg shadow">📋 WO: {wg.wo}</span>
                               <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-semibold">{wg.sos.length} SO · {wg.jobs} งาน</span>
                               <span className={`text-xs px-2 py-0.5 rounded font-bold ${wg.yieldPct >= 90 ? 'bg-green-100 text-green-700' : wg.yieldPct >= 80 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
-                                Yield {wg.yieldPct.toFixed(1)}%
+                                Yield {wg.yieldPct.toFixed(2)}%
                               </span>
                             </div>
                             <div className="text-xs text-gray-500 flex items-center gap-3 flex-wrap">
@@ -1562,9 +1562,9 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                           <div className="text-right shrink-0">
                             <div className="flex gap-4 text-sm">
                               <div><p className="text-[10px] text-gray-400 uppercase">สั่ง</p><p className="font-bold text-gray-700">{num(wg.planned, 0)}</p></div>
-                              <div><p className="text-[10px] text-gray-400 uppercase">FG</p><p className="font-bold text-blue-600">{num(wg.goodKg, 1)}</p></div>
-                              <div><p className="text-[10px] text-gray-400 uppercase">กรอ</p><p className="font-bold text-orange-500">{num(wg.badKg, 1)}</p></div>
-                              <div><p className="text-[10px] text-gray-400 uppercase">เศษ</p><p className="font-bold text-red-500">{num(wg.scrapKg, 1)}</p></div>
+                              <div><p className="text-[10px] text-gray-400 uppercase">FG</p><p className="font-bold text-blue-600">{num(wg.goodKg, 2)}</p></div>
+                              <div><p className="text-[10px] text-gray-400 uppercase">กรอ</p><p className="font-bold text-orange-500">{num(wg.badKg, 2)}</p></div>
+                              <div><p className="text-[10px] text-gray-400 uppercase">เศษ</p><p className="font-bold text-red-500">{num(wg.scrapKg, 2)}</p></div>
                             </div>
                           </div>
                         </button>
@@ -1583,9 +1583,9 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                                   <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{sg.lots.length} Lot · {sg.jobs} งาน</span>
                                 </div>
                                 <div className="flex gap-3 text-xs shrink-0">
-                                  <span className="text-gray-500">FG <b className="text-blue-600">{num(sg.goodKg, 1)}</b></span>
-                                  <span className="text-gray-500">กรอ <b className="text-orange-500">{num(sg.badKg, 1)}</b></span>
-                                  <span className="text-gray-500">เศษ <b className="text-red-500">{num(sg.scrapKg, 1)}</b></span>
+                                  <span className="text-gray-500">FG <b className="text-blue-600">{num(sg.goodKg, 2)}</b></span>
+                                  <span className="text-gray-500">กรอ <b className="text-orange-500">{num(sg.badKg, 2)}</b></span>
+                                  <span className="text-gray-500">เศษ <b className="text-red-500">{num(sg.scrapKg, 2)}</b></span>
                                 </div>
                               </button>
 
@@ -1623,13 +1623,13 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                                                   <td className="px-2 py-1.5 text-gray-600 max-w-[140px] truncate" title={j.customer}>{j.customer}</td>
                                                   <td className="px-2 py-1.5 text-gray-600 max-w-[140px] truncate" title={j.product_name}>{j.product_name}</td>
                                                   <td className="px-2 py-1.5 text-gray-700">{num(j.planned_qty ?? 0, 0)}</td>
-                                                  <td className="px-2 py-1.5 text-blue-600 font-bold">{num(j.good_kg ?? 0, 1)} <span className="text-gray-400 font-normal">({j.good_rolls ?? 0}ม.)</span></td>
-                                                  <td className="px-2 py-1.5 text-orange-500">{num(j.bad_kg ?? 0, 1)}</td>
-                                                  <td className="px-2 py-1.5 text-red-500">{num(j.scrap_kg ?? 0, 1)}</td>
-                                                  <td className="px-2 py-1.5 text-green-600">{num(j.transferred_kg ?? 0, 1)}</td>
+                                                  <td className="px-2 py-1.5 text-blue-600 font-bold">{num(j.good_kg ?? 0, 2)} <span className="text-gray-400 font-normal">({j.good_rolls ?? 0}ม.)</span></td>
+                                                  <td className="px-2 py-1.5 text-orange-500">{num(j.bad_kg ?? 0, 2)}</td>
+                                                  <td className="px-2 py-1.5 text-red-500">{num(j.scrap_kg ?? 0, 2)}</td>
+                                                  <td className="px-2 py-1.5 text-green-600">{num(j.transferred_kg ?? 0, 2)}</td>
                                                   <td className="px-2 py-1.5">
                                                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${yp >= 90 ? 'bg-green-100 text-green-700' : yp >= 80 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
-                                                      {yp.toFixed(1)}%
+                                                      {yp.toFixed(2)}%
                                                     </span>
                                                   </td>
                                                   <td className="px-2 py-1.5 text-gray-500">{j.closed_by ?? '—'}</td>
@@ -1855,8 +1855,8 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                             <td className="px-3 py-2 text-gray-500">{i+1}</td>
                             <td className="px-3 py-2 text-gray-700 max-w-[200px] truncate" title={row.c}>{row.c}</td>
                             <td className="px-3 py-2 text-gray-500">{row.count}</td>
-                            <td className="px-3 py-2 font-bold text-blue-600">{num(row.kg, 1)}</td>
-                            <td className="px-3 py-2 text-gray-500 text-xs">{tot ? (row.kg / tot * 100).toFixed(1) : 0}%</td>
+                            <td className="px-3 py-2 font-bold text-blue-600">{num(row.kg, 2)}</td>
+                            <td className="px-3 py-2 text-gray-500 text-xs">{tot ? (row.kg / tot * 100).toFixed(2) : 0}%</td>
                           </tr>
                         ))
                       })()}
@@ -1887,7 +1887,7 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                             <td className="px-3 py-2 text-gray-500">{i+1}</td>
                             <td className="px-3 py-2 text-gray-700 max-w-[180px] truncate" title={row.p}>{row.p}</td>
                             <td className="px-3 py-2 text-gray-500 font-mono text-xs">{row.code}</td>
-                            <td className="px-3 py-2 font-bold text-blue-600">{num(row.kg, 1)}</td>
+                            <td className="px-3 py-2 font-bold text-blue-600">{num(row.kg, 2)}</td>
                           </tr>
                         ))
                       })()}
@@ -2003,12 +2003,12 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                 <div className="bg-green-50 border-l-4 border-green-500 rounded-lg p-3">
                   <p className="text-green-700 text-xs font-bold uppercase">✓ กรอได้</p>
                   <p className="text-green-700 text-3xl font-black mt-1">{fmtKg(S.reworkedKg)}<span className="text-sm font-normal text-gray-500"> kg</span></p>
-                  <p className="text-green-600 text-xs">{S.totalKg ? (S.reworkedKg/S.totalKg*100).toFixed(1) : 0}% ของรับเข้า</p>
+                  <p className="text-green-600 text-xs">{S.totalKg ? (S.reworkedKg/S.totalKg*100).toFixed(2) : 0}% ของรับเข้า</p>
                 </div>
                 <div className="bg-red-50 border-l-4 border-red-500 rounded-lg p-3">
                   <p className="text-red-700 text-xs font-bold uppercase">🗑 เศษ (ทำลาย)</p>
                   <p className="text-red-700 text-3xl font-black mt-1">{fmtKg(S.scrappedKg)}<span className="text-sm font-normal text-gray-500"> kg</span></p>
-                  <p className="text-red-600 text-xs">{S.totalKg ? (S.scrappedKg/S.totalKg*100).toFixed(1) : 0}% ของรับเข้า</p>
+                  <p className="text-red-600 text-xs">{S.totalKg ? (S.scrappedKg/S.totalKg*100).toFixed(2) : 0}% ของรับเข้า</p>
                 </div>
               </div>
 
@@ -2023,8 +2023,8 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                             <tr key={r.k}>
                               <td className="px-2 py-1.5 text-gray-400 w-6">{i+1}.</td>
                               <td className="px-2 py-1.5 text-gray-700">{r.k}</td>
-                              <td className="px-2 py-1.5 text-right text-orange-600 font-bold">{num(r.kg, 1)}</td>
-                              <td className="px-2 py-1.5 text-right text-gray-400 w-12">{S.totalKg ? (r.kg/S.totalKg*100).toFixed(0) : 0}%</td>
+                              <td className="px-2 py-1.5 text-right text-orange-600 font-bold">{num(r.kg, 2)}</td>
+                              <td className="px-2 py-1.5 text-right text-gray-400 w-12">{S.totalKg ? (r.kg/S.totalKg*100).toFixed(2) : 0}%</td>
                             </tr>
                           ))}
                         </tbody>
@@ -2043,8 +2043,8 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                             <tr key={r.k}>
                               <td className="px-2 py-1.5 text-gray-400 w-6">{i+1}.</td>
                               <td className="px-2 py-1.5 text-gray-700">{r.k}</td>
-                              <td className="px-2 py-1.5 text-right text-red-600 font-bold">{num(r.kg, 1)}</td>
-                              <td className="px-2 py-1.5 text-right text-gray-400 w-12">{S.scrappedKg ? (r.kg/S.scrappedKg*100).toFixed(0) : 0}%</td>
+                              <td className="px-2 py-1.5 text-right text-red-600 font-bold">{num(r.kg, 2)}</td>
+                              <td className="px-2 py-1.5 text-right text-gray-400 w-12">{S.scrappedKg ? (r.kg/S.scrappedKg*100).toFixed(2) : 0}%</td>
                             </tr>
                           ))}
                         </tbody>
@@ -2157,7 +2157,7 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                 </div>
                 <div className="bg-white rounded-xl border-l-4 border-blue-500 border border-gray-200 shadow-sm p-3">
                   <p className="text-[11px] text-gray-500">% สำเร็จ (Yield)</p>
-                  <p className={`text-2xl font-black ${yieldPct >= 80 ? 'text-green-600' : yieldPct >= 60 ? 'text-amber-600' : 'text-red-600'}`}>{yieldPct.toFixed(1)}%</p>
+                  <p className={`text-2xl font-black ${yieldPct >= 80 ? 'text-green-600' : yieldPct >= 60 ? 'text-amber-600' : 'text-red-600'}`}>{yieldPct.toFixed(2)}%</p>
                 </div>
                 <div className="bg-white rounded-xl border-l-4 border-indigo-500 border border-gray-200 shadow-sm p-3">
                   <p className="text-[11px] text-gray-500">งานกรอค้าง</p>
@@ -2196,10 +2196,10 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                         {productRows.map(p => (
                           <tr key={p.k} className="hover:bg-gray-50">
                             <td className="px-3 py-2 text-gray-700"><span className="font-semibold">{p.k}</span>{p.item && <span className="text-gray-400 font-mono text-xs"> · {p.item}</span>}</td>
-                            <td className="px-3 py-2 text-right text-gray-700 font-bold">{num(p.received,1)}</td>
-                            <td className="px-3 py-2 text-right text-green-600 font-bold">{num(p.salvaged,1)}</td>
-                            <td className="px-3 py-2 text-right text-red-500">{num(p.scrap,1)}</td>
-                            <td className={`px-3 py-2 text-right font-bold ${p.pct >= 80 ? 'text-green-600' : p.pct >= 60 ? 'text-amber-600' : 'text-red-600'}`}>{p.pct.toFixed(0)}%</td>
+                            <td className="px-3 py-2 text-right text-gray-700 font-bold">{num(p.received, 2)}</td>
+                            <td className="px-3 py-2 text-right text-green-600 font-bold">{num(p.salvaged, 2)}</td>
+                            <td className="px-3 py-2 text-right text-red-500">{num(p.scrap, 2)}</td>
+                            <td className={`px-3 py-2 text-right font-bold ${p.pct >= 80 ? 'text-green-600' : p.pct >= 60 ? 'text-amber-600' : 'text-red-600'}`}>{p.pct.toFixed(2)}%</td>
                           </tr>
                         ))}
                       </tbody>
@@ -2223,9 +2223,9 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                         {/* หัว WO */}
                         <div className="flex items-center gap-2 flex-wrap mb-1.5">
                           <span className="text-xs font-black px-2.5 py-1 rounded-md bg-amber-100 text-amber-700 border border-amber-200">📋 WO {wg.wo}</span>
-                          <span className="text-xs text-gray-400">รับเข้า <b className="text-gray-700">{num(wg.kg,1)}</b> kg</span>
-                          <span className="text-xs text-green-600">✓ กรอได้ {num(wg.salvaged,1)}</span>
-                          <span className="text-xs text-red-500">🗑 เศษ {num(wg.scrapped,1)}</span>
+                          <span className="text-xs text-gray-400">รับเข้า <b className="text-gray-700">{num(wg.kg, 2)}</b> kg</span>
+                          <span className="text-xs text-green-600">✓ กรอได้ {num(wg.salvaged, 2)}</span>
+                          <span className="text-xs text-red-500">🗑 เศษ {num(wg.scrapped, 2)}</span>
                         </div>
                         {/* ตาราง SO › Lot */}
                         <table className="w-full text-xs ml-1">
@@ -2243,9 +2243,9 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                                 <td className="px-2 py-1 font-mono text-gray-500">{lt.lot}</td>
                                 <td className="px-2 py-1 text-gray-600">{lt.machine}</td>
                                 <td className="px-2 py-1 text-gray-600 max-w-[200px] truncate" title={`${lt.cust} · ${lt.prod}`}>{lt.cust || '—'}{lt.prod ? ` · ${lt.prod}` : ''}</td>
-                                <td className="px-2 py-1 text-right text-gray-700 font-bold">{num(lt.kg,1)}</td>
-                                <td className="px-2 py-1 text-right text-green-600">{num(lt.salvaged,1)}</td>
-                                <td className="px-2 py-1 text-right text-red-500">{num(lt.scrapped,1)}</td>
+                                <td className="px-2 py-1 text-right text-gray-700 font-bold">{num(lt.kg, 2)}</td>
+                                <td className="px-2 py-1 text-right text-green-600">{num(lt.salvaged, 2)}</td>
+                                <td className="px-2 py-1 text-right text-red-500">{num(lt.scrapped, 2)}</td>
                               </tr>
                             )))}
                           </tbody>
@@ -2272,7 +2272,7 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                           <tr key={r.k} className="hover:bg-gray-50">
                             <td className="px-3 py-2 text-gray-700">{r.k}</td>
                             <td className="px-3 py-2 text-right text-gray-500">{r.jobs}</td>
-                            <td className="px-3 py-2 text-right font-bold text-green-600">{num(r.kg, 1)}</td>
+                            <td className="px-3 py-2 text-right font-bold text-green-600">{num(r.kg, 2)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -2314,7 +2314,7 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                               <td className="px-3 py-2 text-rose-600 text-xs max-w-[180px]">{j.source_defect_reason || '—'}</td>
                               <td className="px-3 py-2 text-emerald-600 text-xs max-w-[180px]">{j.rework_reason || '—'}</td>
                               <td className="px-3 py-2 text-sky-600 text-xs">{j.rewinder_name || '—'}</td>
-                              <td className="px-3 py-2 text-right whitespace-nowrap"><span className="font-bold text-green-600">{prog.rolls}</span> ม้วน<br/><span className="text-gray-500 text-xs">{num(prog.kg, 1)} kg</span></td>
+                              <td className="px-3 py-2 text-right whitespace-nowrap"><span className="font-bold text-green-600">{prog.rolls}</span> ม้วน<br/><span className="text-gray-500 text-xs">{num(prog.kg, 2)} kg</span></td>
                               <td className="px-3 py-2 text-xs">
                                 <span className={`px-2 py-0.5 rounded-full font-bold ${j.status === 'closed' ? 'bg-gray-100 text-gray-500' : 'bg-green-100 text-green-700'}`}>
                                   {j.status === 'closed' ? 'ปิดแล้ว' : 'active'}
@@ -2324,7 +2324,7 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                             {isOpen && (
                               <tr className="bg-emerald-50/40">
                                 <td colSpan={8} className="px-4 pb-3 pt-1">
-                                  <p className="text-xs font-bold text-emerald-700 mb-1.5">🧵 ม้วนที่กรอออกได้ (FG) — {lotRolls.length} ม้วน · {num(prog.kg,1)} kg</p>
+                                  <p className="text-xs font-bold text-emerald-700 mb-1.5">🧵 ม้วนที่กรอออกได้ (FG) — {lotRolls.length} ม้วน · {num(prog.kg, 2)} kg</p>
                                   {lotRolls.length === 0 ? (
                                     <p className="text-xs text-gray-400 italic">ยังไม่มีม้วนกรอออกจาก Lot นี้</p>
                                   ) : (
@@ -2449,14 +2449,14 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                             <td className="px-3 py-1.5 text-gray-400">{i + 1}</td>
                             <td className="px-3 py-1.5 text-gray-700 max-w-[200px]">{r.k}</td>
                             <td className="px-3 py-1.5 text-right text-gray-500">{r.count}</td>
-                            <td className="px-3 py-1.5 text-right font-bold text-gray-800">{num(r.kg, 1)}</td>
-                            <td className="px-3 py-1.5 text-right text-gray-500 text-xs">{pct.toFixed(1)}%</td>
+                            <td className="px-3 py-1.5 text-right font-bold text-gray-800">{num(r.kg, 2)}</td>
+                            <td className="px-3 py-1.5 text-right text-gray-500 text-xs">{pct.toFixed(2)}%</td>
                             <td className="px-3 py-1.5">
                               <div className="flex items-center gap-1">
                                 <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
                                   <div className="h-full bg-blue-400 rounded-full" style={{ width: `${Math.min(pct, 100)}%` }}/>
                                 </div>
-                                <span className="text-[9px] text-gray-400 w-8 text-right">{totalKg ? (cum / totalKg * 100).toFixed(0) : 0}%</span>
+                                <span className="text-[9px] text-gray-400 w-8 text-right">{totalKg ? (cum / totalKg * 100).toFixed(2) : 0}%</span>
                               </div>
                             </td>
                           </tr>
@@ -2515,7 +2515,7 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                         <tr key={r.machine} className="hover:bg-gray-50">
                           <td className="px-3 py-2"><span className="bg-orange-100 text-orange-700 font-bold text-xs px-2 py-0.5 rounded">{r.machine}</span></td>
                           <td className="px-3 py-2 text-right text-gray-500">{r.count}</td>
-                          <td className="px-3 py-2 text-right font-bold text-orange-600">{num(r.kg, 1)}</td>
+                          <td className="px-3 py-2 text-right font-bold text-orange-600">{num(r.kg, 2)}</td>
                           <td className="px-3 py-2 text-gray-500 text-xs truncate max-w-[120px]">{r.top}</td>
                         </tr>
                       ))}
@@ -2534,7 +2534,7 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                         <tr key={r.machine} className="hover:bg-gray-50">
                           <td className="px-3 py-2"><span className="bg-red-100 text-red-700 font-bold text-xs px-2 py-0.5 rounded">{r.machine}</span></td>
                           <td className="px-3 py-2 text-right text-gray-500">{r.count}</td>
-                          <td className="px-3 py-2 text-right font-bold text-red-600">{num(r.kg, 1)}</td>
+                          <td className="px-3 py-2 text-right font-bold text-red-600">{num(r.kg, 2)}</td>
                           <td className="px-3 py-2 text-gray-500 text-xs truncate max-w-[120px]">{r.top}</td>
                         </tr>
                       ))}
@@ -2558,8 +2558,8 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                       <tr key={r.shift} className="hover:bg-gray-50">
                         <td className="px-3 py-2"><span className="bg-purple-100 text-purple-700 font-bold text-xs px-2 py-0.5 rounded">{r.shift}</span></td>
                         <td className="px-3 py-2 text-right text-gray-500">{r.count}</td>
-                        <td className="px-3 py-2 text-right font-bold text-purple-600">{num(r.kg, 1)}</td>
-                        <td className="px-3 py-2 text-right text-xs text-gray-500">{badKgTotal ? (r.kg/badKgTotal*100).toFixed(1) : 0}%</td>
+                        <td className="px-3 py-2 text-right font-bold text-purple-600">{num(r.kg, 2)}</td>
+                        <td className="px-3 py-2 text-right text-xs text-gray-500">{badKgTotal ? (r.kg/badKgTotal*100).toFixed(2) : 0}%</td>
                       </tr>
                     ))}
                   </tbody>
@@ -2841,7 +2841,7 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                       <YAxis tickFormatter={(v) => `${Math.round(v * 100)}%`} domain={[0, 1]} tick={{ fontSize: 10 }} width={45}/>
                       <Tooltip formatter={(v: any, n: any, p: any) => {
                         const tot = p.payload.total || 1
-                        return [`${(Number(v) / tot * 100).toFixed(1)}% (${num(Number(v),1)} kg)`, n]
+                        return [`${(Number(v) / tot * 100).toFixed(2)}% (${num(Number(v), 2)} kg)`, n]
                       }}/>
                       <Legend wrapperStyle={{ fontSize: 11 }}/>
                       <Bar dataKey="FG"       name="FG (ดี)" fill="#22c55e" stackId="a" radius={[4,4,0,0]}/>
@@ -2891,15 +2891,15 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                             <td className="px-3 py-2 text-gray-500">{i + 1}</td>
                             <td className="px-3 py-2 text-gray-700 font-semibold max-w-[200px] truncate" title={row.key}>{row.key}</td>
                             <td className="px-3 py-2 text-gray-500">{row.rolls}</td>
-                            <td className="px-3 py-2 text-blue-600 font-bold">{num(row.FG, 1)}</td>
-                            <td className="px-3 py-2 text-orange-500">{num(row.ม้วนกรอ, 1)}</td>
-                            <td className="px-3 py-2 text-red-500">{num(row.scrapKg, 1)}</td>
-                            <td className="px-3 py-2 font-bold text-gray-700">{num(row.total, 1)}</td>
-                            <td className="px-3 py-2 text-orange-500 text-xs">{row.badPctN.toFixed(1)}%</td>
-                            <td className="px-3 py-2 text-red-500 text-xs">{row.scrapPctN.toFixed(1)}%</td>
+                            <td className="px-3 py-2 text-blue-600 font-bold">{num(row.FG, 2)}</td>
+                            <td className="px-3 py-2 text-orange-500">{num(row.ม้วนกรอ, 2)}</td>
+                            <td className="px-3 py-2 text-red-500">{num(row.scrapKg, 2)}</td>
+                            <td className="px-3 py-2 font-bold text-gray-700">{num(row.total, 2)}</td>
+                            <td className="px-3 py-2 text-orange-500 text-xs">{row.badPctN.toFixed(2)}%</td>
+                            <td className="px-3 py-2 text-red-500 text-xs">{row.scrapPctN.toFixed(2)}%</td>
                             <td className="px-3 py-2">
                               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${yieldPct >= 90 ? 'bg-green-100 text-green-700' : yieldPct >= 80 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
-                                {yieldPct.toFixed(1)}%
+                                {yieldPct.toFixed(2)}%
                               </span>
                             </td>
                           </tr>
@@ -3344,7 +3344,7 @@ function ImportProductionModal({ onClose, onDone }: { onClose: () => void; onDon
             <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
               <div><p className="text-2xl font-black text-gray-800">{rows.length}</p><p className="text-[10px] text-gray-400">รายการพร้อมนำเข้า</p></div>
               <div><p className="text-2xl font-black text-emerald-600">{good}</p><p className="text-[10px] text-gray-400">ดี · กรอ {bad} · เศษ {scrap}</p></div>
-              <div><p className="text-2xl font-black text-blue-600">{num(totalKg, 0)}</p><p className="text-[10px] text-gray-400">รวม (kg)</p></div>
+              <div><p className="text-2xl font-black text-blue-600">{num(totalKg, 2)}</p><p className="text-[10px] text-gray-400">รวม (kg)</p></div>
               <div><p className="text-xs font-bold text-gray-700 mt-1.5">{dateRange}</p><p className="text-[10px] text-gray-400">ช่วงวันที่</p></div>
             </div>
           )}

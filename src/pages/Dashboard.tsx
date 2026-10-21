@@ -22,9 +22,7 @@ function RefreshCountdown() {
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 function fmtKg(n: number) {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
-  if (n >= 1_000)     return (n / 1_000).toFixed(1) + 'k'
-  return n.toFixed(1)
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 function num(n: number, d = 2) {
   return n.toLocaleString('th-TH', { minimumFractionDigits: d, maximumFractionDigits: d })
@@ -968,13 +966,13 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                 <div className="flex items-center gap-4">
                   <div className="text-center">
                     <p className="text-[11px] text-gray-400 font-medium">📊 Yield (ดี/ผลิตทั้งหมด)</p>
-                    <p className={`text-5xl font-black leading-none mt-1 ${yColor}`}>{yieldPct.toFixed(1)}<span className="text-2xl">%</span></p>
+                    <p className={`text-5xl font-black leading-none mt-1 ${yColor}`}>{yieldPct.toFixed(2)}<span className="text-2xl">%</span></p>
                   </div>
                 </div>
                 <div className="flex-1 min-w-[260px]">
                   <div className="flex justify-between text-[11px] mb-1">
                     <span className="text-emerald-600 font-bold">✅ FG {fmtKg(fgKg)} kg</span>
-                    <span className="text-rose-600 font-bold">⚠ สูญเสีย {fmtKg(lossKg)} kg ({lossPct.toFixed(1)}%)</span>
+                    <span className="text-rose-600 font-bold">⚠ สูญเสีย {fmtKg(lossKg)} kg ({lossPct.toFixed(2)}%)</span>
                   </div>
                   <div className="h-3 bg-rose-100 rounded-full overflow-hidden flex">
                     <div className={`h-full ${yBar}`} style={{ width: `${Math.min(yieldPct,100)}%` }}/>
@@ -1020,7 +1018,7 @@ export default function Dashboard({ dept, readOnly = false }: { dept?: 'blow'|'r
                   style={{ width: totalKg ? `${Math.min((fgKg/totalKg)*100,100)}%` : '0%' }}/>
               </div>
               <p className="text-[10px] text-gray-400 mt-0.5">
-                FG {totalKg ? (fgKg/totalKg*100).toFixed(1) : 0}% · สูญเสีย {totalKg ? ((badKg+allScrapKg)/totalKg*100).toFixed(1) : 0}%
+                FG {totalKg ? (fgKg/totalKg*100).toFixed(2) : 0}% · สูญเสีย {totalKg ? ((badKg+allScrapKg)/totalKg*100).toFixed(2) : 0}%
               </p>
             </div>
             {/* ม้วนกรอ — แตกย่อย: รอ / กำลังกรอ / กรอเสร็จ / ทำลาย — ซ่อนเมื่อ filter = แผนกกรอ */}

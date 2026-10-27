@@ -145,10 +145,9 @@ async function machineDecimal(machineNo: string): Promise<number> {
     return d
   } catch { return 2 }
 }
-// ทศนิยมตอนรีปริ้น — ม้วนกรอลูกค้าหนองโพ = 1 (ตรงกับตอนชั่ง) · ที่เหลือตามเครื่อง
+// ทศนิยมตอนรีปริ้น — ม้วนลูกค้าหนองโพ (ทั้งเป่าและกรอ) = 1 · ที่เหลือตามเครื่อง
 async function rollDecimal(roll: any): Promise<number> {
-  const isRw = (roll.section === 'rewind') || !!roll.rework_source_roll_id
-  if (isRw && (roll.customer ?? '').includes('หนองโพ')) return 1
+  if ((roll.customer ?? '').includes('หนองโพ')) return 1
   return machineDecimal(roll.machine_no ?? '')
 }
 

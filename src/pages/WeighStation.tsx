@@ -1828,7 +1828,9 @@ function saveQueue(q: any[]) { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)
 // ── Weigh Page ────────────────────────────────────────────────────────────────
 function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: MachineProfile; onBack: (opts?: { weighed?: boolean }) => void; asModal?: boolean }) {
   // เก็บ profile เป็น state + refresh จาก DB ตอน mount — กันใช้ข้อมูล cached เก่า (เช่น widthUnit ไม่ตรง)
-  const [profile, setProfile] = useState<MachineProfile>(initialProfile)
+  // ลูกค้าหนองโพ ชั่งทศนิยม 1 ตำแหน่งเสมอ (ทุกเครื่อง) · ที่เหลือตามเครื่อง
+  const npDec = (p: MachineProfile): MachineProfile => (p.custName ?? '').includes('หนองโพ') ? { ...p, decimal: 1 } : p
+  const [profile, setProfile] = useState<MachineProfile>(() => npDec(initialProfile))
   useEffect(() => {
     if (!initialProfile.machine_no) return
     // ⚠ ไม่ refresh ในแผนกกรอ (rework_job mode) — profile มาจาก job ไม่ใช่ machine_profiles
@@ -1836,7 +1838,7 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
     supabase.from('machine_profiles').select('*').eq('machine_no', initialProfile.machine_no).maybeSingle()
       .then(({ data }) => {
         if (!data) return
-        setProfile({
+        setProfile(npDec({
           machine_no:  data.machine_no,
           custCode:    data.cust_code    ?? '',
           custName:    data.cust_name    ?? '',
@@ -1866,7 +1868,7 @@ function WeighPage({ profile: initialProfile, onBack, asModal }: { profile: Mach
           woNo:        data.work_order   ?? '',
           deliveryDate: data.delivery_date ?? '',
           freshStart:  data.fresh_start  ?? false,
-        })
+        }))
       })
   }, [initialProfile.machine_no])
   const [gross,        setGross]        = useState(0)

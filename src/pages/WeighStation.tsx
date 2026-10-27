@@ -145,10 +145,16 @@ async function machineDecimal(machineNo: string): Promise<number> {
     return d
   } catch { return 2 }
 }
+// ทศนิยมตอนรีปริ้น — ม้วนกรอลูกค้าหนองโพ = 1 (ตรงกับตอนชั่ง) · ที่เหลือตามเครื่อง
+async function rollDecimal(roll: any): Promise<number> {
+  const isRw = (roll.section === 'rewind') || !!roll.rework_source_roll_id
+  if (isRw && (roll.customer ?? '').includes('หนองโพ')) return 1
+  return machineDecimal(roll.machine_no ?? '')
+}
 
 export async function reprintRollLabel(roll: any, size: 'long' | 'short' = 'long') {
   const p = rollToProfile(roll, size)
-  p.decimal = await machineDecimal(roll.machine_no ?? '')
+  p.decimal = await rollDecimal(roll)
   // ม้วนกรอของงานเก่า (ยังไม่ได้เก็บหัวใบติดม้วน) → สืบหัวใบ/ลูกค้า จากฝั่งผลิต ให้ใบเหมือนกัน
   const isRw = (roll.section === 'rewind') || !!roll.rework_source_roll_id
   if (isRw && !(roll.header_text ?? '').trim() && !roll.blank_header) {
@@ -528,7 +534,7 @@ export async function printRollsBatch(rolls: any[], size: 'long'|'short' = 'long
   const labels: { innerHtml: string; W: number; H: number }[] = []
   for (const roll of rolls) {
     const p = rollToProfile(roll)
-    p.decimal = await machineDecimal(roll.machine_no ?? '')   // ทศนิยมตามเครื่อง
+    p.decimal = await rollDecimal(roll)   // ทศนิยมตามเครื่อง (กรอหนองโพ = 1)
     const rt = roll.roll_type ?? 'good'
     const built = await buildLabelHtml(p as MachineProfile, roll.roll_no ?? 0, roll.gross_weight ?? 0, roll.weight ?? 0, size, rt, roll.remark ?? '', roll.id, roll.created_at ?? null)
     labels.push(built)

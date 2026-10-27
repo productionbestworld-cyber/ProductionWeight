@@ -51,7 +51,8 @@ export function jobToProfile(job: ReworkJob, machine_no: string): MachineProfile
     custName:     job.cust_name    ?? '',
     custBranch:   job.cust_branch  ?? '',
     custAddress:  '',
-    decimal:     (job.decimal_places ?? 2) as 1|2,
+    // กรองานลูกค้าหนองโพ ชั่งทศนิยม 1 ตำแหน่ง (เหมือน BL08 ฝั่งผลิต) — ลูกค้าอื่นตามงานเดิม
+    decimal:     ((job.cust_name ?? '').includes('หนองโพ') ? 1 : (job.decimal_places ?? 2)) as 1|2,
     itemCode:     job.item_code    ?? '',
     matCode:      job.mat_code     ?? '',
     productCode:  job.product_code ?? '',

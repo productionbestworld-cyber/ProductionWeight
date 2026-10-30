@@ -180,14 +180,29 @@ async function buildLabelHtml(p: MachineProfile, rollNo: number, gross: number, 
   const baseDate = prodDate ? new Date(prodDate) : new Date()
   const mfgDate = thaiDate(baseDate)
   const core    = parseFloat(p.coreWeight) || 0
-  // QR encode แค่ roll ID → URL สั้น → generate เป็น data URL ฝังใน HTML ทันที
-  const appUrl    = window.location.origin
-  const detailUrl = rollId ? `${appUrl}/?roll=${rollId}` : `${appUrl}/`
+  // QR = ข้อความรายละเอียดม้วน (ลูกค้าเอาเครื่องสแกนยิงแล้วได้ข้อมูลเลย ไม่ใช่ลิงก์)
+  void rollId
+  const qrText = [
+    `Customer: ${p.custName || '-'}`,
+    `Product: ${p.productName || '-'}`,
+    `Item Code: ${p.itemCode || '-'}`,
+    `Product Code: ${p.productCode || '-'}`,
+    `Mat: ${p.matCode || '-'}`,
+    `Size: ${p.widthCm} ${p.widthUnit ?? 'cm'} x ${p.thickMc} mc`,
+    `Lot No: ${p.lotNo || '-'}`,
+    `Roll No: ${rollNo === 0 ? '-' : rollNo}`,
+    `Length: ${p.length || '-'} M.${p.pcs ? ` / ${p.pcs} Pcs.` : ''}`,
+    `Net: ${fmt(net, dec)} Kgs.`,
+    `Gross: ${fmt(gross, dec)} Kgs.`,
+    `Core: ${fmt(core, dec)} Kg`,
+    `MFG: ${mfgDate}`,
+    `Machine: ${p.machine_no || '-'}`,
+  ].join('\r\n')
 
   // generate QR เป็น PNG data URL (ไม่ต้องพึ่ง internet)
   const makeQR = async (px: number) => {
     try {
-      return await QRCodeLib.toDataURL(detailUrl, { width: px, margin: 1, errorCorrectionLevel: 'M' })
+      return await QRCodeLib.toDataURL(qrText, { width: px, margin: 1, errorCorrectionLevel: 'L' })
     } catch { return '' }
   }
   const [qr72, qr56] = await Promise.all([makeQR(144), makeQR(112)])

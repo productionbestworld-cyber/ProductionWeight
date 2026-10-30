@@ -209,7 +209,8 @@ async function buildLabelHtml(p: MachineProfile, rollNo: number, gross: number, 
       return await QRCodeLib.toDataURL(qrText, { width: px, margin: 1, errorCorrectionLevel: qrAsText ? 'L' : 'M' })
     } catch { return '' }
   }
-  const [qr72, qr56] = await Promise.all([makeQR(144), makeQR(112)])
+  // QR ข้อความ (หาดทิพย์) ลายถี่ ~70 ช่อง — 112px จะได้ช่องละ ~1.6px ขนาดไม่เท่ากันตอนขยาย → gen ใหญ่ขึ้น
+  const [qr72, qr56] = await Promise.all(qrAsText ? [makeQR(568), makeQR(568)] : [makeQR(144), makeQR(112)])
   const qrUrl = (s: 72|56) => s === 72 ? qr72 : qr56
 
   // ป้ายชนิดม้วน (ใช้ในหัวใบ)

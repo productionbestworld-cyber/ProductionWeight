@@ -180,9 +180,13 @@ async function buildLabelHtml(p: MachineProfile, rollNo: number, gross: number, 
   const baseDate = prodDate ? new Date(prodDate) : new Date()
   const mfgDate = thaiDate(baseDate)
   const core    = parseFloat(p.coreWeight) || 0
-  // QR = ข้อความรายละเอียดม้วน (ลูกค้าเอาเครื่องสแกนยิงแล้วได้ข้อมูลเลย ไม่ใช่ลิงก์)
-  void rollId
-  const qrText = [
+  // QR: ลูกค้าหาดทิพย์ = ข้อความรายละเอียดม้วน (เครื่องสแกนของลูกค้ายิงแล้วได้ข้อมูลเลย)
+  //     ลูกค้าอื่น = ลิงก์หน้ารายละเอียดม้วนเหมือนเดิม
+  const appUrl    = window.location.origin
+  const detailUrl = rollId ? `${appUrl}/?roll=${rollId}` : `${appUrl}/`
+  const qrAsText  = (p.custName ?? '').includes('หาดทิพ')
+  const qrText = !qrAsText ? detailUrl : [
+    `Supplier: บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด`,
     `Customer: ${p.custName || '-'}`,
     `Product: ${p.productName || '-'}`,
     `Item Code: ${p.itemCode || '-'}`,
@@ -202,7 +206,7 @@ async function buildLabelHtml(p: MachineProfile, rollNo: number, gross: number, 
   // generate QR เป็น PNG data URL (ไม่ต้องพึ่ง internet)
   const makeQR = async (px: number) => {
     try {
-      return await QRCodeLib.toDataURL(qrText, { width: px, margin: 1, errorCorrectionLevel: 'L' })
+      return await QRCodeLib.toDataURL(qrText, { width: px, margin: 1, errorCorrectionLevel: qrAsText ? 'L' : 'M' })
     } catch { return '' }
   }
   const [qr72, qr56] = await Promise.all([makeQR(144), makeQR(112)])

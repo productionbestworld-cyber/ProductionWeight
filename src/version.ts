@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '2.32.0'
+export const APP_VERSION = '2.32.1'
 export const APP_BUILD_DATE = '2026-10-30'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '2.32.1', date: '2026-10-30',
+    items: [
+      'QR แบบข้อความใช้เฉพาะลูกค้าหาดทิพย์ — ลูกค้าอื่นกลับเป็น QR ลิงก์หน้ารายละเอียดม้วนเหมือนเดิม',
+    ],
+  },
   {
     version: '2.32.0', date: '2026-10-30',
     items: [

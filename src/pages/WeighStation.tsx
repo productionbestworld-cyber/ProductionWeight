@@ -186,7 +186,7 @@ async function buildLabelHtml(p: MachineProfile, rollNo: number, gross: number, 
   const detailUrl = rollId ? `${appUrl}/?roll=${rollId}` : `${appUrl}/`
   const qrAsText  = (p.custName ?? '').includes('หาดทิพ')
   const qrText = !qrAsText ? detailUrl : [
-    `Supplier: บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด`,
+    `Supplier: BWP`,
     `Customer: ${p.custName || '-'}`,
     `Product: ${p.productName || '-'}`,
     `Item Code: ${p.itemCode || '-'}`,
@@ -291,7 +291,10 @@ html,body{font-family:'Sarabun','Arial',sans-serif;color:#000;background:#fff;wi
 @media print{@page{size:${shortLayout.labelW}mm ${shortLayout.labelH}mm;margin:0}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style>
 <div style="position:relative;width:${shortLayout.labelW}mm;height:${shortLayout.labelH}mm;border:1.5px solid #000;overflow:hidden">
-${shortLayout.fields.map(renderShortField).join('\n')}
+${shortLayout.fields
+  // QR ข้อความ (หาดทิพย์) ลายถี่ → ขยาย 21→24mm ไปทางซ้าย/ขึ้นบน (ขวา/ล่างชิดขอบใบแล้ว) · วัดแล้วไม่ทับ Core / น้ำหนัก / ผู้ตรวจ
+  .map(f => (qrAsText && f.type === 'qr') ? { ...f, x: f.x + f.w + 0.5 - 24, y: f.y - 0.5, w: 24, h: 24 } : f)
+  .map(renderShortField).join('\n')}
 </div>`
 
 

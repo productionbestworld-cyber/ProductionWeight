@@ -200,7 +200,8 @@ async function buildLabelHtml(p: MachineProfile, rollNo: number, gross: number, 
     `Core: ${fmt(core, dec)} Kg`,
     `MFG: ${mfgDate}`,
     `Machine: ${p.machine_no || '-'}`,
-    `Customer: ${p.custName || '-'}`,
+    // ชื่อลูกค้าตายตัว — งานบางเครื่องกรอกชื่อสั้น "หาดทิพย์" ให้ QR ออกชื่อเดียวกันทุกใบ
+    `Customer: บริษัท หาดทิพย์ จำกัด (มหาชน)`,
   ].join('\r\n')
 
   // generate QR เป็น PNG data URL (ไม่ต้องพึ่ง internet)

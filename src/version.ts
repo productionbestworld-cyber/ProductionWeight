@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '2.32.3'
-export const APP_BUILD_DATE = '2026-11-02'
+export const APP_VERSION = '2.32.4'
+export const APP_BUILD_DATE = '2026-11-04'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '2.32.4', date: '2026-11-04',
+    items: [
+      'QR ใบปะหน้าหาดทิพย์: เรียงบรรทัดตามที่ลูกค้าขอ — Supplier / Size / Item Code (= Product Code ของเรา) ขึ้นก่อน, Customer ไว้ท้ายสุด',
+    ],
+  },
   {
     version: '2.32.3', date: '2026-11-02',
     items: [

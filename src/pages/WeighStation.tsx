@@ -186,13 +186,12 @@ async function buildLabelHtml(p: MachineProfile, rollNo: number, gross: number, 
   const detailUrl = rollId ? `${appUrl}/?roll=${rollId}` : `${appUrl}/`
   const qrAsText  = (p.custName ?? '').includes('หาดทิพ')
   const qrText = !qrAsText ? detailUrl : [
+    // 3 บรรทัดแรก + Customer ท้ายสุด = ลำดับที่หาดทิพย์ขอ · Item Code ของลูกค้า = Product Code ของเรา
     `Supplier: BWP`,
-    `Customer: ${p.custName || '-'}`,
+    `Size: ${p.widthCm}${p.widthUnit ?? 'cm'}.x${p.thickMc}mc.`,
+    `Item Code: ${p.productCode || '-'}`,
     `Product: ${p.productName || '-'}`,
-    `Item Code: ${p.itemCode || '-'}`,
-    `Product Code: ${p.productCode || '-'}`,
     `Mat: ${p.matCode || '-'}`,
-    `Size: ${p.widthCm} ${p.widthUnit ?? 'cm'} x ${p.thickMc} mc`,
     `Lot No: ${p.lotNo || '-'}`,
     `Roll No: ${rollNo === 0 ? '-' : rollNo}`,
     `Length: ${p.length || '-'} M.${p.pcs ? ` / ${p.pcs} Pcs.` : ''}`,
@@ -201,6 +200,7 @@ async function buildLabelHtml(p: MachineProfile, rollNo: number, gross: number, 
     `Core: ${fmt(core, dec)} Kg`,
     `MFG: ${mfgDate}`,
     `Machine: ${p.machine_no || '-'}`,
+    `Customer: ${p.custName || '-'}`,
   ].join('\r\n')
 
   // generate QR เป็น PNG data URL (ไม่ต้องพึ่ง internet)

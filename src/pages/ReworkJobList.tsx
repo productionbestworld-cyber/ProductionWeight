@@ -1528,7 +1528,7 @@ function RollDetailModal({ roll: r, onClose, doReprint, printing, onChanged }: {
   }
   const rows: [string, any][] = [
     ['ม้วนที่', `#${r.roll_no}`],
-    ['น้ำหนักสุทธิ', `${fmt(r.weight,2)} Kg`],
+    ['น้ำหนักสุทธิ', `${fmt(r.weight,1)} Kg`],
     ['น้ำหนักเต็ม', `${fmt((r.weight ?? 0) + (r.core_weight ?? 0),2)} Kg`],
     ['แกน', `${fmt(r.core_weight ?? 0,2)} Kg`],
     ['ความยาว', r.length ? `${r.length} M.` : '—'],
@@ -1546,7 +1546,7 @@ function RollDetailModal({ roll: r, onClose, doReprint, printing, onChanged }: {
     <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
-          <p className="text-white font-bold">ม้วนที่ #{r.roll_no} · {fmt(r.weight,2)} Kg</p>
+          <p className="text-white font-bold">ม้วนที่ #{r.roll_no} · {fmt(r.weight,1)} Kg</p>
           <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={18}/></button>
         </div>
         <div className="px-4 py-3 max-h-[55vh] overflow-y-auto">
@@ -1674,7 +1674,7 @@ function ItemReworkPanel({ itemCode, itemName, onClose }: { itemCode: string; it
             <div key={r.id} className={`border rounded-xl px-3 py-2 ${r.transferred ? 'bg-slate-900 border-slate-800' : 'bg-emerald-500/5 border-emerald-500/25'}`}>
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="text-white font-black text-base">ม้วนที่ #{r.roll_no} <span className="text-slate-400 font-normal text-sm">· {fmt(r.weight,2)} Kg</span></p>
+                  <p className="text-white font-black text-base">ม้วนที่ #{r.roll_no} <span className="text-slate-400 font-normal text-sm">· {fmt(r.weight,1)} Kg</span></p>
                   <p className="text-slate-500 text-[11px] truncate">
                     Lot {r.lot_no} · เครื่อง {r.machine_no || '—'}{r.length ? ` · ${r.length} M.` : ''}
                     {r.work_order ? ` · WO ${r.work_order}` : ''}

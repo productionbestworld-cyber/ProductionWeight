@@ -156,6 +156,7 @@ export async function reprintRollLabel(roll: any, size: 'long' | 'short' = 'long
   p.decimal = await rollDecimal(roll)
   // ม้วนกรอของงานเก่า (ยังไม่ได้เก็บหัวใบติดม้วน) → สืบหัวใบ/ลูกค้า จากฝั่งผลิต ให้ใบเหมือนกัน
   const isRw = (roll.section === 'rewind') || !!roll.rework_source_roll_id
+  if (isRw) p.decimal = 1   // งานกรอ: น้ำหนักทศนิยม 1 ตำแหน่งเสมอ
   if (isRw && !(roll.header_text ?? '').trim() && !roll.blank_header) {
     const id = await resolveProdIdentity(roll)
     if (id) {

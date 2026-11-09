@@ -1454,7 +1454,7 @@ function ReworkPendingPanel({ refreshKey }: { refreshKey: number }) {
                   {list.map(r => (
                     <button key={r.id} onClick={() => setDetail(r)}
                       className="w-full text-left bg-emerald-500/5 border border-emerald-500/25 hover:border-emerald-400 rounded-lg px-2.5 py-1.5 transition-colors">
-                      <p className="font-black text-sm text-amber-300">#{r.roll_no} <span className="font-normal">· {fmt(r.weight,2)} Kg</span></p>
+                      <p className="font-black text-sm text-amber-300">#{r.roll_no} <span className="font-normal">· {fmt(r.weight,1)} Kg</span></p>
                       <p className="text-slate-500 text-[10px] truncate">
                         {r.machine_no || '—'}{r.length ? ` · ${r.length} M.` : ''}{r.work_order ? ` · WO ${r.work_order}` : ''}
                       </p>

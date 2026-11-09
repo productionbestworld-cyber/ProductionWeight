@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '2.32.7'
+export const APP_VERSION = '2.32.8'
 export const APP_BUILD_DATE = '2026-11-09'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '2.32.8', date: '2026-11-09',
+    items: [
+      'ทศนิยม 1 ตำแหน่ง (จอ + รีปริ้น) จำกัดเฉพาะงานกรอ PE SHRINK 30.7CM 35MIC (50001743) — งานกรออื่นกลับเป็นเหมือนเดิม',
+    ],
+  },
   {
     version: '2.32.7', date: '2026-11-09',
     items: [

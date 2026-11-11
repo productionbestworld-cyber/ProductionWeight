@@ -90,8 +90,8 @@ export default function RollDetail() {
 
         {/* Header */}
         <div className={`${typeBg} px-5 py-4 text-center`}>
-          <p className="text-white/70 text-xs">บริษัท เบสท์เวิลด์ อินเตอร์พลาส จำกัด</p>
-          <p className="text-white font-black text-xl mt-0.5">
+          {/* ไม่โชว์ชื่อบริษัท (ทั้งของเราและลูกค้า) — ลูกค้าสแกนหน้าม้วนเห็นแค่ข้อมูลม้วน */}
+          <p className="text-white font-black text-xl">
             {roll.roll_no ? `ม้วนที่ ${roll.roll_no}` : typeLabel}
           </p>
           <p className="text-white/70 text-sm">{roll.machine_no} · {dateStr} {timeStr}</p>
@@ -115,7 +115,6 @@ export default function RollDetail() {
 
         {/* รายละเอียด */}
         <div className="px-5 py-4 space-y-2.5 border-b border-slate-800">
-          <Row label="ลูกค้า"      val={roll.customer     || '—'} />
           <Row label="สินค้า"      val={roll.product_name || '—'} />
           {roll.product_code && <Row label="รหัสสินค้า" val={roll.product_code} mono />}
           {roll.item_code && <Row label="Item Code"  val={roll.item_code} mono />}

@@ -1,10 +1,16 @@
 // ── เวอร์ชันของแอป ──────────────────────────────────────────
 // อัปเดตเลขนี้ทุกครั้งที่ปล่อยเวอร์ชันใหม่ + เพิ่มรายการใน CHANGELOG ด้านล่าง
-export const APP_VERSION = '2.32.8'
-export const APP_BUILD_DATE = '2026-11-09'
+export const APP_VERSION = '2.32.9'
+export const APP_BUILD_DATE = '2026-11-11'
 
 // รายละเอียดอัปเดต — โชว์ในหน้า About (คลิกเวอร์ชันมุมขวาบน)
 export const CHANGELOG: { version: string; date: string; items: string[] }[] = [
+  {
+    version: '2.32.9', date: '2026-11-11',
+    items: [
+      'หน้าสแกน QR หน้าม้วน: ไม่โชว์ชื่อบริษัทเราและชื่อลูกค้า (มีผลกับใบที่ปริ้นไปแล้วด้วย)',
+    ],
+  },
   {
     version: '2.32.8', date: '2026-11-09',
     items: [
